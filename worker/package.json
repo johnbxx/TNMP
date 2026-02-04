@@ -1,0 +1,15 @@
+{
+  "name": "tnmp-notifications",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18",
+    "wrangler": "^4.61.1"
+  }
+}

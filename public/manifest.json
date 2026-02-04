@@ -1,0 +1,16 @@
+{
+    "name": "Are the Pairings Up?",
+    "short_name": "Pairings",
+    "description": "Check if the Tuesday Night Marathon pairings are posted",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1a1a2e",
+    "theme_color": "#4CAF50",
+    "icons": [
+        {
+            "src": "/favicon.png",
+            "sizes": "256x256",
+            "type": "image/png"
+        }
+    ]
+}

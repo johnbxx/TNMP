@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Proxy Benchmark</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { margin-bottom: 1rem; }
+        .description { color: rgba(255,255,255,0.7); margin-bottom: 2rem; }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: translateY(-2px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary { background: #00c853; color: white; }
+        .btn-secondary { background: #424242; color: white; }
+
+        .results {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .results h2 { margin-bottom: 1rem; font-size: 1.2rem; }
+
+        .proxy-result {
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .proxy-result.testing { border-left: 4px solid #ffc107; }
+        .proxy-result.success { border-left: 4px solid #00c853; }
+        .proxy-result.failed { border-left: 4px solid #ff1744; }
+        .proxy-result.fastest { border-left: 4px solid #00e5ff; background: rgba(0,229,255,0.1); }
+
+        .proxy-name { font-weight: 600; margin-bottom: 0.5rem; word-break: break-all; }
+        .proxy-stats { display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem; color: rgba(255,255,255,0.8); }
+        .proxy-stats span { display: flex; align-items: center; gap: 0.25rem; }
+        .status-icon { font-size: 1.2rem; }
+
+        .summary {
+            background: rgba(0,229,255,0.1);
+            border: 1px solid rgba(0,229,255,0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .summary h3 { margin-bottom: 0.75rem; color: #00e5ff; }
+        .recommendation { font-size: 1.1rem; }
+
+        .log {
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+        .log-entry { margin-bottom: 0.25rem; }
+        .log-entry.error { color: #ff6b6b; }
+        .log-entry.success { color: #69db7c; }
+        .log-entry.info { color: #74c0fc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CORS Proxy Benchmark</h1>
+        <p class="description">Test which CORS proxy is fastest and most reliable for fetching the tournament page.</p>
+
+        <div class="controls">
+            <button class="btn-primary" id="run-btn" onclick="runBenchmark()">Run Benchmark (3 rounds)</button>
+            <button class="btn-secondary" onclick="runBenchmark(1)">Quick Test (1 round)</button>
+            <button class="btn-secondary" onclick="runBenchmark(5)">Thorough Test (5 rounds)</button>
+            <button class="btn-secondary" onclick="clearResults()">Clear</button>
+        </div>
+
+        <div class="results" id="results">
+            <h2>Results</h2>
+            <div id="proxy-results"></div>
+            <div id="summary"></div>
+        </div>
+
+        <div class="results">
+            <h2>Log</h2>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        const TARGET_URL = 'https://www.milibrary.org/chess/tournaments/2026-new-years-tuesday-night-marathon';
+
+        // All known CORS proxies to test
+        const PROXIES = [
+            { name: 'allorigins.win', url: 'https://api.allorigins.win/raw?url=' },
+            { name: 'corsproxy.io', url: 'https://corsproxy.io/?' },
+            { name: 'codetabs.com', url: 'https://api.codetabs.com/v1/proxy?quest=' },
+            { name: 'cors-anywhere (demo)', url: 'https://cors-anywhere.herokuapp.com/' },
+            { name: 'thingproxy', url: 'https://thingproxy.freeboard.io/fetch/' },
+            { name: 'corsanywhere.net', url: 'https://corsanywhere.net/' },
+        ];
+
+        let results = {};
+        let isRunning = false;
+
+        function log(message, type = '') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function clearResults() {
+            results = {};
+            document.getElementById('proxy-results').innerHTML = '';
+            document.getElementById('summary').innerHTML = '';
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateProxyDisplay(proxy, status, stats = {}) {
+            let el = document.getElementById(`proxy-${proxy.name.replace(/[^a-z0-9]/gi, '-')}`);
+            if (!el) {
+                el = document.createElement('div');
+                el.id = `proxy-${proxy.name.replace(/[^a-z0-9]/gi, '-')}`;
+                el.className = 'proxy-result';
+                document.getElementById('proxy-results').appendChild(el);
+            }
+
+            el.className = `proxy-result ${status}`;
+
+            let statsHtml = '';
+            if (stats.attempts !== undefined) {
+                statsHtml = `
+                    <div class="proxy-stats">
+                        <span><strong>Success:</strong> ${stats.successes}/${stats.attempts}</span>
+                        ${stats.avgTime ? `<span><strong>Avg Time:</strong> ${stats.avgTime}ms</span>` : ''}
+                        ${stats.minTime ? `<span><strong>Min:</strong> ${stats.minTime}ms</span>` : ''}
+                        ${stats.maxTime ? `<span><strong>Max:</strong> ${stats.maxTime}ms</span>` : ''}
+                        ${stats.contentLength ? `<span><strong>Size:</strong> ${(stats.contentLength / 1024).toFixed(1)}KB</span>` : ''}
+                    </div>
+                `;
+            } else if (status === 'testing') {
+                statsHtml = '<div class="proxy-stats"><span>Testing...</span></div>';
+            }
+
+            const icon = status === 'success' ? '✓' : status === 'failed' ? '✗' : status === 'fastest' ? '🏆' : '⏳';
+
+            el.innerHTML = `
+                <div class="proxy-name"><span class="status-icon">${icon}</span> ${proxy.name}</div>
+                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 0.5rem;">${proxy.url}</div>
+                ${statsHtml}
+            `;
+        }
+
+        async function testProxy(proxy, timeout = 15000) {
+            const startTime = performance.now();
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            try {
+                const response = await fetch(proxy.url + encodeURIComponent(TARGET_URL), {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const html = await response.text();
+                const endTime = performance.now();
+                const duration = Math.round(endTime - startTime);
+
+                // Verify it's actually the right content
+                if (!html.includes('Pairings') && !html.includes('Tuesday Night Marathon')) {
+                    throw new Error('Content mismatch - not the tournament page');
+                }
+
+                return {
+                    success: true,
+                    time: duration,
+                    contentLength: html.length
+                };
+            } catch (error) {
+                clearTimeout(timeoutId);
+                return {
+                    success: false,
+                    error: error.name === 'AbortError' ? 'Timeout' : error.message
+                };
+            }
+        }
+
+        async function runBenchmark(rounds = 3) {
+            if (isRunning) return;
+            isRunning = true;
+
+            const runBtn = document.getElementById('run-btn');
+            runBtn.disabled = true;
+
+            clearResults();
+            log(`Starting benchmark with ${rounds} round(s)...`, 'info');
+
+            // Initialize results
+            for (const proxy of PROXIES) {
+                results[proxy.name] = { times: [], successes: 0, failures: 0, contentLength: 0 };
+                updateProxyDisplay(proxy, 'testing');
+            }
+
+            // Run tests
+            for (let round = 1; round <= rounds; round++) {
+                log(`--- Round ${round}/${rounds} ---`, 'info');
+
+                for (const proxy of PROXIES) {
+                    log(`Testing ${proxy.name}...`);
+                    updateProxyDisplay(proxy, 'testing');
+
+                    const result = await testProxy(proxy);
+
+                    if (result.success) {
+                        results[proxy.name].times.push(result.time);
+                        results[proxy.name].successes++;
+                        results[proxy.name].contentLength = result.contentLength;
+                        log(`${proxy.name}: ${result.time}ms (${(result.contentLength / 1024).toFixed(1)}KB)`, 'success');
+                    } else {
+                        results[proxy.name].failures++;
+                        log(`${proxy.name}: FAILED - ${result.error}`, 'error');
+                    }
+
+                    // Update display with current stats
+                    const r = results[proxy.name];
+                    const status = r.successes > 0 ? 'success' : 'failed';
+                    updateProxyDisplay(proxy, status, {
+                        attempts: r.successes + r.failures,
+                        successes: r.successes,
+                        avgTime: r.times.length ? Math.round(r.times.reduce((a, b) => a + b, 0) / r.times.length) : null,
+                        minTime: r.times.length ? Math.min(...r.times) : null,
+                        maxTime: r.times.length ? Math.max(...r.times) : null,
+                        contentLength: r.contentLength
+                    });
+
+                    // Small delay between requests
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+
+            // Calculate final results and find winner
+            log('--- Final Results ---', 'info');
+
+            let bestProxy = null;
+            let bestScore = Infinity;
+
+            for (const proxy of PROXIES) {
+                const r = results[proxy.name];
+                const successRate = r.successes / (r.successes + r.failures);
+                const avgTime = r.times.length ? r.times.reduce((a, b) => a + b, 0) / r.times.length : Infinity;
+
+                // Score: lower is better. Penalize failures heavily.
+                const score = successRate === 0 ? Infinity : avgTime / successRate;
+
+                if (score < bestScore && r.successes > 0) {
+                    bestScore = score;
+                    bestProxy = proxy;
+                }
+
+                const status = r.successes > 0 ? 'success' : 'failed';
+                updateProxyDisplay(proxy, status, {
+                    attempts: r.successes + r.failures,
+                    successes: r.successes,
+                    avgTime: r.times.length ? Math.round(avgTime) : null,
+                    minTime: r.times.length ? Math.min(...r.times) : null,
+                    maxTime: r.times.length ? Math.max(...r.times) : null,
+                    contentLength: r.contentLength
+                });
+            }
+
+            // Mark the winner
+            if (bestProxy) {
+                const r = results[bestProxy.name];
+                updateProxyDisplay(bestProxy, 'fastest', {
+                    attempts: r.successes + r.failures,
+                    successes: r.successes,
+                    avgTime: Math.round(r.times.reduce((a, b) => a + b, 0) / r.times.length),
+                    minTime: Math.min(...r.times),
+                    maxTime: Math.max(...r.times),
+                    contentLength: r.contentLength
+                });
+
+                log(`Winner: ${bestProxy.name} with avg ${Math.round(r.times.reduce((a, b) => a + b, 0) / r.times.length)}ms`, 'success');
+
+                // Show recommendation
+                const summaryEl = document.getElementById('summary');
+                summaryEl.innerHTML = `
+                    <div class="summary">
+                        <h3>Recommendation</h3>
+                        <p class="recommendation">
+                            Use <strong>${bestProxy.name}</strong> as the primary proxy.<br>
+                            <code style="background: rgba(0,0,0,0.3); padding: 0.5rem; display: block; margin-top: 0.5rem; border-radius: 4px;">
+                                '${bestProxy.url}'
+                            </code>
+                        </p>
+                        <p style="margin-top: 1rem; font-size: 0.9rem; color: rgba(255,255,255,0.7);">
+                            Average response time: ${Math.round(r.times.reduce((a, b) => a + b, 0) / r.times.length)}ms |
+                            Success rate: ${r.successes}/${r.successes + r.failures} (${Math.round(r.successes / (r.successes + r.failures) * 100)}%)
+                        </p>
+                    </div>
+                `;
+            } else {
+                log('No working proxies found!', 'error');
+            }
+
+            isRunning = false;
+            runBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>

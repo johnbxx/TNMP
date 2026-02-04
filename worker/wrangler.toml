@@ -1,0 +1,19 @@
+name = "tnmp-notifications"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+# Pairings: every minute Mon 8PM-midnight Pacific → Tue in UTC
+# Results: every 5 min Tue 7PM-midnight Pacific → Wed in UTC
+# Cache refresh: hourly 24/7
+# PST (Nov-Mar): UTC-8 → pairings Tue 4-8, results Wed 3-8
+# PDT (Mar-Nov): UTC-7 → pairings Tue 3-7, results Wed 2-7
+# Current: PST. Run worker/scripts/dst-switch.sh to toggle on DST transitions.
+crons = ["* 4-8 * * TUE", "*/5 3-8 * * WED", "0 * * * *"]
+
+[vars]
+ALLOWED_ORIGIN = "https://tnmpairings.com"
+
+[[kv_namespaces]]
+binding = "SUBSCRIBERS"
+id = "69d27221bb904515958233a6c9481e75"

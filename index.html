@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Are the Pairings Up?</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="256x256" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/favicon.png">
+    <meta name="theme-color" content="#4CAF50">
+    <meta property="og:title" content="Are the Pairings Up?">
+    <meta property="og:description" content="Tuesday Night Marathon pairings checker — Mechanics' Institute, San Francisco">
+    <meta property="og:image" content="https://tnmpairings.com/og/og-yes.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://tnmpairings.com">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Are the Pairings Up?">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Are the Pairings Up?</h1>
+
+        <div id="loading" class="loading" role="status" aria-label="Checking pairings">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Checking with the chess gods...</p>
+        </div>
+
+        <div id="result" class="result hidden" role="status" aria-live="polite">
+            <div id="answer" class="answer"></div>
+            <div id="pairing-info" class="pairing-info hidden"></div>
+            <div id="round-tracker" class="round-tracker hidden"></div>
+            <div id="meme" class="meme"></div>
+            <p id="round-info" class="round-info"></p>
+        </div>
+
+        <div class="refresh-container">
+            <div class="button-row">
+                <button id="check-btn" class="check-btn" onclick="checkPairings()" aria-label="Check pairings again">Check Again</button>
+                <button id="share-btn" class="share-btn" onclick="shareStatus()" aria-label="Share current status">Share</button>
+            </div>
+            <div id="countdown" class="countdown" aria-live="off">Next check in <span id="countdown-time">60</span>s</div>
+        </div>
+
+        <div class="footer" role="contentinfo">
+            <a href="https://www.milibrary.org/chess/tournaments/2026-new-years-tuesday-night-marathon" target="_blank" rel="noopener">
+                View Tournament Page
+            </a>
+            <span class="footer-divider" aria-hidden="true">•</span>
+            <a href="#" onclick="openSettings(); return false;" id="settings-link" aria-label="Open settings">Settings</a>
+            <span class="footer-divider" aria-hidden="true">•</span>
+            <a href="#" onclick="openAbout(); return false;" aria-label="About this app">About</a>
+            <span class="footer-divider" aria-hidden="true">•</span>
+            <a href="#" onclick="openPrivacy(); return false;" aria-label="Privacy policy">Privacy</a>
+        </div>
+
+        <!-- Debug buttons to preview states (add ?debug=true to URL to show) -->
+        <div class="debug-panel" id="debug-panel" style="display: none;">
+            <p>Debug: Preview States</p>
+            <button onclick="previewState(STATE.YES)">YES</button>
+            <button onclick="previewState(STATE.NO)">NO</button>
+            <button onclick="previewState(STATE.TOO_EARLY)">TOO EARLY</button>
+            <button onclick="previewState(STATE.IN_PROGRESS)">IN PROGRESS</button>
+            <button onclick="previewState(STATE.RESULTS)">RESULTS</button>
+            <p>Debug: Bye Variants</p>
+            <button onclick="previewState(STATE.YES, 'fullBye')">YES + Full Bye</button>
+            <button onclick="previewState(STATE.YES, 'halfBye')">YES + Half Bye</button>
+            <button onclick="previewState(STATE.IN_PROGRESS, 'fullBye')">IN PROGRESS + Full Bye</button>
+            <p>Debug: Result Variants</p>
+            <button onclick="previewState(STATE.RESULTS, 'win')">RESULTS + Win</button>
+            <button onclick="previewState(STATE.RESULTS, 'loss')">RESULTS + Loss</button>
+            <button onclick="previewState(STATE.RESULTS, 'draw')">RESULTS + Draw</button>
+            <button onclick="previewState(STATE.RESULTS, 'fullBye')">RESULTS + Bye</button>
+            <p>Debug: Final Results</p>
+            <button onclick="previewState(STATE.RESULTS, 'final')">RESULTS (Final Round)</button>
+            <p>Debug: Off-Season</p>
+            <button onclick="previewState(STATE.OFF_SEASON)">OFF SEASON (No Info)</button>
+            <button onclick="previewState(STATE.OFF_SEASON, 'nextTnm')">OFF SEASON (Next TNM)</button>
+            <button onclick="previewState(STATE.OFF_SEASON, 'r1Day')">OFF SEASON (R1 Day)</button>
+        </div>
+    </div>
+
+    <div id="share-toast" class="share-toast" role="alert" aria-live="assertive"></div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden" role="dialog" aria-label="Settings" aria-modal="true">
+        <div class="modal-backdrop" onclick="closeSettings()"></div>
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div class="setting-group">
+                <label for="player-name-input">Your Name</label>
+                <input type="text" id="player-name-input" placeholder="e.g., Magnus Carlsen" autocomplete="name">
+                <p class="setting-hint">Enter your name exactly as it appears in the pairings to see your board, color, and opponent.</p>
+            </div>
+            <div class="setting-group">
+                <label for="phone-input">SMS Notifications</label>
+                <div id="sms-unverified">
+                    <div class="phone-input-row">
+                        <input type="tel" id="phone-input" placeholder="(555) 123-4567" autocomplete="tel">
+                        <button id="verify-btn" class="modal-btn modal-btn-primary" onclick="sendVerification()">Verify</button>
+                    </div>
+                    <p class="setting-hint">Get a text when pairings are posted. US numbers only. Msg &amp; data rates apply.</p>
+                </div>
+                <div id="verify-section" class="hidden">
+                    <div class="phone-input-row">
+                        <input type="text" id="verify-code-input" placeholder="6-digit code" maxlength="6" inputmode="numeric">
+                        <button class="modal-btn modal-btn-primary" onclick="confirmVerification()">Confirm</button>
+                    </div>
+                    <p class="setting-hint">Enter the code we texted you.</p>
+                </div>
+                <div id="sms-verified" class="hidden">
+                    <div class="sms-status-row">
+                        <span class="sms-status-badge">Subscribed</span>
+                        <button class="modal-btn modal-btn-secondary modal-btn-small" onclick="startUnsubscribe()">Remove</button>
+                    </div>
+                    <div class="notify-prefs">
+                        <label class="notify-pref-label">
+                            <input type="checkbox" id="pref-pairings" checked onchange="updateNotificationPrefs()">
+                            Pairings posted
+                        </label>
+                        <label class="notify-pref-label">
+                            <input type="checkbox" id="pref-results" checked onchange="updateNotificationPrefs()">
+                            Results posted
+                        </label>
+                    </div>
+                    <p class="setting-hint" id="sms-verified-hint"></p>
+                </div>
+                <div id="sms-unsubscribe-confirm" class="hidden">
+                    <p class="setting-hint" style="margin-bottom: 0.5rem;">Enter your phone number to confirm:</p>
+                    <div class="phone-input-row">
+                        <input type="tel" id="unsubscribe-phone-input" placeholder="(555) 123-4567" autocomplete="tel">
+                        <button class="modal-btn modal-btn-secondary modal-btn-small" onclick="confirmUnsubscribe()">Confirm</button>
+                    </div>
+                </div>
+                <p id="phone-status" class="phone-status hidden"></p>
+            </div>
+            <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="modal-btn modal-btn-primary" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="about-modal" class="modal hidden" role="dialog" aria-label="About" aria-modal="true">
+        <div class="modal-backdrop" onclick="closeAbout()"></div>
+        <div class="modal-content modal-content-wide">
+            <h2>About</h2>
+            <div class="about-body">
+                <p><strong>Are the Pairings Up?</strong> checks whether pairings have been posted for the
+                <a href="https://www.milibrary.org/chess/tournaments/" target="_blank" rel="noopener">Tuesday Night Marathon</a>
+                at the Mechanics' Institute in San Francisco.</p>
+                <p>You can also sign up for SMS notifications in Settings to get a text the moment pairings or results are posted.</p>
+                <p class="about-disclaimer">This is an independent project and is <strong>not affiliated with or endorsed by</strong> the Mechanics' Institute.</p>
+                <p class="about-privacy">Your privacy matters. No cookies, no analytics, no tracking. Phone numbers are encrypted and never stored in plaintext. <a href="#" onclick="closeAbout(); setTimeout(openPrivacy, 300); return false;">Full privacy policy</a>.</p>
+                <p class="about-credit">Built with Cloudflare Workers &amp; Pages.</p>
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-primary" onclick="closeAbout()">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Modal -->
+    <div id="privacy-modal" class="modal hidden" role="dialog" aria-label="Privacy Policy" aria-modal="true">
+        <div class="modal-backdrop" onclick="closePrivacy()"></div>
+        <div class="modal-content modal-content-wide modal-content-scrollable">
+            <h2>Privacy Policy</h2>
+            <div class="privacy-body">
+                <p class="privacy-updated">Last updated: February 3, 2026</p>
+
+                <h3>What This App Does</h3>
+                <p><strong>Are the Pairings Up?</strong> is an independent tool that checks whether pairings have been posted for the Tuesday Night Marathon chess tournament at the Mechanics' Institute in San Francisco. It can also send you an SMS when pairings or results are posted.</p>
+
+                <h3>Data We Collect</h3>
+                <h4>Player Name</h4>
+                <p>If you enter your name in Settings, it is stored in your browser's local storage only. It is used to find your pairing in the tournament data. Your name is also sent to our server if you subscribe to SMS notifications, so we can include your pairing details in the text message.</p>
+
+                <h4>Phone Number (SMS subscribers only)</h4>
+                <p>When you subscribe to SMS notifications, your phone number is:</p>
+                <ul>
+                    <li>Sent to our server over HTTPS</li>
+                    <li>Normalized to standard format and immediately encrypted using <strong>AES-256-GCM</strong></li>
+                    <li>Stored in Cloudflare KV with a <strong>SHA-256 hash</strong> as the key &mdash; the plaintext number is never stored</li>
+                    <li>Decrypted only when sending you an SMS notification</li>
+                </ul>
+                <p>On your device, only a SHA-256 hash of your phone number is stored in local storage &mdash; never the number itself.</p>
+
+                <h4>IP Address</h4>
+                <p>Your IP address is used solely for rate limiting API requests. It is stored temporarily with an automatic 5-minute expiration. It is not logged or retained beyond that.</p>
+
+                <h3>Third-Party Services</h3>
+                <p>SMS messages are delivered through <strong>Twilio</strong>. Your phone number is shared with Twilio solely for message delivery. See <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener">Twilio's Privacy Policy</a>.</p>
+                <p>This app is hosted on <strong>Cloudflare</strong> Pages and Workers. Subscriber data is stored in Cloudflare KV (encrypted as described above). See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's Privacy Policy</a>.</p>
+
+                <h3>Cookies and Tracking</h3>
+                <p>This app uses <strong>no cookies, no analytics, and no tracking</strong> of any kind. There are no third-party scripts, advertising, or data brokers.</p>
+
+                <h3>Data Retention</h3>
+                <p>SMS subscriber records are retained until you unsubscribe. Rate limit records expire automatically after 5 minutes. Browser local storage persists until you clear it or unsubscribe.</p>
+
+                <h3>Your Rights</h3>
+                <ul>
+                    <li><strong>Unsubscribe</strong> from SMS at any time via Settings. This permanently deletes your server-side subscriber record.</li>
+                    <li><strong>Clear local data</strong> by clearing your browser's site data for tnmpairings.com, or by removing your name in Settings.</li>
+                </ul>
+
+                <h3>Contact</h3>
+                <p>Questions about this policy? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a>.</p>
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-primary" onclick="closePrivacy()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>

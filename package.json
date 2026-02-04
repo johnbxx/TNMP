@@ -1,0 +1,18 @@
+{
+  "name": "tnmp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.4.0",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  }
+}
