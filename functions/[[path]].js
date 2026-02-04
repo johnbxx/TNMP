@@ -10,13 +10,35 @@ const SITE_URL = 'https://tnmpairings.com';
 
 const CRAWLER_REGEX = /facebookexternalhit|Twitterbot|Slackbot|LinkedInBot|Discordbot|TelegramBot|WhatsApp|Googlebot|bingbot|Applebot/i;
 
+const SECURITY_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://tnmp-notifications.johnfranklinboyer.workers.dev; frame-ancestors 'none';",
+};
+
+function addSecurityHeaders(response) {
+    const newHeaders = new Headers(response.headers);
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+        newHeaders.set(key, value);
+    }
+    return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: newHeaders,
+    });
+}
+
 export async function onRequest(context) {
     const { request, next } = context;
     const ua = request.headers.get('User-Agent') || '';
 
-    // Non-crawlers: pass through immediately
+    // Non-crawlers: pass through with security headers
     if (!CRAWLER_REGEX.test(ua)) {
-        return next();
+        const response = await next();
+        return addSecurityHeaders(response);
     }
 
     // Crawlers: fetch state and inject OG tags
@@ -53,13 +75,14 @@ export async function onRequest(context) {
         // Insert before </head>
         html = html.replace('</head>', ogTags + '\n</head>');
 
-        return new Response(html, {
+        return addSecurityHeaders(new Response(html, {
             status: response.status,
             headers: response.headers,
-        });
+        }));
     } catch {
-        // On any error, just pass through the original response
-        return next();
+        // On any error, just pass through with security headers
+        const response = await next();
+        return addSecurityHeaders(response);
     }
 }
 

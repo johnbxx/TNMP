@@ -123,6 +123,7 @@ const RATE_LIMITS = {
     '/preferences-by-hash': 10,
     '/tournament-html': 60,
     '/og-state': 60,
+    '/health': 30,
 };
 
 const RATE_WINDOW = 300; // 5 minutes in seconds
@@ -352,6 +353,29 @@ const OG_STATE_CONFIG = {
     results:     { title: 'COMPLETE — Results Are In!', color: '#f57c00', image: 'og-results.png' },
     off_season:  { title: 'REST — Off Season', color: '#5D8047', image: 'og-off-season.png' },
 };
+
+async function handleHealth(env, request) {
+    const [lastCheck, pairingsState, resultsState, cached] = await Promise.all([
+        env.SUBSCRIBERS.get('state:lastCheck'),
+        env.SUBSCRIBERS.get('state:pairingsUp', 'json'),
+        env.SUBSCRIBERS.get('state:resultsPosted', 'json'),
+        env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
+    ]);
+
+    const lastCheckData = lastCheck ? JSON.parse(lastCheck) : null;
+    const lastCheckTime = lastCheckData?.timestamp ? new Date(lastCheckData.timestamp).getTime() : null;
+    const minutesSinceCheck = lastCheckTime ? Math.round((Date.now() - lastCheckTime) / 60000) : null;
+
+    return corsResponse({
+        status: 'ok',
+        lastCheck: lastCheckData || null,
+        minutesSinceLastCheck: minutesSinceCheck,
+        pairingsUp: pairingsState || null,
+        resultsPosted: resultsState || null,
+        cachedRound: cached?.round || null,
+        cachedAt: cached?.fetchedAt || null,
+    }, 200, env, request);
+}
 
 async function handleOgState(request, env) {
     const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
@@ -837,6 +861,10 @@ export default {
             }
             if (path === '/og-state' && request.method === 'GET') {
                 return await handleOgState(request, env);
+            }
+
+            if (path === '/health' && request.method === 'GET') {
+                return await handleHealth(env, request);
             }
 
             return corsResponse({ error: 'Not found' }, 404, env, request);

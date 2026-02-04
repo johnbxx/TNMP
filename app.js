@@ -17,7 +17,6 @@ async function checkPairings() {
 
     try {
         let html = null;
-        let isOffline = false;
         let gameColors = null;
 
         try {
@@ -60,7 +59,6 @@ async function checkPairings() {
                     if (data.html) {
                         html = data.html;
                         gameColors = data.gameColors || null;
-                        isOffline = true;
                         console.log(`Using offline cache (fetched at ${data.fetchedAt})`);
                         if (data.tournamentName || data.roundDates) {
                             setTournamentMeta({

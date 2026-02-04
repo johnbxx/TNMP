@@ -1,5 +1,4 @@
-import { WORKER_URL, CONFIG, STATE } from './config.js';
-import { currentState } from './countdown.js';
+import { WORKER_URL, CONFIG } from './config.js';
 import { showToast } from './share.js';
 import { clearRoundHistory } from './history.js';
 

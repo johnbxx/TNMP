@@ -27,6 +27,9 @@ jobs:
         run: npm ci
         working-directory: worker
 
+      - name: Lint frontend
+        run: npm run lint
+
       - name: Run frontend tests
         run: npm test
 
