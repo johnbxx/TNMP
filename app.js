@@ -296,26 +296,46 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// --- Expose functions to HTML onclick handlers ---
-window.checkPairings = wrappedCheckPairings;
-window.shareStatus = shareStatus;
-window.openSettings = openSettings;
-window.closeSettings = closeSettings;
-window.saveSettings = () => saveSettings(wrappedCheckPairings);
-window.sendVerification = sendVerification;
-window.confirmVerification = confirmVerification;
-window.startUnsubscribe = startUnsubscribe;
-window.confirmUnsubscribe = confirmUnsubscribe;
-window.updateNotificationPrefs = updateNotificationPrefs;
-window.enablePush = enablePush;
-window.disablePush = disablePush;
-window.updatePushPrefs = updatePushPrefs;
-window.openAbout = openAbout;
-window.closeAbout = closeAbout;
-window.openPrivacy = openPrivacy;
-window.closePrivacy = closePrivacy;
-window.previewState = previewState;
-window.STATE = STATE;
+// --- Wire up event handlers (CSP-compliant, no inline handlers) ---
+document.getElementById('check-btn').addEventListener('click', wrappedCheckPairings);
+document.getElementById('share-btn').addEventListener('click', shareStatus);
+document.getElementById('settings-link').addEventListener('click', openSettings);
+document.getElementById('about-link').addEventListener('click', openAbout);
+document.getElementById('privacy-link').addEventListener('click', openPrivacy);
+
+// Settings modal
+document.getElementById('verify-btn').addEventListener('click', sendVerification);
+document.getElementById('confirm-verify-btn').addEventListener('click', confirmVerification);
+document.getElementById('start-unsubscribe-btn').addEventListener('click', startUnsubscribe);
+document.getElementById('confirm-unsubscribe-btn').addEventListener('click', confirmUnsubscribe);
+document.getElementById('pref-pairings').addEventListener('change', updateNotificationPrefs);
+document.getElementById('pref-results').addEventListener('change', updateNotificationPrefs);
+document.getElementById('cancel-settings-btn').addEventListener('click', closeSettings);
+document.getElementById('save-settings-btn').addEventListener('click', () => saveSettings(wrappedCheckPairings));
+
+// Push notifications
+document.getElementById('enable-push-btn').addEventListener('click', enablePush);
+document.getElementById('disable-push-btn').addEventListener('click', disablePush);
+document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
+document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
+
+// About modal
+document.getElementById('close-about-btn').addEventListener('click', () => closeAbout());
+document.getElementById('about-privacy-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    closeAbout();
+    setTimeout(openPrivacy, 300);
+});
+
+// Privacy modal
+document.getElementById('close-privacy-btn').addEventListener('click', closePrivacy);
+
+// Debug panel
+document.getElementById('debug-panel').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-debug]');
+    if (!btn) return;
+    previewState(btn.dataset.debug, btn.dataset.variant);
+});
 
 // --- Register service worker ---
 if ('serviceWorker' in navigator) {
@@ -330,15 +350,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show About modal first; chain to Settings when closed
         setTimeout(() => {
             openAbout();
-            // Override closeAbout to chain to Settings on first visit
-            const originalClose = window.closeAbout;
-            window.closeAbout = function () {
-                originalClose();
-                window.closeAbout = originalClose;
+            // Chain: when About is closed on first visit, open Settings
+            const closeBtn = document.getElementById('close-about-btn');
+            const onFirstClose = () => {
+                closeBtn.removeEventListener('click', onFirstClose);
                 if (!CONFIG.playerName) {
                     setTimeout(() => openSettings(), 300);
                 }
             };
+            closeBtn.addEventListener('click', onFirstClose);
         }, 500);
     }
 

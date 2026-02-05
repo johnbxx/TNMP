@@ -39,8 +39,8 @@
 
         <div class="refresh-container">
             <div class="button-row">
-                <button id="check-btn" class="check-btn" onclick="checkPairings()" aria-label="Check pairings again">Check Again</button>
-                <button id="share-btn" class="share-btn" onclick="shareStatus()" aria-label="Share current status">Share</button>
+                <button id="check-btn" class="check-btn" aria-label="Check pairings again">Check Again</button>
+                <button id="share-btn" class="share-btn" aria-label="Share current status">Share</button>
             </div>
             <div id="countdown" class="countdown" aria-live="off">Next check in <span id="countdown-time">60</span>s</div>
         </div>
@@ -50,36 +50,36 @@
                 View Tournament Page
             </a>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <button type="button" class="footer-link" onclick="openSettings()" id="settings-link" aria-label="Open settings">Settings</button>
+            <button type="button" class="footer-link" id="settings-link" aria-label="Open settings">Settings</button>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <button type="button" class="footer-link" onclick="openAbout()" aria-label="About this app">About</button>
+            <button type="button" class="footer-link" id="about-link" aria-label="About this app">About</button>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <button type="button" class="footer-link" onclick="openPrivacy()" aria-label="Privacy policy">Privacy</button>
+            <button type="button" class="footer-link" id="privacy-link" aria-label="Privacy policy">Privacy</button>
         </div>
 
         <!-- Debug buttons to preview states (add ?debug=true to URL to show) -->
         <div class="debug-panel" id="debug-panel" style="display: none;">
             <p>Debug: Preview States</p>
-            <button onclick="previewState(STATE.YES)">YES</button>
-            <button onclick="previewState(STATE.NO)">NO</button>
-            <button onclick="previewState(STATE.TOO_EARLY)">TOO EARLY</button>
-            <button onclick="previewState(STATE.IN_PROGRESS)">IN PROGRESS</button>
-            <button onclick="previewState(STATE.RESULTS)">RESULTS</button>
+            <button data-debug="yes">YES</button>
+            <button data-debug="no">NO</button>
+            <button data-debug="too_early">TOO EARLY</button>
+            <button data-debug="in_progress">IN PROGRESS</button>
+            <button data-debug="results">RESULTS</button>
             <p>Debug: Bye Variants</p>
-            <button onclick="previewState(STATE.YES, 'fullBye')">YES + Full Bye</button>
-            <button onclick="previewState(STATE.YES, 'halfBye')">YES + Half Bye</button>
-            <button onclick="previewState(STATE.IN_PROGRESS, 'fullBye')">IN PROGRESS + Full Bye</button>
+            <button data-debug="yes" data-variant="fullBye">YES + Full Bye</button>
+            <button data-debug="yes" data-variant="halfBye">YES + Half Bye</button>
+            <button data-debug="in_progress" data-variant="fullBye">IN PROGRESS + Full Bye</button>
             <p>Debug: Result Variants</p>
-            <button onclick="previewState(STATE.RESULTS, 'win')">RESULTS + Win</button>
-            <button onclick="previewState(STATE.RESULTS, 'loss')">RESULTS + Loss</button>
-            <button onclick="previewState(STATE.RESULTS, 'draw')">RESULTS + Draw</button>
-            <button onclick="previewState(STATE.RESULTS, 'fullBye')">RESULTS + Bye</button>
+            <button data-debug="results" data-variant="win">RESULTS + Win</button>
+            <button data-debug="results" data-variant="loss">RESULTS + Loss</button>
+            <button data-debug="results" data-variant="draw">RESULTS + Draw</button>
+            <button data-debug="results" data-variant="fullBye">RESULTS + Bye</button>
             <p>Debug: Final Results</p>
-            <button onclick="previewState(STATE.RESULTS, 'final')">RESULTS (Final Round)</button>
+            <button data-debug="results" data-variant="final">RESULTS (Final Round)</button>
             <p>Debug: Off-Season</p>
-            <button onclick="previewState(STATE.OFF_SEASON)">OFF SEASON (No Info)</button>
-            <button onclick="previewState(STATE.OFF_SEASON, 'nextTnm')">OFF SEASON (Next TNM)</button>
-            <button onclick="previewState(STATE.OFF_SEASON, 'r1Day')">OFF SEASON (R1 Day)</button>
+            <button data-debug="off_season">OFF SEASON (No Info)</button>
+            <button data-debug="off_season" data-variant="nextTnm">OFF SEASON (Next TNM)</button>
+            <button data-debug="off_season" data-variant="r1Day">OFF SEASON (R1 Day)</button>
         </div>
     </div>
 
@@ -100,29 +100,29 @@
                 <div id="sms-unverified">
                     <div class="phone-input-row">
                         <input type="tel" id="phone-input" placeholder="(555) 123-4567" autocomplete="tel">
-                        <button id="verify-btn" class="modal-btn modal-btn-primary" onclick="sendVerification()">Verify</button>
+                        <button id="verify-btn" class="modal-btn modal-btn-primary">Verify</button>
                     </div>
                     <p class="setting-hint">Get a text when pairings are posted. US numbers only. Msg &amp; data rates apply.</p>
                 </div>
                 <div id="verify-section" class="hidden">
                     <div class="phone-input-row">
                         <input type="text" id="verify-code-input" placeholder="6-digit code" maxlength="6" inputmode="numeric">
-                        <button class="modal-btn modal-btn-primary" onclick="confirmVerification()">Confirm</button>
+                        <button id="confirm-verify-btn" class="modal-btn modal-btn-primary">Confirm</button>
                     </div>
                     <p class="setting-hint">Enter the code we texted you.</p>
                 </div>
                 <div id="sms-verified" class="hidden">
                     <div class="sms-status-row">
                         <span class="sms-status-badge">Subscribed</span>
-                        <button class="modal-btn modal-btn-secondary modal-btn-small" onclick="startUnsubscribe()">Remove</button>
+                        <button id="start-unsubscribe-btn" class="modal-btn modal-btn-secondary modal-btn-small">Remove</button>
                     </div>
                     <div class="notify-prefs">
                         <label class="notify-pref-label">
-                            <input type="checkbox" id="pref-pairings" checked onchange="updateNotificationPrefs()">
+                            <input type="checkbox" id="pref-pairings" checked>
                             Pairings posted
                         </label>
                         <label class="notify-pref-label">
-                            <input type="checkbox" id="pref-results" checked onchange="updateNotificationPrefs()">
+                            <input type="checkbox" id="pref-results" checked>
                             Results posted
                         </label>
                     </div>
@@ -132,7 +132,7 @@
                     <p class="setting-hint" style="margin-bottom: 0.5rem;">Enter your phone number to confirm:</p>
                     <div class="phone-input-row">
                         <input type="tel" id="unsubscribe-phone-input" placeholder="(555) 123-4567" autocomplete="tel">
-                        <button class="modal-btn modal-btn-secondary modal-btn-small" onclick="confirmUnsubscribe()">Confirm</button>
+                        <button id="confirm-unsubscribe-btn" class="modal-btn modal-btn-secondary modal-btn-small">Confirm</button>
                     </div>
                 </div>
                 <p id="phone-status" class="phone-status hidden" role="alert" aria-live="assertive"></p>
@@ -143,21 +143,21 @@
                     <p class="setting-hint">Push notifications are not supported in this browser.</p>
                 </div>
                 <div id="push-unsubscribed" class="hidden">
-                    <button class="modal-btn modal-btn-primary" onclick="enablePush()">Enable Push Notifications</button>
+                    <button id="enable-push-btn" class="modal-btn modal-btn-primary">Enable Push Notifications</button>
                     <p class="setting-hint">Get browser notifications when pairings or results are posted. No phone number required.</p>
                 </div>
                 <div id="push-subscribed" class="hidden">
                     <div class="sms-status-row">
                         <span class="sms-status-badge">Push Active</span>
-                        <button class="modal-btn modal-btn-secondary modal-btn-small" onclick="disablePush()">Disable</button>
+                        <button id="disable-push-btn" class="modal-btn modal-btn-secondary modal-btn-small">Disable</button>
                     </div>
                     <div class="notify-prefs">
                         <label class="notify-pref-label">
-                            <input type="checkbox" id="push-pref-pairings" checked onchange="updatePushPrefs()">
+                            <input type="checkbox" id="push-pref-pairings" checked>
                             Pairings posted
                         </label>
                         <label class="notify-pref-label">
-                            <input type="checkbox" id="push-pref-results" checked onchange="updatePushPrefs()">
+                            <input type="checkbox" id="push-pref-results" checked>
                             Results posted
                         </label>
                     </div>
@@ -166,8 +166,8 @@
             </div>
             <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
             <div class="modal-buttons">
-                <button class="modal-btn modal-btn-secondary" onclick="closeSettings()">Cancel</button>
-                <button class="modal-btn modal-btn-primary" onclick="saveSettings()">Save</button>
+                <button id="cancel-settings-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                <button id="save-settings-btn" class="modal-btn modal-btn-primary">Save</button>
             </div>
         </div>
     </div>
@@ -183,11 +183,11 @@
                 at the Mechanics' Institute in San Francisco.</p>
                 <p>You can also enable push notifications or sign up for SMS in Settings to be notified the moment pairings or results are posted.</p>
                 <p class="about-disclaimer">This is an independent project and is <strong>not affiliated with or endorsed by</strong> the Mechanics' Institute.</p>
-                <p class="about-privacy">Your privacy matters. No cookies, no analytics, no tracking. Phone numbers are encrypted and never stored in plaintext. <a href="#" onclick="closeAbout(); setTimeout(openPrivacy, 300); return false;">Full privacy policy</a>.</p>
+                <p class="about-privacy">Your privacy matters. No cookies, no analytics, no tracking. Phone numbers are encrypted and never stored in plaintext. <a href="#" id="about-privacy-link">Full privacy policy</a>.</p>
                 <p class="about-credit">Built with Cloudflare Workers &amp; Pages.</p>
             </div>
             <div class="modal-buttons">
-                <button class="modal-btn modal-btn-primary" onclick="closeAbout()">Got it</button>
+                <button id="close-about-btn" class="modal-btn modal-btn-primary">Got it</button>
             </div>
         </div>
     </div>
@@ -243,7 +243,7 @@
                 <p>Questions about this policy? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a>.</p>
             </div>
             <div class="modal-buttons">
-                <button class="modal-btn modal-btn-primary" onclick="closePrivacy()">Close</button>
+                <button id="close-privacy-btn" class="modal-btn modal-btn-primary">Close</button>
             </div>
         </div>
     </div>
