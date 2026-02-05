@@ -96,59 +96,17 @@
                 <p class="setting-hint">Enter your name exactly as it appears in the pairings to see your board, color, and opponent.</p>
             </div>
             <div class="setting-group">
-                <label for="phone-input">SMS Notifications</label>
-                <div id="sms-unverified">
-                    <div class="phone-input-row">
-                        <input type="tel" id="phone-input" placeholder="(555) 123-4567" autocomplete="tel">
-                        <button id="verify-btn" class="modal-btn modal-btn-primary">Verify</button>
-                    </div>
-                    <p class="setting-hint">Get a text when pairings are posted. US numbers only. Msg &amp; data rates apply.</p>
-                </div>
-                <div id="verify-section" class="hidden">
-                    <div class="phone-input-row">
-                        <input type="text" id="verify-code-input" placeholder="6-digit code" maxlength="6" inputmode="numeric">
-                        <button id="confirm-verify-btn" class="modal-btn modal-btn-primary">Confirm</button>
-                    </div>
-                    <p class="setting-hint">Enter the code we texted you.</p>
-                </div>
-                <div id="sms-verified" class="hidden">
-                    <div class="sms-status-row">
-                        <span class="sms-status-badge">Subscribed</span>
-                        <button id="start-unsubscribe-btn" class="modal-btn modal-btn-secondary modal-btn-small">Remove</button>
-                    </div>
-                    <div class="notify-prefs">
-                        <label class="notify-pref-label">
-                            <input type="checkbox" id="pref-pairings" checked>
-                            Pairings posted
-                        </label>
-                        <label class="notify-pref-label">
-                            <input type="checkbox" id="pref-results" checked>
-                            Results posted
-                        </label>
-                    </div>
-                    <p class="setting-hint" id="sms-verified-hint"></p>
-                </div>
-                <div id="sms-unsubscribe-confirm" class="hidden">
-                    <p class="setting-hint" style="margin-bottom: 0.5rem;">Enter your phone number to confirm:</p>
-                    <div class="phone-input-row">
-                        <input type="tel" id="unsubscribe-phone-input" placeholder="(555) 123-4567" autocomplete="tel">
-                        <button id="confirm-unsubscribe-btn" class="modal-btn modal-btn-secondary modal-btn-small">Confirm</button>
-                    </div>
-                </div>
-                <p id="phone-status" class="phone-status hidden" role="alert" aria-live="assertive"></p>
-            </div>
-            <div class="setting-group">
-                <label>Push Notifications</label>
+                <label>Notifications</label>
                 <div id="push-unsupported" class="hidden">
                     <p class="setting-hint">Push notifications are not supported in this browser.</p>
                 </div>
                 <div id="push-unsubscribed" class="hidden">
                     <button id="enable-push-btn" class="modal-btn modal-btn-primary">Enable Push Notifications</button>
-                    <p class="setting-hint">Get browser notifications when pairings or results are posted. No phone number required.</p>
+                    <p class="setting-hint">Get browser notifications when pairings or results are posted.</p>
                 </div>
                 <div id="push-subscribed" class="hidden">
-                    <div class="sms-status-row">
-                        <span class="sms-status-badge">Push Active</span>
+                    <div class="notification-status-row">
+                        <span class="notification-status-badge">Push Active</span>
                         <button id="disable-push-btn" class="modal-btn modal-btn-secondary modal-btn-small">Disable</button>
                     </div>
                     <div class="notify-prefs">
@@ -162,7 +120,7 @@
                         </label>
                     </div>
                 </div>
-                <p id="push-status" class="phone-status hidden" role="alert" aria-live="assertive"></p>
+                <p id="push-status" class="notification-status hidden" role="alert" aria-live="assertive"></p>
             </div>
             <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
             <div class="modal-buttons">
@@ -181,9 +139,9 @@
                 <p><strong>Are the Pairings Up?</strong> checks whether pairings have been posted for the
                 <a href="https://www.milibrary.org/chess/tournaments/" target="_blank" rel="noopener">Tuesday Night Marathon</a>
                 at the Mechanics' Institute in San Francisco.</p>
-                <p>You can also enable push notifications or sign up for SMS in Settings to be notified the moment pairings or results are posted.</p>
+                <p>You can also enable push notifications in Settings to be notified the moment pairings or results are posted.</p>
                 <p class="about-disclaimer">This is an independent project and is <strong>not affiliated with or endorsed by</strong> the Mechanics' Institute.</p>
-                <p class="about-privacy">Your privacy matters. No cookies, no analytics, no tracking. Phone numbers are encrypted and never stored in plaintext. <a href="#" id="about-privacy-link">Full privacy policy</a>.</p>
+                <p class="about-privacy">Your privacy matters. No cookies, no analytics, no tracking. No personal data is collected. <a href="#" id="about-privacy-link">Full privacy policy</a>.</p>
                 <p class="about-credit">Built with Cloudflare Workers &amp; Pages.</p>
             </div>
             <div class="modal-buttons">
@@ -201,21 +159,11 @@
                 <p class="privacy-updated">Last updated: February 4, 2026</p>
 
                 <h3>What This App Does</h3>
-                <p><strong>Are the Pairings Up?</strong> is an independent tool that checks whether pairings have been posted for the Tuesday Night Marathon chess tournament at the Mechanics' Institute in San Francisco. It can also notify you via push notifications or SMS when pairings or results are posted.</p>
+                <p><strong>Are the Pairings Up?</strong> is an independent tool that checks whether pairings have been posted for the Tuesday Night Marathon chess tournament at the Mechanics' Institute in San Francisco. It can also notify you via push notifications when pairings or results are posted.</p>
 
                 <h3>Data We Collect</h3>
                 <h4>Player Name</h4>
-                <p>If you enter your name in Settings, it is stored in your browser's local storage only. It is used to find your pairing in the tournament data. Your name is also sent to our server if you subscribe to SMS notifications, so we can include your pairing details in the text message.</p>
-
-                <h4>Phone Number (SMS subscribers only)</h4>
-                <p>When you subscribe to SMS notifications, your phone number is:</p>
-                <ul>
-                    <li>Sent to our server over HTTPS</li>
-                    <li>Normalized to standard format and immediately encrypted using <strong>AES-256-GCM</strong></li>
-                    <li>Stored in Cloudflare KV with a <strong>SHA-256 hash</strong> as the key &mdash; the plaintext number is never stored</li>
-                    <li>Decrypted only when sending you an SMS notification</li>
-                </ul>
-                <p>On your device, only a SHA-256 hash of your phone number is stored in local storage &mdash; never the number itself.</p>
+                <p>If you enter your name in Settings, it is stored in your browser's local storage only. It is used to find your pairing in the tournament data. If you enable push notifications, your name is also sent to our server so we can include your pairing details in the notification.</p>
 
                 <h4>Push Notification Endpoint (push subscribers only)</h4>
                 <p>If you enable push notifications, your browser generates a push subscription endpoint URL (managed by your browser vendor, e.g. Google or Apple). This URL is stored on our server and used solely to deliver notifications. It does not contain personal information. Your notification preferences (pairings/results) and player name are stored alongside the endpoint.</p>
@@ -224,18 +172,17 @@
                 <p>Your IP address is used solely for rate limiting API requests. It is stored temporarily with an automatic 5-minute expiration. It is not logged or retained beyond that.</p>
 
                 <h3>Third-Party Services</h3>
-                <p>SMS messages are delivered through <strong>Twilio</strong>. Your phone number is shared with Twilio solely for message delivery. See <a href="https://www.twilio.com/en-us/legal/privacy" target="_blank" rel="noopener">Twilio's Privacy Policy</a>.</p>
-                <p>This app is hosted on <strong>Cloudflare</strong> Pages and Workers. Subscriber data is stored in Cloudflare KV (encrypted as described above). See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's Privacy Policy</a>.</p>
+                <p>This app is hosted on <strong>Cloudflare</strong> Pages and Workers. Push subscription data is stored in Cloudflare KV. See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare's Privacy Policy</a>.</p>
 
                 <h3>Cookies and Tracking</h3>
                 <p>This app uses <strong>no cookies, no analytics, and no tracking</strong> of any kind. There are no third-party scripts, advertising, or data brokers.</p>
 
                 <h3>Data Retention</h3>
-                <p>SMS subscriber records are retained until you unsubscribe. Push subscription records are retained until you disable push notifications or your browser revokes the subscription. Rate limit records expire automatically after 5 minutes. Browser local storage persists until you clear it or unsubscribe.</p>
+                <p>Push subscription records are retained until you disable push notifications or your browser revokes the subscription. Rate limit records expire automatically after 5 minutes. Browser local storage persists until you clear it.</p>
 
                 <h3>Your Rights</h3>
                 <ul>
-                    <li><strong>Unsubscribe</strong> from SMS or disable push notifications at any time via Settings. This permanently deletes your server-side subscriber record.</li>
+                    <li><strong>Disable push notifications</strong> at any time via Settings. This permanently deletes your server-side subscription record.</li>
                     <li><strong>Clear local data</strong> by clearing your browser's site data for tnmpairings.com, or by removing your name in Settings.</li>
                 </ul>
 

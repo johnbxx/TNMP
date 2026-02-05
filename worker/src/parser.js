@@ -245,14 +245,14 @@ export function findPlayerResult(html, playerName) {
 }
 
 /**
- * Compose a personalized results SMS message for a subscriber.
+ * Compose a personalized results notification message.
  *
  * @param {object|null} pairing - Result from findPlayerPairing
  * @param {string|null} result - Player's result string (e.g., "1", "0", "½")
  * @param {number} round - Round number
- * @returns {string} SMS message body
+ * @returns {string} Message body
  */
-export function composeResultsSMS(pairing, result, round) {
+export function composeResultsMessage(pairing, result, round) {
     const link = SITE_URL;
 
     if (!pairing || !result) {
@@ -273,13 +273,13 @@ export function composeResultsSMS(pairing, result, round) {
 }
 
 /**
- * Compose a personalized SMS message for a subscriber.
+ * Compose a personalized pairings notification message.
  *
  * @param {object|null} pairing - Result from findPlayerPairing
  * @param {number} round - Round number
- * @returns {string} SMS message body
+ * @returns {string} Message body
  */
-export function composeSMS(pairing, round) {
+export function composeMessage(pairing, round) {
     const link = SITE_URL;
 
     if (!pairing) {

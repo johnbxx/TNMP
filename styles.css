@@ -816,47 +816,31 @@ html.off-season .meme {
     background: var(--overlay-light);
 }
 
-/* SMS Notification UI */
-.phone-input-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.phone-input-row input {
-    flex: 1;
-}
-
-.phone-input-row .modal-btn {
-    flex-shrink: 0;
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-}
-
-.phone-status {
+/* Notification UI */
+.notification-status {
     font-size: 0.85rem;
     margin-top: 0.5rem;
     padding: 0.4rem 0.75rem;
     border-radius: 6px;
 }
 
-.phone-status-error {
+.notification-status-error {
     color: var(--status-error);
     background: var(--status-error-bg);
 }
 
-.phone-status-success {
+.notification-status-success {
     color: var(--status-success);
     background: var(--status-success-bg);
 }
 
-.sms-status-row {
+.notification-status-row {
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
 
-.sms-status-badge {
+.notification-status-badge {
     display: inline-block;
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-end) 100%);
     color: var(--text-primary);

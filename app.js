@@ -4,7 +4,7 @@ import { getTimeState } from './src/time.js';
 import { showLoading, showState, showError, updateTournamentLink, showOfflineBanner, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown, setLastRoundNumber } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
-import { openSettings, closeSettings, saveSettings, sendVerification, confirmVerification, startUnsubscribe, confirmUnsubscribe, updateNotificationPrefs } from './src/settings.js';
+import { openSettings, closeSettings, saveSettings } from './src/settings.js';
 import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './src/history.js';
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
@@ -304,12 +304,6 @@ document.getElementById('about-link').addEventListener('click', openAbout);
 document.getElementById('privacy-link').addEventListener('click', openPrivacy);
 
 // Settings modal
-document.getElementById('verify-btn').addEventListener('click', sendVerification);
-document.getElementById('confirm-verify-btn').addEventListener('click', confirmVerification);
-document.getElementById('start-unsubscribe-btn').addEventListener('click', startUnsubscribe);
-document.getElementById('confirm-unsubscribe-btn').addEventListener('click', confirmUnsubscribe);
-document.getElementById('pref-pairings').addEventListener('change', updateNotificationPrefs);
-document.getElementById('pref-results').addEventListener('change', updateNotificationPrefs);
 document.getElementById('cancel-settings-btn').addEventListener('click', closeSettings);
 document.getElementById('save-settings-btn').addEventListener('click', () => saveSettings(wrappedCheckPairings));
 
@@ -341,6 +335,11 @@ document.getElementById('debug-panel').addEventListener('click', (e) => {
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
 }
+
+// --- Clean up legacy SMS localStorage keys ---
+localStorage.removeItem('smsPhoneHash');
+localStorage.removeItem('smsSubscribed');
+localStorage.removeItem('smsPhone');
 
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {

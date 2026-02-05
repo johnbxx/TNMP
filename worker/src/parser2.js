@@ -342,7 +342,7 @@ export async function findPlayerResult(html, playerName) {
 
 // --- Re-exported pure functions from parser.js (v1) ---
 
-export { composeSMS, composeResultsSMS, parseTournamentList, parseRoundDates, extractTournamentName } from './parser.js';
+export { composeMessage, composeResultsMessage, parseTournamentList, parseRoundDates, extractTournamentName } from './parser.js';
 
 /**
  * Extract per-round color data from PGN textareas in the full tournament HTML.

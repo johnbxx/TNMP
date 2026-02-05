@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
     parsePlayerInfo, extractSwissSysContent, extractRoundNumber, hasPairings, hasResults,
     findPlayerPairing, findPlayerResult,
-    composeSMS, composeResultsSMS,
+    composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
 } from './parser.js';
 import { extractPgnColors } from './parser2.js';
@@ -120,18 +120,18 @@ describe('findPlayerResult', () => {
     });
 });
 
-// --- composeSMS ---
+// --- composeMessage ---
 
-describe('composeSMS', () => {
+describe('composeMessage', () => {
     it('composes generic message when no pairing', () => {
-        const msg = composeSMS(null, 4);
+        const msg = composeMessage(null, 4);
         expect(msg).toContain('Round 4');
         expect(msg).toContain('pairings are up');
         expect(msg).toContain('tnmpairings.com');
     });
 
     it('composes personalized message with pairing', () => {
-        const msg = composeSMS({
+        const msg = composeMessage({
             board: '18',
             color: 'Black',
             opponent: 'Phil Ploquin',
@@ -144,43 +144,43 @@ describe('composeSMS', () => {
     });
 
     it('composes bye message', () => {
-        const msg = composeSMS({ isBye: true, byeType: 'full' }, 4);
+        const msg = composeMessage({ isBye: true, byeType: 'full' }, 4);
         expect(msg).toContain('full-point bye');
     });
 
     it('composes half-point bye message', () => {
-        const msg = composeSMS({ isBye: true, byeType: 'half' }, 4);
+        const msg = composeMessage({ isBye: true, byeType: 'half' }, 4);
         expect(msg).toContain('half-point bye');
     });
 });
 
-// --- composeResultsSMS ---
+// --- composeResultsMessage ---
 
-describe('composeResultsSMS', () => {
+describe('composeResultsMessage', () => {
     it('composes win message', () => {
-        const msg = composeResultsSMS({ color: 'Black', opponent: 'Phil Ploquin', opponentRating: 1660 }, '1', 4);
+        const msg = composeResultsMessage({ color: 'Black', opponent: 'Phil Ploquin', opponentRating: 1660 }, '1', 4);
         expect(msg).toContain('Won');
         expect(msg).toContain('Phil Ploquin');
     });
 
     it('composes loss message', () => {
-        const msg = composeResultsSMS({ color: 'White', opponent: 'John Boyer', opponentRating: 1740 }, '0', 4);
+        const msg = composeResultsMessage({ color: 'White', opponent: 'John Boyer', opponentRating: 1740 }, '0', 4);
         expect(msg).toContain('Lost');
     });
 
     it('composes draw message', () => {
-        const msg = composeResultsSMS({ color: 'White', opponent: 'Someone', opponentRating: 1500 }, '½', 4);
+        const msg = composeResultsMessage({ color: 'White', opponent: 'Someone', opponentRating: 1500 }, '½', 4);
         expect(msg).toContain('Drew');
     });
 
     it('composes generic message when no pairing or result', () => {
-        const msg = composeResultsSMS(null, null, 4);
+        const msg = composeResultsMessage(null, null, 4);
         expect(msg).toContain('results are posted');
         expect(msg).toContain('tnmpairings.com');
     });
 
     it('composes bye results message', () => {
-        const msg = composeResultsSMS({ isBye: true, byeType: 'full' }, '1', 4);
+        const msg = composeResultsMessage({ isBye: true, byeType: 'full' }, '1', 4);
         expect(msg).toContain('full-point bye');
     });
 });

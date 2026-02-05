@@ -1,13 +1,13 @@
 # TNMP — "Are the Pairings Up?"
 
-Chess tournament pairings checker PWA with SMS notifications for the Tuesday Night Marathon at the Mechanics' Institute (San Francisco).
+Chess tournament pairings checker PWA with push notifications for the Tuesday Night Marathon at the Mechanics' Institute (San Francisco).
 
 ## Architecture
 
 Two deployments on Cloudflare:
 
 - **Frontend** — Vanilla JS PWA on Cloudflare Pages (`tnmpairings.com`). Vite build, no framework. DOMParser-based HTML parser.
-- **Worker** — Cloudflare Worker (`tnmp-notifications`) for cron-triggered SMS notifications, tournament HTML caching, and subscriber management. Uses both regex (v1) and HTMLRewriter (v2) parsers. Twilio for SMS.
+- **Worker** — Cloudflare Worker (`tnmp-notifications`) for cron-triggered push notifications, tournament HTML caching, and subscriber management. Uses both regex (v1) and HTMLRewriter (v2) parsers.
 - **Pages Function** — `functions/[[path]].js` intercepts crawler requests to inject dynamic Open Graph meta tags. Regular users bypass it entirely.
 
 ## Key Files
@@ -17,12 +17,13 @@ Two deployments on Cloudflare:
 | File | Role |
 |------|------|
 | `app.js` | Entry point (root dir). Fetches worker `/tournament-html`, determines time state, renders UI, manages round history. First-visit About modal flow. |
-| `src/config.js` | Constants: `WORKER_URL`, `STATE` enum, `tournamentMeta` object, `CONFIG` (player name, URLs). |
+| `src/config.js` | Constants: `WORKER_URL`, `VAPID_PUBLIC_KEY`, `STATE` enum, `tournamentMeta` object, `CONFIG` (player name, URLs). |
 | `src/parser2.js` | DOMParser-based parser. `parsePairingsSections()`, `parseStandings()`, `findPlayerPairing()`, `parseResult()`. |
 | `src/time.js` | `getTimeState()` — determines time window: `too_early`, `check_pairings`, `round_in_progress`, `results_window`, `off_season`, `off_season_r1`. Uses `tournamentMeta.roundDates`. |
 | `src/ui.js` | `showState()` renders answer, meme, pairing info, round tracker. `renderRoundTracker()` shows tournament progress with clickable round circles. |
 | `src/history.js` | Round history tracking via localStorage. `updateRoundHistory()`, `backfillFromStandings()` (uses standings table + PGN data for colors/boards). |
-| `src/settings.js` | Settings modal, SMS subscribe/verify/unsubscribe flows. Phone numbers stored as SHA-256 hashes in localStorage (never plaintext). |
+| `src/settings.js` | Settings modal open/close/save. Syncs push subscription with player name. |
+| `src/push.js` | Push notification subscribe/unsubscribe/preferences/status management. |
 | `src/countdown.js` | 60-second auto-refresh timer with display. |
 | `src/memes.js` | Random meme selection per state (36 images, 36 captions). |
 | `src/share.js` | Native Share API with clipboard fallback. |
@@ -33,10 +34,10 @@ Two deployments on Cloudflare:
 
 | File | Role |
 |------|------|
-| `index.js` | HTTP routes + cron handler. Crypto helpers (AES-GCM phone encryption, SHA-256 key hashing). Rate limiting. Tournament resolution. OG state endpoint. Hash-based status/preferences endpoints. |
-| `parser.js` | Regex-based parser (v1). `extractSwissSysContent()`, `hasPairings()`, `hasResults()`, `findPlayerPairing()`, `composeSMS()`, `composeResultsSMS()`, `parseTournamentList()`, `parseRoundDates()`, `extractTournamentName()`. |
-| `parser2.js` | HTMLRewriter-based parser (v2). Used by `index.js` for async parsing. `extractPgnColors()` extracts color/result/board from PGN textareas. Re-exports pure functions (`composeSMS`, `composeResultsSMS`, `parseTournamentList`, `parseRoundDates`, `extractTournamentName`) from `parser.js`. |
-| `twilio.js` | `sendSMS(to, body, env)` via Twilio REST API. |
+| `index.js` | HTTP routes + cron handler. Push notification endpoints. Rate limiting. Tournament resolution. OG state endpoint. |
+| `parser.js` | Regex-based parser (v1). `extractSwissSysContent()`, `hasPairings()`, `hasResults()`, `findPlayerPairing()`, `composeMessage()`, `composeResultsMessage()`, `parseTournamentList()`, `parseRoundDates()`, `extractTournamentName()`. |
+| `parser2.js` | HTMLRewriter-based parser (v2). Used by `index.js` for async parsing. `extractPgnColors()` extracts color/result/board from PGN textareas. Re-exports pure functions (`composeMessage`, `composeResultsMessage`, `parseTournamentList`, `parseRoundDates`, `extractTournamentName`) from `parser.js`. |
+| `webpush.js` | Web Push Protocol implementation (VAPID JWT + RFC 8291 payload encryption). `sendPushNotification()`. |
 
 ### Edge (`functions/`)
 
@@ -48,7 +49,7 @@ Two deployments on Cloudflare:
 
 | Path | Content |
 |------|---------|
-| `sw.js` | Service worker. Network-first for HTML shell, cache-first for assets/memes/pieces. |
+| `sw.js` | Service worker. Network-first for HTML shell, cache-first for assets/memes/pieces. Push notification handlers. |
 | `manifest.json` | PWA manifest. `"Are the Pairings Up?"`, standalone display. |
 | `_routes.json` | Cloudflare Pages routing. Limits Pages Function to root path only; static assets bypass it. |
 | `memes/` | State-specific meme images (yes, no, too_early, in_progress, results). 36 images. |
@@ -77,7 +78,7 @@ PGN Round field encodes board: `[Round "2.18"]` = round 2, board 18. Results: `1
 
 ### Standings Parsing
 
-Standings table columns: `# | Place | Name | ID | Rating | Rd 1..N | Total` (6 fixed columns before round data).
+Standings table columns vary: `# | Name | ID | Rating | Rd 1..N | Total` or `# | Place | Name | ID | Rating | Rd 1..N | Total`. The Name column is detected by `class="name"` on the `<td>` element.
 
 Round result codes: `W`=win, `L`=loss, `D`=draw, `H`=half-point bye, `B`=full-point bye, `U`=zero-point bye. Number after W/L/D is opponent's rank.
 
@@ -86,22 +87,15 @@ Round result codes: `W`=win, `L`=loss, `D`=draw, `H`=half-point bye, `B`=full-po
 | Route | Method | Purpose |
 |-------|--------|---------|
 | `/tournament-html` | GET | Cached tournament HTML + metadata + gameColors |
-| `/subscribe` | POST | Start SMS verification (`{phone, playerName}`) |
-| `/verify` | POST | Confirm 6-digit code (`{phone, code}`) |
-| `/unsubscribe` | DELETE | Remove subscriber (`{phone}`) |
-| `/status` | GET | Check subscription status (`?phone=...`) |
-| `/status-by-hash` | GET | Check subscription status by hash (`?hash=...`) — used by frontend |
-| `/preferences` | POST | Update notification prefs (`{phone, notifyPairings, notifyResults}`) |
-| `/preferences-by-hash` | POST | Update prefs by hash (`{hash, notifyPairings, notifyResults}`) — used by frontend |
+| `/push-subscribe` | POST | Store push subscription (`{subscription, playerName}`) |
+| `/push-unsubscribe` | POST | Remove push subscription (`{endpoint}`) |
+| `/push-status` | GET | Check push subscription status (`?endpoint=...`) |
+| `/push-preferences` | POST | Update push notification prefs (`{endpoint, notifyPairings, notifyResults}`) |
+| `/push-test` | POST | Send test push notification (requires VAPID private key as auth) |
 | `/og-state` | GET | Current app state for OG meta tags (used by Pages Function) |
+| `/health` | GET | Worker health check |
 
 All endpoints are rate-limited per IP (KV-based, 5-minute windows).
-
-## Phone Security
-
-- **Server-side**: Phone numbers are encrypted using AES-256-GCM with the `ENCRYPTION_KEY` secret (32-byte hex). KV keys use `sub:<SHA-256(phone)>`. Plaintext is never stored — only decrypted when sending SMS.
-- **Client-side**: Only a SHA-256 hash is stored in localStorage (`smsPhoneHash`). The plaintext phone is held in memory only during the subscribe→verify flow, then discarded. A one-time migration removes any legacy `smsPhone` plaintext entries.
-- **Unsubscribe**: Requires re-entering the phone number (proof of ownership for the destructive action).
 
 ## Open Graph / Social Previews
 
@@ -118,9 +112,9 @@ Static OG images in `public/og/` match the app's gradient colors: green (YES), r
 
 Three modals in `index.html`, all following the same pattern (`.modal` + `.modal-backdrop` + `.modal-content`):
 
-- **Settings** — Player name, SMS subscribe/verify/unsubscribe, notification preferences, feedback email link
+- **Settings** — Player name, push notification enable/disable, notification preferences, feedback email link
 - **About** — App description, Mechanics' Institute disclaimer, privacy summary, credits. Shown on first visit (chains to Settings if no player name set).
-- **Privacy** — Full privacy policy covering data collection, encryption, third parties (Twilio, Cloudflare), localStorage inventory, retention, user rights.
+- **Privacy** — Full privacy policy covering data collection, push endpoints, Cloudflare hosting, localStorage inventory, retention, user rights.
 
 All modals support Escape key to close. Footer links: View Tournament Page, Settings, About, Privacy.
 
@@ -142,7 +136,7 @@ All in the `SUBSCRIBERS` namespace (`69d27221bb904515958233a6c9481e75`):
 
 | Pattern | Purpose |
 |---------|---------|
-| `sub:<sha256_hash>` | Subscriber record (encrypted phone, name, prefs, notification state) |
+| `push:<sha256_hash>` | Push subscription record (endpoint, keys, player name, prefs, notification state) |
 | `cache:tournamentHtml` | Stripped SwissSys HTML + round number + gameColors |
 | `cache:tournamentMeta` | Tournament name, URL, round dates, next tournament (6h TTL) |
 | `state:pairingsUp` | Last pairings detection (round + timestamp) |
@@ -156,13 +150,13 @@ All in the `SUBSCRIBERS` namespace (`69d27221bb904515958233a6c9481e75`):
 # Frontend
 npm run dev          # Vite dev server
 npm run build        # Build to dist/
-npm test             # Vitest (50 tests, happy-dom)
+npm test             # Vitest (happy-dom)
 
 # Worker
 cd worker
 npm run dev          # Wrangler dev
 npm run deploy       # Wrangler deploy
-npm test             # Vitest (47 tests, Node)
+npm test             # Vitest (Node)
 
 # Deploy frontend to Cloudflare Pages
 npx vite build && npx wrangler pages deploy dist --project-name=tnmpairings
@@ -175,7 +169,7 @@ node scripts/generate-og-images.js
 
 - Frontend parser tests: `src/parser2.test.js` — covers `parsePairingsSections`, `findPlayerPairing`, `parsePlayerInfo`, `parseResult`, `parseStandings`.
 - Frontend history tests: `src/history.test.js` — covers `loadRoundHistory`, `updateRoundHistory`, `backfillFromStandings` (with and without PGN gameColors).
-- Worker tests: `worker/src/parser.test.js` — covers `extractSwissSysContent` (standings + pairings preservation), `extractRoundNumber`, `hasPairings`, `hasResults`, `findPlayerPairing`, `findPlayerResult`, `composeSMS`, `composeResultsSMS`, `parseTournamentList`, `parseRoundDates`, `extractTournamentName`, `parsePlayerInfo`, `extractPgnColors` (PGN color/result/board extraction).
+- Worker tests: `worker/src/parser.test.js` — covers `extractSwissSysContent` (standings + pairings preservation), `extractRoundNumber`, `hasPairings`, `hasResults`, `findPlayerPairing`, `findPlayerResult`, `composeMessage`, `composeResultsMessage`, `parseTournamentList`, `parseRoundDates`, `extractTournamentName`, `parsePlayerInfo`, `extractPgnColors` (PGN color/result/board extraction).
 - All tests use real tournament HTML fixtures in `test/fixtures/`.
 
 ## Conventions
@@ -186,7 +180,6 @@ node scripts/generate-og-images.js
 - Tests use real tournament HTML fixtures in `test/fixtures/`.
 - Vite hashes all built assets for cache busting.
 - CORS locked to `https://tnmpairings.com` + `http://localhost:*` for dev.
-- Worker secrets: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `ENCRYPTION_KEY`.
+- Worker secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`.
 - Round history stored in localStorage under key `roundHistory`.
-- Phone numbers never stored in plaintext (encrypted server-side, hashed client-side).
 - Contact email: `info@tnmpairings.com` (Cloudflare Email Routing → personal email).

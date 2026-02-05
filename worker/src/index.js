@@ -1,60 +1,9 @@
-import { sendSMS } from './twilio.js';
 import { sendPushNotification } from './webpush.js';
-import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeSMS, composeResultsSMS, extractSwissSysContent, extractPgnColors, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
+import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
 
 const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 const MI_BASE_URL = 'https://www.milibrary.org';
 const META_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
-
-// --- Crypto Helpers ---
-
-let _cryptoKey = null;
-
-function hexToBytes(hex) {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-    }
-    return bytes;
-}
-
-function bytesToHex(bytes) {
-    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function getCryptoKey(env) {
-    if (_cryptoKey) return _cryptoKey;
-    const keyBytes = hexToBytes(env.ENCRYPTION_KEY);
-    _cryptoKey = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt', 'decrypt']);
-    return _cryptoKey;
-}
-
-async function hashPhone(phone) {
-    const encoded = new TextEncoder().encode(phone);
-    const hash = await crypto.subtle.digest('SHA-256', encoded);
-    return bytesToHex(new Uint8Array(hash));
-}
-
-async function encryptPhone(phone, env) {
-    const key = await getCryptoKey(env);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(phone);
-    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-    return { iv: bytesToHex(iv), ciphertext: bytesToHex(new Uint8Array(ciphertext)) };
-}
-
-async function decryptPhone(encrypted, env) {
-    const key = await getCryptoKey(env);
-    const iv = hexToBytes(encrypted.iv);
-    const ciphertext = hexToBytes(encrypted.ciphertext);
-    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-    return new TextDecoder().decode(plaintext);
-}
-
-async function subscriberKey(phone) {
-    const hash = await hashPhone(phone);
-    return `sub:${hash}`;
-}
 
 // --- Helpers ---
 
@@ -77,7 +26,7 @@ function corsHeaders(env, request) {
 
     return {
         'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
     };
 }
@@ -92,36 +41,9 @@ function corsResponse(data, status, env, request) {
     });
 }
 
-/**
- * Normalize a US phone number to E.164 format (+1XXXXXXXXXX).
- * Accepts: (555) 123-4567, 555-123-4567, 5551234567, +15551234567, etc.
- * Returns null if invalid.
- */
-function normalizePhone(input) {
-    const digits = input.replace(/\D/g, '');
-    if (digits.length === 10) {
-        return '+1' + digits;
-    }
-    if (digits.length === 11 && digits.startsWith('1')) {
-        return '+' + digits;
-    }
-    return null;
-}
-
-function generateCode() {
-    return String(Math.floor(100000 + Math.random() * 900000));
-}
-
 // --- Rate Limiting ---
 
 const RATE_LIMITS = {
-    '/subscribe': 5,
-    '/verify': 10,
-    '/unsubscribe': 5,
-    '/preferences': 10,
-    '/status': 30,
-    '/status-by-hash': 30,
-    '/preferences-by-hash': 10,
     '/tournament-html': 60,
     '/og-state': 60,
     '/health': 30,
@@ -447,218 +369,16 @@ async function handleOgState(request, env) {
     }, 200, env, request);
 }
 
-async function handleSubscribe(request, env) {
-    const { phone, playerName } = await request.json();
-
-    if (!phone) {
-        return corsResponse({ success: false, error: 'Phone number is required' }, 400, env, request);
-    }
-
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-        return corsResponse({ success: false, error: 'Invalid US phone number' }, 400, env, request);
-    }
-
-    if (!playerName || !playerName.trim()) {
-        return corsResponse({ success: false, error: 'Player name is required. Set your name in Settings first.' }, 400, env, request);
-    }
-
-    const key = await subscriberKey(normalized);
-    const existing = await env.SUBSCRIBERS.get(key, 'json');
-
-    // Rate limit: max 3 verification attempts per hour
-    if (existing && existing.verifyAttempts >= 3) {
-        const hourAgo = Date.now() - 60 * 60 * 1000;
-        if (existing.lastVerifyAttempt > hourAgo) {
-            return corsResponse({ success: false, error: 'Too many attempts. Try again later.' }, 429, env, request);
-        }
-    }
-
-    const code = generateCode();
-
-    await env.SUBSCRIBERS.put(key, JSON.stringify({
-        encryptedPhone: await encryptPhone(normalized, env),
-        name: playerName.trim(),
-        verified: false,
-        verifyCode: code,
-        verifyExpires: Date.now() + 10 * 60 * 1000, // 10 minutes
-        verifyAttempts: (existing?.verifyAttempts || 0) + 1,
-        lastVerifyAttempt: Date.now(),
-        lastNotifiedRound: existing?.lastNotifiedRound || null,
-        createdAt: existing?.createdAt || new Date().toISOString(),
-    }));
-
-    const result = await sendSMS(
-        normalized,
-        `Your TNMP verification code is: ${code}`,
-        env
-    );
-
-    if (!result.success) {
-        return corsResponse({ success: false, error: 'Failed to send SMS. Check your phone number.' }, 500, env, request);
-    }
-
-    return corsResponse({ success: true, message: 'Verification code sent!' }, 200, env, request);
-}
-
-async function handleVerify(request, env) {
-    const { phone, code } = await request.json();
-
-    if (!phone || !code) {
-        return corsResponse({ success: false, error: 'Phone and code are required' }, 400, env, request);
-    }
-
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-        return corsResponse({ success: false, error: 'Invalid phone number' }, 400, env, request);
-    }
-
-    const key = await subscriberKey(normalized);
-    const record = await env.SUBSCRIBERS.get(key, 'json');
-
-    if (!record) {
-        return corsResponse({ success: false, error: 'No pending verification for this number' }, 404, env, request);
-    }
-
-    if (Date.now() > record.verifyExpires) {
-        return corsResponse({ success: false, error: 'Code expired. Request a new one.' }, 410, env, request);
-    }
-
-    if (record.verifyCode !== code.trim()) {
-        return corsResponse({ success: false, error: 'Incorrect code' }, 401, env, request);
-    }
-
-    // Mark as verified
-    record.verified = true;
-    record.verifyCode = null;
-    record.verifyExpires = null;
-    record.verifyAttempts = 0;
-    await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-
-    return corsResponse({
-        success: true,
-        message: "Phone verified! You'll get a text when pairings are posted.",
-    }, 200, env, request);
-}
-
-async function handleUnsubscribe(request, env) {
-    const { phone } = await request.json();
-
-    if (!phone) {
-        return corsResponse({ success: false, error: 'Phone number is required' }, 400, env, request);
-    }
-
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-        return corsResponse({ success: false, error: 'Invalid phone number' }, 400, env, request);
-    }
-
-    await env.SUBSCRIBERS.delete(await subscriberKey(normalized));
-    return corsResponse({ success: true, message: 'Unsubscribed' }, 200, env, request);
-}
-
-async function handleStatus(request, env) {
-    const url = new URL(request.url);
-    const phone = url.searchParams.get('phone');
-
-    if (!phone) {
-        return corsResponse({ subscribed: false }, 200, env, request);
-    }
-
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-        return corsResponse({ subscribed: false }, 200, env, request);
-    }
-
-    const record = await env.SUBSCRIBERS.get(await subscriberKey(normalized), 'json');
-
-    if (!record) {
-        return corsResponse({ subscribed: false }, 200, env, request);
-    }
-
-    return corsResponse({
-        subscribed: true,
-        verified: record.verified,
-        name: record.name,
-        notifyPairings: record.notifyPairings !== false,
-        notifyResults: record.notifyResults !== false,
-    }, 200, env, request);
-}
-
-async function handlePreferences(request, env) {
-    const { phone, notifyPairings, notifyResults } = await request.json();
-
-    if (!phone) {
-        return corsResponse({ success: false, error: 'Phone number is required' }, 400, env, request);
-    }
-
-    const normalized = normalizePhone(phone);
-    if (!normalized) {
-        return corsResponse({ success: false, error: 'Invalid phone number' }, 400, env, request);
-    }
-
-    const key = await subscriberKey(normalized);
-    const record = await env.SUBSCRIBERS.get(key, 'json');
-
-    if (!record || !record.verified) {
-        return corsResponse({ success: false, error: 'No active subscription for this number' }, 404, env, request);
-    }
-
-    record.notifyPairings = notifyPairings !== false;
-    record.notifyResults = notifyResults !== false;
-    await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-
-    return corsResponse({ success: true, message: 'Preferences updated' }, 200, env, request);
-}
-
-async function handleStatusByHash(request, env) {
-    const url = new URL(request.url);
-    const hash = url.searchParams.get('hash');
-
-    if (!hash || !/^[a-f0-9]{64}$/.test(hash)) {
-        return corsResponse({ subscribed: false }, 200, env, request);
-    }
-
-    const record = await env.SUBSCRIBERS.get(`sub:${hash}`, 'json');
-
-    if (!record) {
-        return corsResponse({ subscribed: false }, 200, env, request);
-    }
-
-    return corsResponse({
-        subscribed: true,
-        verified: record.verified,
-        name: record.name,
-        notifyPairings: record.notifyPairings !== false,
-        notifyResults: record.notifyResults !== false,
-    }, 200, env, request);
-}
-
-async function handlePreferencesByHash(request, env) {
-    const { hash, notifyPairings, notifyResults } = await request.json();
-
-    if (!hash || !/^[a-f0-9]{64}$/.test(hash)) {
-        return corsResponse({ success: false, error: 'Invalid hash' }, 400, env, request);
-    }
-
-    const key = `sub:${hash}`;
-    const record = await env.SUBSCRIBERS.get(key, 'json');
-
-    if (!record || !record.verified) {
-        return corsResponse({ success: false, error: 'No active subscription' }, 404, env, request);
-    }
-
-    record.notifyPairings = notifyPairings !== false;
-    record.notifyResults = notifyResults !== false;
-    await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-
-    return corsResponse({ success: true, message: 'Preferences updated' }, 200, env, request);
-}
-
 // --- Push Notification Endpoints ---
 
+async function sha256Hex(input) {
+    const encoded = new TextEncoder().encode(input);
+    const hash = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function pushKey(endpoint) {
-    const hash = await hashPhone(endpoint); // reuse SHA-256 helper
+    const hash = await sha256Hex(endpoint);
     return `push:${hash}`;
 }
 
@@ -810,7 +530,7 @@ async function handlePushTest(request, env) {
     return corsResponse({ success: true, type: type || 'pairings', payload, results }, 200, env, request);
 }
 
-// --- Cron: Pairing Detection & SMS Dispatch ---
+// --- Cron: Pairing Detection & Push Notification Dispatch ---
 
 async function handleScheduled(env) {
     console.log('Cron triggered: checking for pairings...');
@@ -871,43 +591,6 @@ async function handleScheduled(env) {
         return;
     }
 
-    // Get all subscribers (parallel KV reads)
-    const subscriberList = await env.SUBSCRIBERS.list({ prefix: 'sub:' });
-    const subscribers = await Promise.all(
-        subscriberList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
-    );
-    let notifiedCount = 0;
-
-    for (const { key, record } of subscribers) {
-        if (!record || !record.verified) continue;
-        if (record.notifyPairings === false) continue;
-        if (record.lastNotifiedRound === round) continue;
-
-        // Decrypt phone number for SMS delivery
-        let phone;
-        try {
-            phone = await decryptPhone(record.encryptedPhone, env);
-        } catch (err) {
-            console.error(`Failed to decrypt phone for ${key}: ${err.message}`);
-            continue;
-        }
-
-        // Parse personalized pairing
-        const pairing = record.name ? await findPlayerPairing(html, record.name) : null;
-        const message = composeSMS(pairing, round);
-
-        console.log(`Sending SMS to ${key}: ${message}`);
-        const result = await sendSMS(phone, message, env);
-
-        if (result.success) {
-            record.lastNotifiedRound = round;
-            await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-            notifiedCount++;
-        } else {
-            console.error(`Failed to send to ${key}: ${result.error}`);
-        }
-    }
-
     // --- Push notifications for pairings ---
     let pushPairingsCount = 0;
     try {
@@ -921,7 +604,7 @@ async function handleScheduled(env) {
             if (record.lastNotifiedRound === round) continue;
 
             const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
-            const message = composeSMS(pairing, round);
+            const message = composeMessage(pairing, round);
 
             const payload = JSON.stringify({
                 title: `Round ${round} Pairings Are Up!`,
@@ -956,11 +639,10 @@ async function handleScheduled(env) {
     await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
         round,
         detectedAt: new Date().toISOString(),
-        notifiedCount,
         pushNotifiedCount: pushPairingsCount,
     }));
 
-    console.log(`Notified ${notifiedCount} SMS + ${pushPairingsCount} push subscriber(s) for round ${round}.`);
+    console.log(`Notified ${pushPairingsCount} push subscriber(s) for round ${round}.`);
 
     // --- Results Detection & Notification ---
     if (!await hasResults(html)) {
@@ -974,41 +656,6 @@ async function handleScheduled(env) {
     if (resultsState && resultsState.round === round) {
         console.log(`Already notified results for round ${round}, skipping.`);
         return;
-    }
-
-    const resultsSubscriberList = await env.SUBSCRIBERS.list({ prefix: 'sub:' });
-    const resultsSubscribers = await Promise.all(
-        resultsSubscriberList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
-    );
-    let resultsNotifiedCount = 0;
-
-    for (const { key, record } of resultsSubscribers) {
-        if (!record || !record.verified) continue;
-        if (record.notifyResults === false) continue;
-        if (record.lastNotifiedResultsRound === round) continue;
-
-        let phone;
-        try {
-            phone = await decryptPhone(record.encryptedPhone, env);
-        } catch (err) {
-            console.error(`Failed to decrypt phone for ${key}: ${err.message}`);
-            continue;
-        }
-
-        const pairing = record.name ? await findPlayerPairing(html, record.name) : null;
-        const playerResult = record.name ? await findPlayerResult(html, record.name) : null;
-        const message = composeResultsSMS(pairing, playerResult, round);
-
-        console.log(`Sending results SMS to ${key}: ${message}`);
-        const smsResult = await sendSMS(phone, message, env);
-
-        if (smsResult.success) {
-            record.lastNotifiedResultsRound = round;
-            await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-            resultsNotifiedCount++;
-        } else {
-            console.error(`Failed to send results to ${key}: ${smsResult.error}`);
-        }
     }
 
     // --- Push notifications for results ---
@@ -1025,7 +672,7 @@ async function handleScheduled(env) {
 
             const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
             const playerResult = record.playerName ? await findPlayerResult(html, record.playerName) : null;
-            const message = composeResultsSMS(pairing, playerResult, round);
+            const message = composeResultsMessage(pairing, playerResult, round);
 
             const payload = JSON.stringify({
                 title: `Round ${round} Results Are In!`,
@@ -1059,11 +706,10 @@ async function handleScheduled(env) {
     await env.SUBSCRIBERS.put('state:resultsPosted', JSON.stringify({
         round,
         detectedAt: new Date().toISOString(),
-        notifiedCount: resultsNotifiedCount,
         pushNotifiedCount: pushResultsCount,
     }));
 
-    console.log(`Notified ${resultsNotifiedCount} SMS + ${pushResultsCount} push subscriber(s) of results for round ${round}.`);
+    console.log(`Notified ${pushResultsCount} push subscriber(s) of results for round ${round}.`);
 }
 
 // --- Worker Entry Point ---
@@ -1086,29 +732,8 @@ export default {
             const rateLimited = await checkRateLimit(request, env, path);
             if (rateLimited) return rateLimited;
 
-            if (path === '/subscribe' && request.method === 'POST') {
-                return await handleSubscribe(request, env);
-            }
-            if (path === '/verify' && request.method === 'POST') {
-                return await handleVerify(request, env);
-            }
-            if (path === '/unsubscribe' && request.method === 'DELETE') {
-                return await handleUnsubscribe(request, env);
-            }
-            if (path === '/status' && request.method === 'GET') {
-                return await handleStatus(request, env);
-            }
-            if (path === '/preferences' && request.method === 'POST') {
-                return await handlePreferences(request, env);
-            }
             if (path === '/tournament-html' && request.method === 'GET') {
                 return await handleTournamentHtml(request, env);
-            }
-            if (path === '/status-by-hash' && request.method === 'GET') {
-                return await handleStatusByHash(request, env);
-            }
-            if (path === '/preferences-by-hash' && request.method === 'POST') {
-                return await handlePreferencesByHash(request, env);
             }
             if (path === '/push-subscribe' && request.method === 'POST') {
                 return await handlePushSubscribe(request, env);

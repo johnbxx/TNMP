@@ -87,8 +87,8 @@ export async function enablePush() {
     const statusEl = document.getElementById('push-status');
     const showError = (msg) => {
         statusEl.textContent = msg;
-        statusEl.classList.remove('hidden', 'phone-status-success');
-        statusEl.classList.add('phone-status-error');
+        statusEl.classList.remove('hidden', 'notification-status-success');
+        statusEl.classList.add('notification-status-error');
     };
 
     statusEl.classList.add('hidden');
