@@ -134,21 +134,30 @@ export function parseStandings(html) {
 
         for (const tr of trs) {
             const cells = tr.querySelectorAll('td');
-            if (cells.length < 7) continue;
+            if (cells.length < 6) continue;
 
             const rank = parseInt(cells[0].textContent.trim(), 10);
             if (isNaN(rank)) continue;
 
-            // Columns: # | Place | Name | ID | Rating | Rd 1..N | Total
-            const nameLink = cells[2].querySelector('a');
-            const name = cells[2].textContent.trim();
+            // Find the name column by class="name" to handle tables with or without a Place column
+            // With Place:    # | Place | Name | ID | Rating | Rd 1..N | Total
+            // Without Place: # | Name | ID | Rating | Rd 1..N | Total
+            let nameIdx = -1;
+            for (let c = 1; c < cells.length; c++) {
+                if (cells[c].classList.contains('name')) { nameIdx = c; break; }
+            }
+            if (nameIdx === -1) nameIdx = 2; // fallback to original assumption
+
+            const nameLink = cells[nameIdx].querySelector('a');
+            const name = cells[nameIdx].textContent.trim();
             const url = nameLink?.getAttribute('href') || null;
-            const id = cells[3].textContent.trim();
-            const rating = parseInt(cells[4].textContent.trim(), 10) || null;
+            const id = cells[nameIdx + 1].textContent.trim();
+            const rating = parseInt(cells[nameIdx + 2].textContent.trim(), 10) || null;
 
             const rounds = [];
-            // Round columns start at index 5, total is the last column
-            for (let i = 5; i < cells.length - 1; i++) {
+            // Round columns start after Rating, total is the last column
+            const roundStart = nameIdx + 3;
+            for (let i = roundStart; i < cells.length - 1; i++) {
                 const cellText = cells[i].textContent.trim();
                 if (!cellText || cellText === '\u00A0') {
                     rounds.push(null); // Future round

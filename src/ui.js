@@ -98,9 +98,11 @@ export function showState(state, info, pairingInfo = null, checkPairings = null)
     } else {
         const meme = getRandomMeme(state);
         memeEl.innerHTML = `
-            <img src="${meme.img}" alt="" role="presentation" onerror="this.style.display='none'">
+            <img src="${meme.img}" alt="" role="presentation">
             <p class="meme-text">${meme.text}</p>
         `;
+        const img = memeEl.querySelector('img');
+        if (img) img.addEventListener('error', () => { img.style.display = 'none'; });
     }
     roundInfoEl.textContent = info || '';
 

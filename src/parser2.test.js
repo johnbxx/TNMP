@@ -237,4 +237,22 @@ describe('parseStandings', () => {
         // Rounds 5-7 should be null (future)
         expect(boyer.rounds[4]).toBeNull();
     });
+
+    it('handles standings table without Place column', () => {
+        // Live data sometimes omits the Place column
+        const noPlaceHtml = `<h3>Standings. TNM: Open (Standings)</h3><table>
+            <thead><tr><td>#</td><td>Name</td><td>ID</td><td>Rating</td><td>Rd 1</td><td>Rd 2</td><td>Total</td></tr></thead>
+            <tbody>
+                <tr><td>1</td><td class="name"><a href="https://ratings.uschess.org/player/123">Alice Smith</a></td><td>123</td><td>1800</td><td class="result">W2</td><td class="result">L2</td><td class="total">1.0</td></tr>
+                <tr><td>2</td><td class="name"><a href="https://ratings.uschess.org/player/456">Bob Jones</a></td><td>456</td><td>1750</td><td class="result">L1</td><td class="result">W1</td><td class="total">1.0</td></tr>
+            </tbody></table>`;
+        const sections = parseStandings(noPlaceHtml);
+        expect(sections).toHaveLength(1);
+        expect(sections[0].players).toHaveLength(2);
+        expect(sections[0].players[0].name).toBe('Alice Smith');
+        expect(sections[0].players[0].rating).toBe(1800);
+        expect(sections[0].players[0].rounds[0]).toEqual({ result: 'W', opponentRank: 2 });
+        expect(sections[0].players[0].rounds[1]).toEqual({ result: 'L', opponentRank: 2 });
+        expect(sections[0].players[1].name).toBe('Bob Jones');
+    });
 });
