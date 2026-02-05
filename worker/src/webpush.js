@@ -61,39 +61,13 @@ async function hkdf(salt, ikm, info, length) {
     return hkdfExpand(prk, info, length);
 }
 
-// --- Info construction for RFC 8291 ---
+// --- Info construction for RFC 8291 (aes128gcm) ---
 
-function buildInfo(type, clientPublicKey, serverPublicKey) {
+function buildInfo(type) {
     const encoder = new TextEncoder();
-    const typeBytes = encoder.encode(type);
-    // "Content-Encoding: <type>\0" + "P-256\0" + lengths + keys
-    const info = new Uint8Array(
-        18 + typeBytes.length + 1 + 5 + 1 + 2 + clientPublicKey.length + 2 + serverPublicKey.length
-    );
-    let offset = 0;
-
-    // "Content-Encoding: "
-    const prefix = encoder.encode('Content-Encoding: ');
-    info.set(prefix, offset); offset += prefix.length;
-    info.set(typeBytes, offset); offset += typeBytes.length;
-    info[offset++] = 0; // null separator
-
-    // "P-256\0"
-    const curve = encoder.encode('P-256');
-    info.set(curve, offset); offset += curve.length;
-    info[offset++] = 0;
-
-    // Client public key length (2 bytes big-endian) + key
-    info[offset++] = 0;
-    info[offset++] = clientPublicKey.length;
-    info.set(clientPublicKey, offset); offset += clientPublicKey.length;
-
-    // Server public key length (2 bytes big-endian) + key
-    info[offset++] = 0;
-    info[offset++] = serverPublicKey.length;
-    info.set(serverPublicKey, offset);
-
-    return info;
+    // For aes128gcm (RFC 8291), info is simply "Content-Encoding: <type>\0"
+    const str = `Content-Encoding: ${type}\0`;
+    return encoder.encode(str);
 }
 
 // --- VAPID JWT (RFC 8292) ---
@@ -243,18 +217,17 @@ async function encryptPayload(subscription, payload) {
     // Generate 16-byte salt
     const salt = crypto.getRandomValues(new Uint8Array(16));
 
-    // Derive CEK and nonce
-    const cekInfo = buildInfo('aesgcm', clientPublicKey, serverPublicKeyRaw);
-    const nonceInfo = buildInfo('nonce', clientPublicKey, serverPublicKeyRaw);
+    // Derive CEK and nonce using aes128gcm info strings (RFC 8291)
+    const cekInfo = buildInfo('aes128gcm');
+    const nonceInfo = buildInfo('nonce');
 
     const cek = await hkdf(salt, ikm, cekInfo, 16);
     const nonce = await hkdf(salt, ikm, nonceInfo, 12);
 
-    // Pad the plaintext: add a 2-byte padding length prefix (0 padding bytes)
-    const padded = new Uint8Array(2 + payloadBytes.length);
-    padded[0] = 0; // padding length high byte
-    padded[1] = 0; // padding length low byte
-    padded.set(payloadBytes, 2);
+    // aes128gcm padding: plaintext + delimiter byte 0x02 (single record, no padding)
+    const padded = new Uint8Array(payloadBytes.length + 1);
+    padded.set(payloadBytes, 0);
+    padded[payloadBytes.length] = 2; // delimiter: final record
 
     // AES-128-GCM encrypt
     const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
@@ -264,7 +237,7 @@ async function encryptPayload(subscription, payload) {
 
     // Build aes128gcm content coding header:
     // salt (16) || rs (4, big-endian uint32) || idlen (1) || keyid (65) || encrypted
-    const recordSize = padded.length + 16; // plaintext + tag
+    const recordSize = padded.length + 16; // padded plaintext + AES-GCM tag (16 bytes)
     const header = new Uint8Array(16 + 4 + 1 + serverPublicKeyRaw.length);
     header.set(salt, 0);
     const rs = new DataView(header.buffer, 16, 4);
