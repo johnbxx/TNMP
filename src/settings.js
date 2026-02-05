@@ -1,6 +1,7 @@
 import { WORKER_URL, CONFIG } from './config.js';
 import { showToast } from './share.js';
 import { clearRoundHistory } from './history.js';
+import { openModal, closeModal } from './modal.js';
 
 // --- Phone hash storage (never store plaintext) ---
 
@@ -107,20 +108,15 @@ async function checkNotificationStatus() {
 // --- Settings modal ---
 
 export function openSettings() {
-    const modal = document.getElementById('settings-modal');
     const input = document.getElementById('player-name-input');
     input.value = CONFIG.playerName;
-    modal.classList.remove('hidden');
-    input.focus();
+    openModal('settings-modal', input);
     hidePhoneStatus();
     checkNotificationStatus();
 }
 
 export function closeSettings() {
-    const modal = document.getElementById('settings-modal');
-    const input = document.getElementById('player-name-input');
-    input.blur();
-    modal.classList.add('hidden');
+    closeModal('settings-modal');
 }
 
 export function saveSettings(checkPairings) {

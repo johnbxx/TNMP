@@ -50,11 +50,11 @@
                 View Tournament Page
             </a>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <a href="#" onclick="openSettings(); return false;" id="settings-link" aria-label="Open settings">Settings</a>
+            <button type="button" class="footer-link" onclick="openSettings()" id="settings-link" aria-label="Open settings">Settings</button>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <a href="#" onclick="openAbout(); return false;" aria-label="About this app">About</a>
+            <button type="button" class="footer-link" onclick="openAbout()" aria-label="About this app">About</button>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <a href="#" onclick="openPrivacy(); return false;" aria-label="Privacy policy">Privacy</a>
+            <button type="button" class="footer-link" onclick="openPrivacy()" aria-label="Privacy policy">Privacy</button>
         </div>
 
         <!-- Debug buttons to preview states (add ?debug=true to URL to show) -->
@@ -86,10 +86,10 @@
     <div id="share-toast" class="share-toast" role="alert" aria-live="assertive"></div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="modal hidden" role="dialog" aria-label="Settings" aria-modal="true">
-        <div class="modal-backdrop" onclick="closeSettings()"></div>
+    <div id="settings-modal" class="modal hidden" role="dialog" aria-labelledby="settings-modal-title" aria-modal="true">
+        <div class="modal-backdrop"></div>
         <div class="modal-content">
-            <h2>Settings</h2>
+            <h2 id="settings-modal-title">Settings</h2>
             <div class="setting-group">
                 <label for="player-name-input">Your Name</label>
                 <input type="text" id="player-name-input" placeholder="e.g., Magnus Carlsen" autocomplete="name">
@@ -135,7 +135,7 @@
                         <button class="modal-btn modal-btn-secondary modal-btn-small" onclick="confirmUnsubscribe()">Confirm</button>
                     </div>
                 </div>
-                <p id="phone-status" class="phone-status hidden"></p>
+                <p id="phone-status" class="phone-status hidden" role="alert" aria-live="assertive"></p>
             </div>
             <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
             <div class="modal-buttons">
@@ -146,10 +146,10 @@
     </div>
 
     <!-- About Modal -->
-    <div id="about-modal" class="modal hidden" role="dialog" aria-label="About" aria-modal="true">
-        <div class="modal-backdrop" onclick="closeAbout()"></div>
+    <div id="about-modal" class="modal hidden" role="dialog" aria-labelledby="about-modal-title" aria-modal="true">
+        <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-wide">
-            <h2>About</h2>
+            <h2 id="about-modal-title">About</h2>
             <div class="about-body">
                 <p><strong>Are the Pairings Up?</strong> checks whether pairings have been posted for the
                 <a href="https://www.milibrary.org/chess/tournaments/" target="_blank" rel="noopener">Tuesday Night Marathon</a>
@@ -166,10 +166,10 @@
     </div>
 
     <!-- Privacy Modal -->
-    <div id="privacy-modal" class="modal hidden" role="dialog" aria-label="Privacy Policy" aria-modal="true">
-        <div class="modal-backdrop" onclick="closePrivacy()"></div>
+    <div id="privacy-modal" class="modal hidden" role="dialog" aria-labelledby="privacy-modal-title" aria-modal="true">
+        <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-wide modal-content-scrollable">
-            <h2>Privacy Policy</h2>
+            <h2 id="privacy-modal-title">Privacy Policy</h2>
             <div class="privacy-body">
                 <p class="privacy-updated">Last updated: February 3, 2026</p>
 

@@ -659,6 +659,22 @@ html.off-season .meme {
     color: var(--text-primary);
 }
 
+.footer-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-link-hover);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.footer-link:hover {
+    color: var(--text-primary);
+}
+
 .footer-divider {
     color: rgba(255, 255, 255, 0.5);
     margin: 0 0.5rem;

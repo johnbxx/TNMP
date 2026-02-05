@@ -1,15 +1,17 @@
+import { openModal, closeModal } from './modal.js';
+
 export function openAbout() {
-    document.getElementById('about-modal').classList.remove('hidden');
+    openModal('about-modal');
 }
 
 export function closeAbout() {
-    document.getElementById('about-modal').classList.add('hidden');
+    closeModal('about-modal');
 }
 
 export function openPrivacy() {
-    document.getElementById('privacy-modal').classList.remove('hidden');
+    openModal('privacy-modal');
 }
 
 export function closePrivacy() {
-    document.getElementById('privacy-modal').classList.add('hidden');
+    closeModal('privacy-modal');
 }

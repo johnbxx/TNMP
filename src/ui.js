@@ -98,7 +98,7 @@ export function showState(state, info, pairingInfo = null, checkPairings = null)
     } else {
         const meme = getRandomMeme(state);
         memeEl.innerHTML = `
-            <img src="${meme.img}" alt="${meme.text}" onerror="this.style.display='none'">
+            <img src="${meme.img}" alt="" role="presentation" onerror="this.style.display='none'">
             <p class="meme-text">${meme.text}</p>
         `;
     }
@@ -189,6 +189,8 @@ export function showOfflineBanner(fetchedAt) {
     if (!banner) {
         banner = document.createElement('div');
         banner.id = 'offline-banner';
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
         document.body.prepend(banner);
     }
     const ago = formatTimeAgo(new Date(fetchedAt));

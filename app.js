@@ -8,6 +8,7 @@ import { openSettings, closeSettings, saveSettings, sendVerification, confirmVer
 import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './src/history.js';
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
+import { registerModalClose, trapFocus } from './src/modal.js';
 
 // --- Main check logic ---
 
@@ -264,22 +265,31 @@ const wrappedCheckPairings = async function() {
     await checkPairings();
 };
 
+// --- Register modal close handlers for backdrop clicks ---
+registerModalClose('settings-modal', closeSettings);
+registerModalClose('about-modal', closeAbout);
+registerModalClose('privacy-modal', closePrivacy);
+
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
     const settingsModal = document.getElementById('settings-modal');
     const aboutModal = document.getElementById('about-modal');
+    const privacyModal = document.getElementById('privacy-modal');
     if (!settingsModal.classList.contains('hidden')) {
-        if (e.key === 'Enter') {
+        trapFocus(e, 'settings-modal');
+        if (e.key === 'Enter' && !['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
             saveSettings(wrappedCheckPairings);
         } else if (e.key === 'Escape') {
             closeSettings();
         }
     } else if (!aboutModal.classList.contains('hidden')) {
-        if (e.key === 'Escape' || e.key === 'Enter') {
+        trapFocus(e, 'about-modal');
+        if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
             closeAbout();
         }
-    } else if (!document.getElementById('privacy-modal').classList.contains('hidden')) {
-        if (e.key === 'Escape' || e.key === 'Enter') {
+    } else if (!privacyModal.classList.contains('hidden')) {
+        trapFocus(e, 'privacy-modal');
+        if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
             closePrivacy();
         }
     }
