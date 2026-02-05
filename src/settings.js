@@ -2,6 +2,7 @@ import { WORKER_URL, CONFIG } from './config.js';
 import { showToast } from './share.js';
 import { clearRoundHistory } from './history.js';
 import { openModal, closeModal } from './modal.js';
+import { checkPushStatus, syncPushName } from './push.js';
 
 // --- Phone hash storage (never store plaintext) ---
 
@@ -113,6 +114,7 @@ export function openSettings() {
     openModal('settings-modal', input);
     hidePhoneStatus();
     checkNotificationStatus();
+    checkPushStatus();
 }
 
 export function closeSettings() {
@@ -130,6 +132,8 @@ export function saveSettings(checkPairings) {
     if (newName !== oldName) {
         // Clear stale round history built for the old player name
         clearRoundHistory();
+        // Sync push subscription with new name
+        syncPushName();
         // Always re-check to rebuild pairing info and history for the new name
         checkPairings();
     }

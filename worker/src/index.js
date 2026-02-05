@@ -1,4 +1,5 @@
 import { sendSMS } from './twilio.js';
+import { sendPushNotification } from './webpush.js';
 import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeSMS, composeResultsSMS, extractSwissSysContent, extractPgnColors, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
 
 const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
@@ -124,6 +125,10 @@ const RATE_LIMITS = {
     '/tournament-html': 60,
     '/og-state': 60,
     '/health': 30,
+    '/push-subscribe': 10,
+    '/push-unsubscribe': 5,
+    '/push-status': 30,
+    '/push-preferences': 10,
 };
 
 const RATE_WINDOW = 300; // 5 minutes in seconds
@@ -650,6 +655,161 @@ async function handlePreferencesByHash(request, env) {
     return corsResponse({ success: true, message: 'Preferences updated' }, 200, env, request);
 }
 
+// --- Push Notification Endpoints ---
+
+async function pushKey(endpoint) {
+    const hash = await hashPhone(endpoint); // reuse SHA-256 helper
+    return `push:${hash}`;
+}
+
+async function handlePushSubscribe(request, env) {
+    const { subscription, playerName } = await request.json();
+
+    if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+        return corsResponse({ success: false, error: 'Invalid push subscription' }, 400, env, request);
+    }
+
+    const key = await pushKey(subscription.endpoint);
+    const existing = await env.SUBSCRIBERS.get(key, 'json');
+
+    await env.SUBSCRIBERS.put(key, JSON.stringify({
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        playerName: (playerName || '').trim(),
+        notifyPairings: existing?.notifyPairings !== false,
+        notifyResults: existing?.notifyResults !== false,
+        lastNotifiedRound: existing?.lastNotifiedRound || null,
+        lastNotifiedResultsRound: existing?.lastNotifiedResultsRound || null,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+    }));
+
+    return corsResponse({ success: true }, 200, env, request);
+}
+
+async function handlePushUnsubscribe(request, env) {
+    const { endpoint } = await request.json();
+
+    if (!endpoint) {
+        return corsResponse({ success: false, error: 'Endpoint is required' }, 400, env, request);
+    }
+
+    await env.SUBSCRIBERS.delete(await pushKey(endpoint));
+    return corsResponse({ success: true }, 200, env, request);
+}
+
+async function handlePushStatus(request, env) {
+    const url = new URL(request.url);
+    const endpoint = url.searchParams.get('endpoint');
+
+    if (!endpoint) {
+        return corsResponse({ subscribed: false }, 200, env, request);
+    }
+
+    const record = await env.SUBSCRIBERS.get(await pushKey(endpoint), 'json');
+
+    if (!record) {
+        return corsResponse({ subscribed: false }, 200, env, request);
+    }
+
+    return corsResponse({
+        subscribed: true,
+        playerName: record.playerName,
+        notifyPairings: record.notifyPairings !== false,
+        notifyResults: record.notifyResults !== false,
+    }, 200, env, request);
+}
+
+async function handlePushPreferences(request, env) {
+    const { endpoint, notifyPairings, notifyResults } = await request.json();
+
+    if (!endpoint) {
+        return corsResponse({ success: false, error: 'Endpoint is required' }, 400, env, request);
+    }
+
+    const key = await pushKey(endpoint);
+    const record = await env.SUBSCRIBERS.get(key, 'json');
+
+    if (!record) {
+        return corsResponse({ success: false, error: 'No push subscription found' }, 404, env, request);
+    }
+
+    record.notifyPairings = notifyPairings !== false;
+    record.notifyResults = notifyResults !== false;
+    await env.SUBSCRIBERS.put(key, JSON.stringify(record));
+
+    return corsResponse({ success: true }, 200, env, request);
+}
+
+// --- Push Test Endpoint (requires VAPID_PRIVATE_KEY as auth) ---
+
+async function handlePushTest(request, env) {
+    const { type, key: authKey } = await request.json();
+
+    // Auth: must provide the VAPID private key as proof of admin access
+    if (!authKey || authKey !== env.VAPID_PRIVATE_KEY) {
+        return corsResponse({ error: 'Unauthorized' }, 403, env, request);
+    }
+
+    // Find all push subscriptions
+    const pushList = await env.SUBSCRIBERS.list({ prefix: 'push:' });
+    const pushSubs = await Promise.all(
+        pushList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
+    );
+
+    if (pushSubs.length === 0) {
+        return corsResponse({ success: false, error: 'No push subscriptions found' }, 404, env, request);
+    }
+
+    const testPayloads = {
+        // Type 1: Pairings posted, no name
+        pairings: {
+            title: 'Round 5 Pairings Are Up!',
+            body: 'TNM Round 5 pairings have been posted!',
+            url: '/',
+            type: 'pairings',
+            round: 5,
+        },
+        // Type 2: Pairings posted, with name
+        'pairings-named': {
+            title: 'Round 5 Pairings Are Up!',
+            body: 'TNM Round 5: You have White vs Dahlia Quinn (1850) on Board 16.',
+            url: '/',
+            type: 'pairings',
+            round: 5,
+        },
+        // Type 3: Results posted
+        results: {
+            title: 'Round 5 Results Are In!',
+            body: 'TNM Round 5 results have been posted!',
+            url: '/',
+            type: 'results',
+            round: 5,
+        },
+    };
+
+    const payload = testPayloads[type] || testPayloads.pairings;
+    const results = [];
+
+    for (const { key, record } of pushSubs) {
+        if (!record) continue;
+
+        const result = await sendPushNotification(
+            { endpoint: record.endpoint, keys: record.keys },
+            JSON.stringify(payload),
+            env
+        );
+
+        results.push({ key, success: result.success, status: result.status, error: result.error, gone: result.gone });
+
+        if (result.gone) {
+            console.log(`Test: push subscription gone, removing: ${key}`);
+            await env.SUBSCRIBERS.delete(key);
+        }
+    }
+
+    return corsResponse({ success: true, type: type || 'pairings', payload, results }, 200, env, request);
+}
+
 // --- Cron: Pairing Detection & SMS Dispatch ---
 
 async function handleScheduled(env) {
@@ -748,14 +908,59 @@ async function handleScheduled(env) {
         }
     }
 
+    // --- Push notifications for pairings ---
+    let pushPairingsCount = 0;
+    try {
+        const pushList = await env.SUBSCRIBERS.list({ prefix: 'push:' });
+        const pushSubs = await Promise.all(
+            pushList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
+        );
+
+        for (const { key, record } of pushSubs) {
+            if (!record || record.notifyPairings === false) continue;
+            if (record.lastNotifiedRound === round) continue;
+
+            const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
+            const message = composeSMS(pairing, round);
+
+            const payload = JSON.stringify({
+                title: `Round ${round} Pairings Are Up!`,
+                body: message,
+                url: '/',
+                type: 'pairings',
+                round,
+            });
+
+            const result = await sendPushNotification(
+                { endpoint: record.endpoint, keys: record.keys },
+                payload,
+                env
+            );
+
+            if (result.success) {
+                record.lastNotifiedRound = round;
+                await env.SUBSCRIBERS.put(key, JSON.stringify(record));
+                pushPairingsCount++;
+            } else if (result.gone) {
+                console.log(`Push subscription gone, removing: ${key}`);
+                await env.SUBSCRIBERS.delete(key);
+            } else {
+                console.error(`Push failed for ${key}: ${result.error}`);
+            }
+        }
+    } catch (err) {
+        console.error('Push pairings dispatch error:', err.message);
+    }
+
     // Update state
     await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
         round,
         detectedAt: new Date().toISOString(),
         notifiedCount,
+        pushNotifiedCount: pushPairingsCount,
     }));
 
-    console.log(`Notified ${notifiedCount} subscriber(s) for round ${round}.`);
+    console.log(`Notified ${notifiedCount} SMS + ${pushPairingsCount} push subscriber(s) for round ${round}.`);
 
     // --- Results Detection & Notification ---
     if (!await hasResults(html)) {
@@ -806,13 +1011,59 @@ async function handleScheduled(env) {
         }
     }
 
+    // --- Push notifications for results ---
+    let pushResultsCount = 0;
+    try {
+        const pushList = await env.SUBSCRIBERS.list({ prefix: 'push:' });
+        const pushSubs = await Promise.all(
+            pushList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
+        );
+
+        for (const { key, record } of pushSubs) {
+            if (!record || record.notifyResults === false) continue;
+            if (record.lastNotifiedResultsRound === round) continue;
+
+            const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
+            const playerResult = record.playerName ? await findPlayerResult(html, record.playerName) : null;
+            const message = composeResultsSMS(pairing, playerResult, round);
+
+            const payload = JSON.stringify({
+                title: `Round ${round} Results Are In!`,
+                body: message,
+                url: '/',
+                type: 'results',
+                round,
+            });
+
+            const result = await sendPushNotification(
+                { endpoint: record.endpoint, keys: record.keys },
+                payload,
+                env
+            );
+
+            if (result.success) {
+                record.lastNotifiedResultsRound = round;
+                await env.SUBSCRIBERS.put(key, JSON.stringify(record));
+                pushResultsCount++;
+            } else if (result.gone) {
+                console.log(`Push subscription gone, removing: ${key}`);
+                await env.SUBSCRIBERS.delete(key);
+            } else {
+                console.error(`Push results failed for ${key}: ${result.error}`);
+            }
+        }
+    } catch (err) {
+        console.error('Push results dispatch error:', err.message);
+    }
+
     await env.SUBSCRIBERS.put('state:resultsPosted', JSON.stringify({
         round,
         detectedAt: new Date().toISOString(),
         notifiedCount: resultsNotifiedCount,
+        pushNotifiedCount: pushResultsCount,
     }));
 
-    console.log(`Notified ${resultsNotifiedCount} subscriber(s) of results for round ${round}.`);
+    console.log(`Notified ${resultsNotifiedCount} SMS + ${pushResultsCount} push subscriber(s) of results for round ${round}.`);
 }
 
 // --- Worker Entry Point ---
@@ -858,6 +1109,21 @@ export default {
             }
             if (path === '/preferences-by-hash' && request.method === 'POST') {
                 return await handlePreferencesByHash(request, env);
+            }
+            if (path === '/push-subscribe' && request.method === 'POST') {
+                return await handlePushSubscribe(request, env);
+            }
+            if (path === '/push-unsubscribe' && request.method === 'POST') {
+                return await handlePushUnsubscribe(request, env);
+            }
+            if (path === '/push-status' && request.method === 'GET') {
+                return await handlePushStatus(request, env);
+            }
+            if (path === '/push-preferences' && request.method === 'POST') {
+                return await handlePushPreferences(request, env);
+            }
+            if (path === '/push-test' && request.method === 'POST') {
+                return await handlePushTest(request, env);
             }
             if (path === '/og-state' && request.method === 'GET') {
                 return await handleOgState(request, env);

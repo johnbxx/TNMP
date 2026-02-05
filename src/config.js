@@ -1,5 +1,8 @@
-// Worker URL for SMS notifications
+// Worker URL for notifications
 export const WORKER_URL = 'https://tnmp-notifications.johnfranklinboyer.workers.dev';
+
+// VAPID public key for Web Push (base64url-encoded)
+export const VAPID_PUBLIC_KEY = 'BKdSGlB3e8V2mPw7Mmr3wchYnk6ySS5tWsEiqJwkRMvb3Z_ArLWvaV8ZOCqAzcaFdqLyo2LJU-qP17RQMPGRzS4';
 
 // Configuration
 export const CONFIG = {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tnmp-v5';
+const CACHE_NAME = 'tnmp-v6';
 
 // Pre-cache only the HTML shell and piece images.
 // JS/CSS assets have content hashes in their filenames (via Vite)
@@ -66,4 +66,48 @@ self.addEventListener('fetch', (event) => {
             })
         );
     }
+});
+
+// --- Push Notification Handlers ---
+
+self.addEventListener('push', (event) => {
+    if (!event.data) return;
+
+    let data;
+    try {
+        data = event.data.json();
+    } catch {
+        data = { title: 'TNMP', body: event.data.text() };
+    }
+
+    const title = data.title || 'Are the Pairings Up?';
+    const options = {
+        body: data.body || '',
+        icon: '/pieces/WhiteKing.webp',
+        badge: '/pieces/WhiteKing.webp',
+        tag: `tnmp-${data.type || 'notification'}-r${data.round || 0}`,
+        renotify: true,
+        data: { url: data.url || '/' },
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const url = event.notification.data?.url || '/';
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+            // Focus existing TNMP tab if open
+            for (const client of windowClients) {
+                if (new URL(client.url).pathname === '/' && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            // Otherwise open a new tab
+            return clients.openWindow(url);
+        })
+    );
 });

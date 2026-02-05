@@ -9,6 +9,7 @@ import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './src/history.js';
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
 import { registerModalClose, trapFocus } from './src/modal.js';
+import { enablePush, disablePush, updatePushPrefs } from './src/push.js';
 
 // --- Main check logic ---
 
@@ -306,6 +307,9 @@ window.confirmVerification = confirmVerification;
 window.startUnsubscribe = startUnsubscribe;
 window.confirmUnsubscribe = confirmUnsubscribe;
 window.updateNotificationPrefs = updateNotificationPrefs;
+window.enablePush = enablePush;
+window.disablePush = disablePush;
+window.updatePushPrefs = updatePushPrefs;
 window.openAbout = openAbout;
 window.closeAbout = closeAbout;
 window.openPrivacy = openPrivacy;
