@@ -9,6 +9,8 @@ import {
 // Track which historical round detail is being shown (null = show live pairing)
 let selectedHistoryRound = null;
 let livePairingHtml = null;
+let fitAnswerRafId = null;
+const trackerState = { roundHistory: null, currentRound: null, listening: false };
 
 // Fit answer text to container width
 export function fitAnswerText() {
@@ -17,7 +19,9 @@ export function fitAnswerText() {
 
     el.style.fontSize = '';
 
-    requestAnimationFrame(() => {
+    if (fitAnswerRafId) cancelAnimationFrame(fitAnswerRafId);
+    fitAnswerRafId = requestAnimationFrame(() => {
+        fitAnswerRafId = null;
         const container = el.parentElement;
         if (!container) return;
         const maxWidth = container.clientWidth * 0.92;
@@ -280,13 +284,18 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
     html += '</div>';
     container.innerHTML = html;
 
-    // Attach click handlers
-    container.querySelectorAll('[data-clickable="true"]').forEach(btn => {
-        btn.addEventListener('click', () => {
+    // Use event delegation — single listener on container, set up once
+    trackerState.roundHistory = roundHistory;
+    trackerState.currentRound = currentRound;
+    if (!trackerState.listening) {
+        trackerState.listening = true;
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-clickable="true"]');
+            if (!btn) return;
             const roundNum = parseInt(btn.dataset.round, 10);
-            showRoundDetail(roundNum, roundHistory, currentRound);
+            showRoundDetail(roundNum, trackerState.roundHistory, trackerState.currentRound);
         });
-    });
+    }
 }
 
 /**

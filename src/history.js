@@ -20,7 +20,11 @@ export function loadRoundHistory() {
  * Save round history to localStorage.
  */
 function saveRoundHistory(history) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch (e) {
+        console.warn('Failed to save round history (storage full?):', e.message);
+    }
 }
 
 /**

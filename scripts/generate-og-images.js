@@ -59,6 +59,13 @@ const states = [
         gradientStart: '#5D8047',
         gradientEnd: '#7BA862',
     },
+    {
+        name: 'og-default',
+        text: '♟',
+        subtitle: 'Tuesday Night Marathon pairings checker',
+        gradientStart: '#37474f',
+        gradientEnd: '#546e7a',
+    },
 ];
 
 function createSvg(state) {

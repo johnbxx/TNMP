@@ -1034,3 +1034,18 @@ html.off-season .meme {
 .setting-feedback a:hover {
     color: var(--accent-end);
 }
+
+/* Focus indicators for keyboard navigation */
+:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.8);
+    outline-offset: 2px;
+}
+
+.modal-content :focus-visible {
+    outline-color: var(--accent);
+}
+
+.setting-group input[type="text"]:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+}

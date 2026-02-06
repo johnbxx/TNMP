@@ -15,10 +15,14 @@ export const CONFIG = {
         return localStorage.getItem('playerName') || '';
     },
     set playerName(value) {
-        if (value && value.trim()) {
-            localStorage.setItem('playerName', value.trim());
-        } else {
-            localStorage.removeItem('playerName');
+        try {
+            if (value && value.trim()) {
+                localStorage.setItem('playerName', value.trim());
+            } else {
+                localStorage.removeItem('playerName');
+            }
+        } catch (e) {
+            console.warn('Failed to save player name (storage full?):', e.message);
         }
     }
 };

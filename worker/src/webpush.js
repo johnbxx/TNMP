@@ -6,7 +6,7 @@
 
 // --- Base64url helpers ---
 
-function base64urlEncode(buffer) {
+export function base64urlEncode(buffer) {
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
@@ -15,7 +15,7 @@ function base64urlEncode(buffer) {
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function base64urlDecode(str) {
+export function base64urlDecode(str) {
     const padded = str.replace(/-/g, '+').replace(/_/g, '/');
     const padding = (4 - (padded.length % 4)) % 4;
     const binary = atob(padded + '='.repeat(padding));
@@ -63,7 +63,7 @@ async function hkdf(salt, ikm, info, length) {
 
 // --- Info construction for RFC 8291 (aes128gcm) ---
 
-function buildInfo(type) {
+export function buildInfo(type) {
     const encoder = new TextEncoder();
     // For aes128gcm (RFC 8291), info is simply "Content-Encoding: <type>\0"
     const str = `Content-Encoding: ${type}\0`;
@@ -86,24 +86,9 @@ async function buildVapidJwt(endpoint, privateKeyBase64url) {
 
     const unsignedToken = `${header}.${payload}`;
 
-    // Import the VAPID private key
+    // Import the VAPID private key as PKCS8
     const privateKeyBytes = base64urlDecode(privateKeyBase64url);
-    const privateKey = await crypto.subtle.importKey(
-        'jwk',
-        {
-            kty: 'EC',
-            crv: 'P-256',
-            d: privateKeyBase64url,
-            // We need x and y but they'll be derived; however, importKey requires them.
-            // We'll import as PKCS8 instead.
-        },
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['sign']
-    ).catch(() => {
-        // JWK import may fail without x,y — use raw PKCS8
-        return importPrivateKeyRaw(privateKeyBytes);
-    });
+    const privateKey = await importPrivateKeyRaw(privateKeyBytes);
 
     const signature = await crypto.subtle.sign(
         { name: 'ECDSA', hash: 'SHA-256' },
@@ -147,7 +132,7 @@ async function importPrivateKeyRaw(privateKeyBytes) {
  * Convert DER-encoded ECDSA signature to raw 64-byte r||s format.
  * crypto.subtle may return either format depending on the platform.
  */
-function derToRaw(der) {
+export function derToRaw(der) {
     // If it's already 64 bytes, it's raw format
     if (der.length === 64) return der;
 
@@ -279,6 +264,7 @@ export async function sendPushNotification(subscription, payload, env) {
                 'Urgency': 'high',
             },
             body,
+            signal: AbortSignal.timeout(30000),
         });
 
         if (response.status === 201 || response.status === 200) {

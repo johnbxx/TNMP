@@ -227,7 +227,7 @@ async function handleTournamentHtml(request, env) {
  * Server-side time state logic, mirroring src/time.js getTimeState().
  * Returns: 'off_season' | 'off_season_r1' | 'too_early' | 'check_pairings' | 'round_in_progress' | 'results_window'
  */
-function getTimeState(roundDates, nextTournament) {
+export function getTimeState(roundDates, nextTournament) {
     const now = new Date();
     const pacificTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
     const day = pacificTime.getDay();
@@ -289,7 +289,11 @@ async function handleHealth(env, request) {
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
     ]);
 
-    const lastCheckData = lastCheck ? JSON.parse(lastCheck) : null;
+    let lastCheckData = null;
+    if (lastCheck) {
+        try { lastCheckData = JSON.parse(lastCheck); }
+        catch { console.warn('Corrupt state:lastCheck in KV, ignoring'); }
+    }
     const lastCheckTime = lastCheckData?.timestamp ? new Date(lastCheckData.timestamp).getTime() : null;
     const minutesSinceCheck = lastCheckTime ? Math.round((Date.now() - lastCheckTime) / 60000) : null;
 
@@ -460,6 +464,63 @@ async function handlePushPreferences(request, env) {
     return corsResponse({ success: true }, 200, env, request);
 }
 
+// --- Push Helpers ---
+
+/**
+ * List all push subscriptions from KV, handling pagination (1000 keys per page).
+ */
+async function listPushSubscriptions(env) {
+    const subs = [];
+    let cursor = undefined;
+    do {
+        const list = await env.SUBSCRIBERS.list({ prefix: 'push:', cursor });
+        const records = await Promise.all(
+            list.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
+        );
+        subs.push(...records);
+        cursor = list.list_complete ? undefined : list.cursor;
+    } while (cursor);
+    return subs;
+}
+
+/**
+ * Send push notifications to all eligible subscribers.
+ * @param {object} opts
+ * @param {Array} opts.subscribers - From listPushSubscriptions()
+ * @param {string} opts.prefKey - Subscriber preference key to check ('notifyPairings' or 'notifyResults')
+ * @param {string} opts.trackKey - Subscriber field tracking last notified round ('lastNotifiedRound' or 'lastNotifiedResultsRound')
+ * @param {number} opts.round - Current round number
+ * @param {Function} opts.buildPayload - (record) => payload object
+ * @param {object} opts.env - Worker env
+ * @param {string} opts.label - Log label for this dispatch
+ */
+async function dispatchPushNotifications({ subscribers, prefKey, trackKey, round, buildPayload, env, label }) {
+    let count = 0;
+    for (const { key, record } of subscribers) {
+        if (!record || record[prefKey] === false) continue;
+        if (record[trackKey] === round) continue;
+
+        const payload = JSON.stringify(await buildPayload(record));
+        const result = await sendPushNotification(
+            { endpoint: record.endpoint, keys: record.keys },
+            payload,
+            env
+        );
+
+        if (result.success) {
+            record[trackKey] = round;
+            await env.SUBSCRIBERS.put(key, JSON.stringify(record));
+            count++;
+        } else if (result.gone) {
+            console.log(`Push subscription gone, removing: ${key}`);
+            await env.SUBSCRIBERS.delete(key);
+        } else {
+            console.error(`Push ${label} failed for ${key}: ${result.error}`);
+        }
+    }
+    return count;
+}
+
 // --- Push Test Endpoint (requires VAPID_PRIVATE_KEY as auth) ---
 
 async function handlePushTest(request, env) {
@@ -471,10 +532,7 @@ async function handlePushTest(request, env) {
     }
 
     // Find all push subscriptions
-    const pushList = await env.SUBSCRIBERS.list({ prefix: 'push:' });
-    const pushSubs = await Promise.all(
-        pushList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
-    );
+    const pushSubs = await listPushSubscriptions(env);
 
     if (pushSubs.length === 0) {
         return corsResponse({ success: false, error: 'No push subscriptions found' }, 404, env, request);
@@ -533,6 +591,26 @@ async function handlePushTest(request, env) {
 // --- Cron: Pairing Detection & Push Notification Dispatch ---
 
 async function handleScheduled(env) {
+    // DST-proof guard: cron windows are widened to cover both PST and PDT.
+    // Early-return if Pacific time is outside the intended hours.
+    const pacific = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const pDay = pacific.getDay(); // 0=Sun..6=Sat
+    const pHour = pacific.getHours();
+    const pMinute = pacific.getMinutes();
+
+    // Mon 8PM-11:59PM: pairings check (every minute)
+    const isPairingsWindow = pDay === 1 && pHour >= 20;
+    // Tue 7PM-11:59PM: results check (every 5 min)
+    const isResultsWindow = pDay === 2 && pHour >= 19;
+
+    if (!isPairingsWindow && !isResultsWindow) {
+        // Outside pairings/results windows — only run the hourly cache refresh
+        if (pMinute !== 0) {
+            console.log(`Cron skipped: Pacific ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][pDay]} ${pHour}:${String(pMinute).padStart(2, '0')} outside active window`);
+            return;
+        }
+    }
+
     console.log('Cron triggered: checking for pairings...');
 
     // Resolve the current tournament dynamically
@@ -592,45 +670,27 @@ async function handleScheduled(env) {
     }
 
     // --- Push notifications for pairings ---
+    const pushSubs = await listPushSubscriptions(env);
     let pushPairingsCount = 0;
     try {
-        const pushList = await env.SUBSCRIBERS.list({ prefix: 'push:' });
-        const pushSubs = await Promise.all(
-            pushList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
-        );
-
-        for (const { key, record } of pushSubs) {
-            if (!record || record.notifyPairings === false) continue;
-            if (record.lastNotifiedRound === round) continue;
-
-            const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
-            const message = composeMessage(pairing, round);
-
-            const payload = JSON.stringify({
-                title: `Round ${round} Pairings Are Up!`,
-                body: message,
-                url: '/',
-                type: 'pairings',
-                round,
-            });
-
-            const result = await sendPushNotification(
-                { endpoint: record.endpoint, keys: record.keys },
-                payload,
-                env
-            );
-
-            if (result.success) {
-                record.lastNotifiedRound = round;
-                await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-                pushPairingsCount++;
-            } else if (result.gone) {
-                console.log(`Push subscription gone, removing: ${key}`);
-                await env.SUBSCRIBERS.delete(key);
-            } else {
-                console.error(`Push failed for ${key}: ${result.error}`);
-            }
-        }
+        pushPairingsCount = await dispatchPushNotifications({
+            subscribers: pushSubs,
+            prefKey: 'notifyPairings',
+            trackKey: 'lastNotifiedRound',
+            round,
+            buildPayload: async (record) => {
+                const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
+                return {
+                    title: `Round ${round} Pairings Are Up!`,
+                    body: composeMessage(pairing, round),
+                    url: '/',
+                    type: 'pairings',
+                    round,
+                };
+            },
+            env,
+            label: 'pairings',
+        });
     } catch (err) {
         console.error('Push pairings dispatch error:', err.message);
     }
@@ -658,47 +718,28 @@ async function handleScheduled(env) {
         return;
     }
 
-    // --- Push notifications for results ---
+    // --- Push notifications for results (reuse subscriber list from pairings) ---
     let pushResultsCount = 0;
     try {
-        const pushList = await env.SUBSCRIBERS.list({ prefix: 'push:' });
-        const pushSubs = await Promise.all(
-            pushList.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
-        );
-
-        for (const { key, record } of pushSubs) {
-            if (!record || record.notifyResults === false) continue;
-            if (record.lastNotifiedResultsRound === round) continue;
-
-            const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
-            const playerResult = record.playerName ? await findPlayerResult(html, record.playerName) : null;
-            const message = composeResultsMessage(pairing, playerResult, round);
-
-            const payload = JSON.stringify({
-                title: `Round ${round} Results Are In!`,
-                body: message,
-                url: '/',
-                type: 'results',
-                round,
-            });
-
-            const result = await sendPushNotification(
-                { endpoint: record.endpoint, keys: record.keys },
-                payload,
-                env
-            );
-
-            if (result.success) {
-                record.lastNotifiedResultsRound = round;
-                await env.SUBSCRIBERS.put(key, JSON.stringify(record));
-                pushResultsCount++;
-            } else if (result.gone) {
-                console.log(`Push subscription gone, removing: ${key}`);
-                await env.SUBSCRIBERS.delete(key);
-            } else {
-                console.error(`Push results failed for ${key}: ${result.error}`);
-            }
-        }
+        pushResultsCount = await dispatchPushNotifications({
+            subscribers: pushSubs,
+            prefKey: 'notifyResults',
+            trackKey: 'lastNotifiedResultsRound',
+            round,
+            buildPayload: async (record) => {
+                const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
+                const playerResult = record.playerName ? await findPlayerResult(html, record.playerName) : null;
+                return {
+                    title: `Round ${round} Results Are In!`,
+                    body: composeResultsMessage(pairing, playerResult, round),
+                    url: '/',
+                    type: 'results',
+                    round,
+                };
+            },
+            env,
+            label: 'results',
+        });
     } catch (err) {
         console.error('Push results dispatch error:', err.message);
     }

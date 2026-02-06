@@ -90,7 +90,7 @@ export async function onRequest(context) {
 function buildOgTags(data) {
     const title = escapeHtml(data.title || 'Are the Pairings Up?');
     const description = escapeHtml(data.description || 'Tuesday Night Marathon pairings checker');
-    const image = `${SITE_URL}/og/${data.image || 'og-yes.png'}`;
+    const image = `${SITE_URL}/og/${data.image || 'og-default.png'}`;
     const color = data.color || '#4CAF50';
 
     return `    <meta property="og:title" content="${title}">
@@ -108,7 +108,7 @@ function buildOgTags(data) {
 function buildFallbackOgTags() {
     return `    <meta property="og:title" content="Are the Pairings Up?">
     <meta property="og:description" content="Tuesday Night Marathon pairings checker">
-    <meta property="og:image" content="${SITE_URL}/og/og-yes.png">
+    <meta property="og:image" content="${SITE_URL}/og/og-default.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:url" content="${SITE_URL}">

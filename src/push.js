@@ -154,8 +154,8 @@ export async function disablePush() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ endpoint: sub.endpoint }),
                 });
-            } catch {
-                // Best effort
+            } catch (err) {
+                console.warn('Push unsubscribe server sync failed:', err.message);
             }
             await sub.unsubscribe();
         }
@@ -186,9 +186,27 @@ export async function updatePushPrefs() {
                 notifyResults,
             }),
         });
-    } catch {
-        // Best effort
+        showToast('Preferences saved');
+    } catch (err) {
+        console.warn('Push preferences sync failed:', err.message);
+        showToast('Offline — will sync later');
     }
+}
+
+function showToast(message) {
+    let toast = document.getElementById('push-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'push-toast';
+        toast.className = 'share-toast';
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 /**
@@ -208,7 +226,7 @@ export async function syncPushName() {
                 playerName: CONFIG.playerName,
             }),
         });
-    } catch {
-        // Best effort
+    } catch (err) {
+        console.warn('Push name sync failed:', err.message);
     }
 }

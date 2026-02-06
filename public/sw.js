@@ -41,15 +41,18 @@ self.addEventListener('fetch', (event) => {
         || url.pathname.startsWith('/pieces/');
 
     if (isNavigate) {
-        // Network-first for HTML shell — picks up new deploys immediately
+        // Stale-while-revalidate for HTML shell — instant load, background refresh
         event.respondWith(
-            fetch(event.request).then((response) => {
-                if (response.ok) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                }
-                return response;
-            }).catch(() => caches.match(event.request))
+            caches.match(event.request).then((cached) => {
+                const fetchPromise = fetch(event.request).then((response) => {
+                    if (response.ok) {
+                        const clone = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    }
+                    return response;
+                }).catch(() => cached);
+                return cached || fetchPromise;
+            })
         );
     } else if (isAsset) {
         // Cache-first for hashed assets, memes, and pieces
@@ -77,7 +80,8 @@ self.addEventListener('push', (event) => {
     try {
         data = event.data.json();
     } catch {
-        data = { title: 'TNMP', body: event.data.text() };
+        try { data = { title: 'TNMP', body: event.data.text() }; }
+        catch { data = { title: 'TNMP', body: 'New notification' }; }
     }
 
     const title = data.title || 'Are the Pairings Up?';

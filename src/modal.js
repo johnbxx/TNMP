@@ -21,6 +21,10 @@ export function openModal(modalId, focusTarget) {
 
     modal.classList.remove('hidden');
 
+    // Hide background content from screen readers
+    const container = document.querySelector('.container');
+    if (container) container.setAttribute('aria-hidden', 'true');
+
     // Focus the target or first focusable element
     const target = focusTarget || modal.querySelector(FOCUSABLE);
     if (target) {
@@ -38,6 +42,13 @@ export function closeModal(modalId) {
     if (!modal) return;
 
     modal.classList.add('hidden');
+
+    // Restore background content for screen readers (only if no other modals are open)
+    const anyOpen = document.querySelector('.modal:not(.hidden)');
+    if (!anyOpen) {
+        const container = document.querySelector('.container');
+        if (container) container.removeAttribute('aria-hidden');
+    }
 
     // Restore focus
     const prev = previousFocus.get(modalId);
