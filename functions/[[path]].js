@@ -71,6 +71,7 @@ export async function onRequest(context) {
         // Remove any existing og: tags from the static HTML to avoid duplicates
         html = html.replace(/<meta\s+property="og:[^"]*"[^>]*>\s*/gi, '');
         html = html.replace(/<meta\s+name="twitter:card"[^>]*>\s*/gi, '');
+        html = html.replace(/<meta\s+name="theme-color"[^>]*>\s*/gi, '');
 
         // Insert before </head>
         html = html.replace('</head>', ogTags + '\n</head>');
