@@ -59,13 +59,6 @@ const states = [
         gradientStart: '#5D8047',
         gradientEnd: '#7BA862',
     },
-    {
-        name: 'og-default',
-        text: '♟',
-        subtitle: 'Tuesday Night Marathon pairings checker',
-        gradientStart: '#37474f',
-        gradientEnd: '#546e7a',
-    },
 ];
 
 function createSvg(state) {
@@ -98,6 +91,59 @@ function createSvg(state) {
 </svg>`;
 }
 
+// --- Branded default OG image (matches favicon: four-color quadrants + white knight) ---
+
+function createDefaultBgSvg() {
+    const hw = WIDTH / 2;
+    const hh = HEIGHT / 2;
+
+    return `<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  <!-- Four-color quadrant background -->
+  <rect x="0" y="0" width="${hw}" height="${hh}" fill="#4CAF50"/>
+  <rect x="${hw}" y="0" width="${hw}" height="${hh}" fill="#f44336"/>
+  <rect x="0" y="${hh}" width="${hw}" height="${hh}" fill="#9C27B0"/>
+  <rect x="${hw}" y="${hh}" width="${hw}" height="${hh}" fill="#1565C0"/>
+
+  <!-- TNM Pairings text -->
+  <text x="${hw}" y="${HEIGHT - 80}" text-anchor="middle" dominant-baseline="central"
+    font-family="system-ui, -apple-system, 'Segoe UI', Arial, sans-serif"
+    font-size="52" font-weight="800" fill="white" letter-spacing="3">
+    TNM PAIRINGS
+  </text>
+
+  <!-- Domain -->
+  <text x="${hw}" y="${HEIGHT - 30}" text-anchor="middle"
+    font-family="system-ui, -apple-system, 'Segoe UI', Arial, sans-serif"
+    font-size="22" font-weight="400" fill="rgba(255,255,255,0.6)">
+    tnmpairings.com
+  </text>
+</svg>`;
+}
+
+async function generateDefaultOg() {
+    const knightPath = resolve(__dirname, '../public/pieces/WhiteKnight.webp');
+    const knightSize = 300;
+
+    // Resize knight to desired size, then remove grey background by flattening on transparent
+    const knight = await sharp(knightPath)
+        .resize(knightSize, knightSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer();
+
+    const bgSvg = createDefaultBgSvg();
+    const bg = await sharp(Buffer.from(bgSvg)).png().toBuffer();
+
+    // Composite knight centered horizontally, above the text
+    const knightLeft = Math.round((WIDTH - knightSize) / 2);
+    const knightTop = Math.round((HEIGHT - knightSize) / 2) - 35;
+
+    return sharp(bg)
+        .composite([{ input: knight, left: knightLeft, top: knightTop }])
+        .png()
+        .toFile(resolve(outDir, 'og-default.png'));
+}
+
+// Generate state-specific images
 for (const state of states) {
     const svg = createSvg(state);
     const outPath = resolve(outDir, `${state.name}.png`);
@@ -105,4 +151,8 @@ for (const state of states) {
     console.log(`Generated ${outPath}`);
 }
 
-console.log('Done! Generated', states.length, 'OG images.');
+// Generate branded default image (composites knight piece on quadrant background)
+await generateDefaultOg();
+console.log(`Generated ${resolve(outDir, 'og-default.png')}`);
+
+console.log('Done! Generated', states.length + 1, 'OG images.');
