@@ -113,12 +113,6 @@ async function checkPairings() {
             return;
         }
 
-        if (timeState === 'too_early') {
-            showState(STATE.TOO_EARLY, "Pairings are posted Monday at 8PM Pacific. Check back then!");
-            stopCountdown();
-            return;
-        }
-
         // Fallback: try CORS proxy if worker cache failed
         if (!html) {
             try {
@@ -139,6 +133,12 @@ async function checkPairings() {
         }
 
         if (!html) {
+            // If we can't fetch data and it's too_early, just show CHILL
+            if (timeState === 'too_early') {
+                showState(STATE.TOO_EARLY, "Pairings are posted Monday at 8PM Pacific. Check back then!");
+                stopCountdown();
+                return;
+            }
             throw new Error('Could not fetch tournament data');
         }
 
@@ -236,6 +236,17 @@ async function checkPairings() {
                 showState(STATE.RESULTS, `Round ${roundNumber} is complete. Check back Monday for next week's pairings!`, pairingInfo);
             }
             stopCountdown();
+        } else if (timeState === 'too_early') {
+            // Before the normal pairings window — but pairings might already be posted
+            if (hasEmptyResults) {
+                displayedState = STATE.YES;
+                showState(STATE.YES, `Round ${roundNumber} pairings are up!`, pairingInfo);
+                stopCountdown();
+            } else {
+                displayedState = STATE.TOO_EARLY;
+                showState(STATE.TOO_EARLY, "Pairings are posted Monday at 8PM Pacific. Check back then!");
+                stopCountdown();
+            }
         } else {
             // check_pairings window (Mon 8PM - Tue 6:30PM)
             if (hasEmptyResults) {
