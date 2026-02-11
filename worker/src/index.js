@@ -650,61 +650,62 @@ async function handleScheduled(env) {
     }));
     console.log(`Cached tournament HTML in KV (${strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(gameColors).length} rounds of PGN colors).`);
 
-    // Check for pairings
-    if (!await hasPairings(html)) {
+    const pairingsFound = await hasPairings(html);
+
+    await env.SUBSCRIBERS.put('state:lastCheck', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        pairingsFound,
+    }));
+
+    if (!pairingsFound) {
         console.log('No pairings found on page.');
-        await env.SUBSCRIBERS.put('state:lastCheck', JSON.stringify({
-            timestamp: new Date().toISOString(),
-            pairingsFound: false,
-        }));
         return;
     }
 
     console.log(`Pairings detected for round ${round}`);
 
-    // Check if we already notified for this round
-    const state = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
-    if (state && state.round === round) {
-        console.log(`Already notified for round ${round}, skipping.`);
-        return;
-    }
-
-    // --- Push notifications for pairings ---
+    // Fetch subscribers once — used by both pairings and results dispatch
     const pushSubs = await listPushSubscriptions(env);
-    let pushPairingsCount = 0;
-    try {
-        pushPairingsCount = await dispatchPushNotifications({
-            subscribers: pushSubs,
-            prefKey: 'notifyPairings',
-            trackKey: 'lastNotifiedRound',
+
+    // --- Pairings notifications ---
+    const pairingsState = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
+    if (pairingsState && pairingsState.round === round) {
+        console.log(`Already notified pairings for round ${round}, skipping.`);
+    } else {
+        let pushPairingsCount = 0;
+        try {
+            pushPairingsCount = await dispatchPushNotifications({
+                subscribers: pushSubs,
+                prefKey: 'notifyPairings',
+                trackKey: 'lastNotifiedRound',
+                round,
+                buildPayload: async (record) => {
+                    const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
+                    return {
+                        title: `Round ${round} Pairings Are Up!`,
+                        body: composeMessage(pairing, round),
+                        url: '/',
+                        type: 'pairings',
+                        round,
+                    };
+                },
+                env,
+                label: 'pairings',
+            });
+        } catch (err) {
+            console.error('Push pairings dispatch error:', err.message);
+        }
+
+        await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
             round,
-            buildPayload: async (record) => {
-                const pairing = record.playerName ? await findPlayerPairing(html, record.playerName) : null;
-                return {
-                    title: `Round ${round} Pairings Are Up!`,
-                    body: composeMessage(pairing, round),
-                    url: '/',
-                    type: 'pairings',
-                    round,
-                };
-            },
-            env,
-            label: 'pairings',
-        });
-    } catch (err) {
-        console.error('Push pairings dispatch error:', err.message);
+            detectedAt: new Date().toISOString(),
+            pushNotifiedCount: pushPairingsCount,
+        }));
+
+        console.log(`Notified ${pushPairingsCount} push subscriber(s) for round ${round}.`);
     }
 
-    // Update state
-    await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
-        round,
-        detectedAt: new Date().toISOString(),
-        pushNotifiedCount: pushPairingsCount,
-    }));
-
-    console.log(`Notified ${pushPairingsCount} push subscriber(s) for round ${round}.`);
-
-    // --- Results Detection & Notification ---
+    // --- Results notifications (independent of pairings state) ---
     if (!await hasResults(html)) {
         console.log('No results found yet for current round.');
         return;
@@ -718,7 +719,6 @@ async function handleScheduled(env) {
         return;
     }
 
-    // --- Push notifications for results (reuse subscriber list from pairings) ---
     let pushResultsCount = 0;
     try {
         pushResultsCount = await dispatchPushNotifications({
