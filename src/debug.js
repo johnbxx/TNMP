@@ -6,7 +6,7 @@ const MOCK_PAIRINGS = {
     normal: {
         board: '5',
         color: 'White',
-        colorIcon: 'pieces/WhiteKing.webp',
+        colorIcon: 'pieces/wK.webp',
         opponent: 'Magnus Carlsen',
         opponentRating: 2830,
         opponentUrl: 'https://ratings.uschess.org/player/12345678',
@@ -27,7 +27,7 @@ const MOCK_PAIRINGS = {
     win: {
         board: '5',
         color: 'White',
-        colorIcon: 'pieces/WhiteKing.webp',
+        colorIcon: 'pieces/wK.webp',
         opponent: 'Magnus Carlsen',
         opponentRating: 2830,
         opponentUrl: 'https://ratings.uschess.org/player/12345678',
@@ -38,7 +38,7 @@ const MOCK_PAIRINGS = {
     loss: {
         board: '5',
         color: 'Black',
-        colorIcon: 'pieces/BlackKing.webp',
+        colorIcon: 'pieces/bK.webp',
         opponent: 'Magnus Carlsen',
         opponentRating: 2830,
         opponentUrl: 'https://ratings.uschess.org/player/12345678',
@@ -49,7 +49,7 @@ const MOCK_PAIRINGS = {
     draw: {
         board: '5',
         color: 'White',
-        colorIcon: 'pieces/WhiteKing.webp',
+        colorIcon: 'pieces/wK.webp',
         opponent: 'Magnus Carlsen',
         opponentRating: 2830,
         opponentUrl: 'https://ratings.uschess.org/player/12345678',

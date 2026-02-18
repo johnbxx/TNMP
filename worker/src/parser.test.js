@@ -8,7 +8,7 @@ import {
     composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
 } from './parser.js';
-import { extractPgnColors } from './parser2.js';
+import { extractPgnColors, extractPairingsColors, extractFullPgnGames } from './parser2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fullHtml;
@@ -325,5 +325,136 @@ describe('extractPgnColors', () => {
     it('returns empty object for HTML without PGN textareas', () => {
         const noPgn = '<html><body>No PGN</body></html>';
         expect(extractPgnColors(noPgn)).toEqual({});
+    });
+});
+
+// --- extractFullPgnGames ---
+
+describe('extractFullPgnGames', () => {
+    it('extracts full PGN text for each game', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        expect(Object.keys(rounds).length).toBeGreaterThan(0);
+        const allGames = Object.values(rounds).flat();
+        expect(allGames.length).toBeGreaterThan(0);
+        for (const game of allGames) {
+            expect(game.pgn).toContain('[Event');
+            expect(game.pgn).toContain('1.');
+        }
+    });
+
+    it('retains the same games as extractPgnColors', () => {
+        const colors = extractPgnColors(fullHtml);
+        const full = extractFullPgnGames(fullHtml);
+        // Same round numbers
+        expect(Object.keys(full).sort()).toEqual(Object.keys(colors).sort());
+        // Same game count per round
+        for (const roundNum of Object.keys(colors)) {
+            expect(full[roundNum].length).toBe(colors[roundNum].length);
+        }
+    });
+
+    it('extracts Elo ratings from PGN headers', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        const allGames = Object.values(rounds).flat();
+        const withElo = allGames.filter(g => g.whiteElo && g.blackElo);
+        expect(withElo.length).toBeGreaterThan(0);
+    });
+
+    it('extracts ECO codes', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        const allGames = Object.values(rounds).flat();
+        const withEco = allGames.filter(g => g.eco);
+        expect(withEco.length).toBeGreaterThan(0);
+    });
+
+    it('extracts board numbers', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        const allGames = Object.values(rounds).flat();
+        const withBoard = allGames.filter(g => g.board !== null);
+        expect(withBoard.length).toBeGreaterThan(0);
+    });
+
+    it('full PGN contains move text, not just headers', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        const game = Object.values(rounds).flat()[0];
+        // Should have moves after the headers
+        const moveText = game.pgn.split(/\n\n/).pop();
+        expect(moveText).toMatch(/\d+\./);
+    });
+
+    it('returns empty object for HTML without PGN textareas', () => {
+        expect(extractFullPgnGames('<html><body>No PGN</body></html>')).toEqual({});
+    });
+});
+
+// --- extractPairingsColors ---
+
+describe('extractPairingsColors', () => {
+    const mockSections = [
+        {
+            round: 7,
+            section: '2000+',
+            rows: [
+                { board: '1', whiteResult: '', whiteName: 'Smith, John (2100 w 4.0 D)', whiteUrl: null, blackResult: '', blackName: 'Jones, Mary (1950 w 3.5 D)', blackUrl: null },
+                { board: '2', whiteResult: '1', whiteName: 'Doe, Jane (1800 w 5.0 D)', whiteUrl: null, blackResult: '0', blackName: 'Lee, Bob (1700 w 2.0 D)', blackUrl: null },
+                { board: '3', whiteResult: '\u00BD', whiteName: 'Chen, Wei (2000 w 4.5 D)', whiteUrl: null, blackResult: '\u00BD', blackName: 'Park, Min (1900 w 4.5 D)', blackUrl: null },
+            ],
+        },
+    ];
+
+    it('extracts colors from pairings sections', () => {
+        const colors = extractPairingsColors(mockSections);
+        expect(colors[7]).toHaveLength(3);
+    });
+
+    it('strips rating suffix from names using parsePlayerInfo', () => {
+        const colors = extractPairingsColors(mockSections);
+        expect(colors[7][0].white).toBe('Smith, John');
+        expect(colors[7][0].black).toBe('Jones, Mary');
+    });
+
+    it('extracts board numbers', () => {
+        const colors = extractPairingsColors(mockSections);
+        expect(colors[7][0].board).toBe(1);
+        expect(colors[7][1].board).toBe(2);
+    });
+
+    it('derives PGN-style results', () => {
+        const colors = extractPairingsColors(mockSections);
+        expect(colors[7][0].result).toBe('*'); // no results yet
+        expect(colors[7][1].result).toBe('1-0'); // white wins
+        expect(colors[7][2].result).toBe('1/2-1/2'); // draw
+    });
+
+    it('skips bye rows', () => {
+        const withByes = [{
+            round: 5,
+            section: 'Open',
+            rows: [
+                { board: '1', whiteResult: '', whiteName: 'Smith, John (2100)', whiteUrl: null, blackResult: '', blackName: 'Bye', blackUrl: null },
+                { board: '2', whiteResult: '', whiteName: 'Full Point Bye', whiteUrl: null, blackResult: '', blackName: 'Jones, Mary (1950)', blackUrl: null },
+                { board: '3', whiteResult: '', whiteName: 'Doe, Jane (1800)', whiteUrl: null, blackResult: '', blackName: 'Lee, Bob (1700)', blackUrl: null },
+            ],
+        }];
+        const colors = extractPairingsColors(withByes);
+        expect(colors[5]).toHaveLength(1);
+        expect(colors[5][0].white).toBe('Doe, Jane');
+    });
+
+    it('returns empty object for empty sections', () => {
+        expect(extractPairingsColors([])).toEqual({});
+    });
+
+    it('handles multiple sections for the same round', () => {
+        const multiSection = [
+            { round: 3, section: '2000+', rows: [
+                { board: '1', whiteResult: '', whiteName: 'A, B (2000)', whiteUrl: null, blackResult: '', blackName: 'C, D (1900)', blackUrl: null },
+            ]},
+            { round: 3, section: 'U2000', rows: [
+                { board: '1', whiteResult: '', whiteName: 'E, F (1500)', whiteUrl: null, blackResult: '', blackName: 'G, H (1400)', blackUrl: null },
+            ]},
+        ];
+        const colors = extractPairingsColors(multiSection);
+        expect(colors[3]).toHaveLength(2);
     });
 });

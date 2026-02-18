@@ -121,7 +121,7 @@ function createDefaultBgSvg() {
 }
 
 async function generateDefaultOg() {
-    const knightPath = resolve(__dirname, '../public/pieces/WhiteKnight.webp');
+    const knightPath = resolve(__dirname, '../public/pieces/wN.webp');
     const knightSize = 300;
 
     // Resize knight to desired size, then remove grey background by flattening on transparent

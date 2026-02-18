@@ -222,40 +222,19 @@ export function backfillFromStandings(html, playerName, tournamentName, gameColo
                     };
                 }
             } else {
-                // W/L/D with opponent
+                // W/L/D with opponent — always merge additively, never overwrite with null
                 const opponent = rankMap[roundData.opponentRank];
                 const pgn = resolveFromPgn(gameColors, roundNum, playerName);
-                const pgnColor = existing.color || (pgn && pgn.color) || null;
-                const pgnBoard = existing.board || (pgn && pgn.board) || null;
-                if (!existing.result) {
-                    history.rounds[roundNum] = {
-                        ...existing,
-                        result: roundData.result,
-                        opponent: opponent?.name || existing.opponent || null,
-                        opponentRating: opponent?.rating || existing.opponentRating || null,
-                        opponentUrl: opponent?.url || existing.opponentUrl || null,
-                        color: pgnColor,
-                        board: pgnBoard,
-                        isBye: false,
-                    };
-                } else {
-                    // Fill in missing opponent/color/board info even if result exists
-                    const updates = {};
-                    if (!existing.opponent && opponent) {
-                        updates.opponent = opponent.name;
-                        updates.opponentRating = opponent.rating;
-                        updates.opponentUrl = opponent.url;
-                    }
-                    if (!existing.color && pgnColor) {
-                        updates.color = pgnColor;
-                    }
-                    if (!existing.board && pgnBoard) {
-                        updates.board = pgnBoard;
-                    }
-                    if (Object.keys(updates).length > 0) {
-                        history.rounds[roundNum] = { ...existing, ...updates };
-                    }
-                }
+                history.rounds[roundNum] = {
+                    ...existing,
+                    result: existing.result || roundData.result,
+                    opponent: existing.opponent || opponent?.name || null,
+                    opponentRating: existing.opponentRating || opponent?.rating || null,
+                    opponentUrl: existing.opponentUrl || opponent?.url || null,
+                    color: existing.color || (pgn && pgn.color) || null,
+                    board: existing.board || (pgn && pgn.board) || null,
+                    isBye: false,
+                };
             }
         }
 

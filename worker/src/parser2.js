@@ -386,6 +386,90 @@ export function extractPgnColors(html) {
     return gameColors;
 }
 
+/**
+ * Extract color assignments from parsed pairings sections.
+ * Takes the output of parsePairingsSections() and returns the same format as
+ * extractPgnColors: { [round]: [{white, black, result, board}] }
+ * This captures color data while pairings are live, before the table is removed.
+ */
+export function extractPairingsColors(sections) {
+    const colors = {};
+
+    for (const section of sections) {
+        const rnd = section.round;
+        if (!colors[rnd]) colors[rnd] = [];
+
+        for (const row of section.rows) {
+            // Skip byes
+            if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) {
+                continue;
+            }
+
+            const white = parsePlayerInfo(row.whiteName).name;
+            const black = parsePlayerInfo(row.blackName).name;
+            const board = row.board ? parseInt(row.board, 10) || null : null;
+
+            // Derive PGN-style result from the two result columns
+            let result = '*';
+            const wr = row.whiteResult.trim();
+            const br = row.blackResult.trim();
+            if (wr === '1' && br === '0') result = '1-0';
+            else if (wr === '0' && br === '1') result = '0-1';
+            else if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) result = '1/2-1/2';
+
+            colors[rnd].push({ white, black, result, board });
+        }
+    }
+
+    return colors;
+}
+
+/**
+ * Extract full PGN game texts from PGN textareas in the full tournament HTML.
+ * Must be called BEFORE extractSwissSysContent strips the HTML.
+ * Returns { [roundNumber]: [{ white, black, result, board, whiteElo, blackElo, eco, pgn }] }
+ */
+export function extractFullPgnGames(html) {
+    const rounds = {};
+
+    const textareaRegex = /<textarea\s+id="pgn-textarea-(\d+)"[^>]*>([\s\S]*?)<\/textarea>/gi;
+    let taMatch;
+
+    while ((taMatch = textareaRegex.exec(html)) !== null) {
+        const pgnText = taMatch[2];
+        const games = pgnText.split(/\n\s*\n(?=\[Event\s)/);
+
+        for (const game of games) {
+            const roundMatch = game.match(/\[Round\s+"(\d+)(?:\.(\d+))?"\]/);
+            const whiteMatch = game.match(/\[White\s+"([^"]+)"\]/);
+            const blackMatch = game.match(/\[Black\s+"([^"]+)"\]/);
+            const resultMatch = game.match(/\[Result\s+"([^"]+)"\]/);
+            const whiteEloMatch = game.match(/\[WhiteElo\s+"([^"]+)"\]/);
+            const blackEloMatch = game.match(/\[BlackElo\s+"([^"]+)"\]/);
+            const ecoMatch = game.match(/\[ECO\s+"([^"]+)"\]/);
+
+            if (!roundMatch || !whiteMatch || !blackMatch) continue;
+
+            const roundNum = parseInt(roundMatch[1], 10);
+            const board = roundMatch[2] ? parseInt(roundMatch[2], 10) : null;
+            if (!rounds[roundNum]) rounds[roundNum] = [];
+
+            rounds[roundNum].push({
+                white: whiteMatch[1],
+                black: blackMatch[1],
+                result: resultMatch ? resultMatch[1] : null,
+                board,
+                whiteElo: whiteEloMatch ? whiteEloMatch[1] : null,
+                blackElo: blackEloMatch ? blackEloMatch[1] : null,
+                eco: ecoMatch ? ecoMatch[1] : null,
+                pgn: game.trim(),
+            });
+        }
+    }
+
+    return rounds;
+}
+
 // --- Utility ---
 
 function decodeEntities(str) {

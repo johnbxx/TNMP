@@ -80,6 +80,8 @@
             <button data-debug="off_season">OFF SEASON (No Info)</button>
             <button data-debug="off_season" data-variant="nextTnm">OFF SEASON (Next TNM)</button>
             <button data-debug="off_season" data-variant="r1Day">OFF SEASON (R1 Day)</button>
+            <p>Debug: Game Viewer</p>
+            <button id="debug-game-viewer">Open Game Viewer</button>
         </div>
     </div>
 
@@ -191,6 +193,26 @@
             </div>
             <div class="modal-buttons">
                 <button id="close-privacy-btn" class="modal-btn modal-btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Viewer Modal -->
+    <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Viewer" aria-modal="true">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-content-viewer">
+            <div id="viewer-header" class="viewer-header"></div>
+            <div class="viewer-layout">
+                <div id="viewer-board" class="viewer-board"></div>
+                <div id="viewer-moves" class="viewer-moves"></div>
+            </div>
+            <div class="viewer-nav">
+                <button id="viewer-start" class="viewer-nav-btn" aria-label="Go to start">&#x23EE;</button>
+                <button id="viewer-prev" class="viewer-nav-btn" aria-label="Previous move">&#x23F4;</button>
+                <button id="viewer-play" class="viewer-nav-btn" aria-label="Play">&#x25B6;</button>
+                <button id="viewer-next" class="viewer-nav-btn" aria-label="Next move">&#x23F5;</button>
+                <button id="viewer-end" class="viewer-nav-btn" aria-label="Go to end">&#x23ED;</button>
+                <button id="viewer-flip" class="viewer-nav-btn" aria-label="Flip board">&#x21C5;</button>
             </div>
         </div>
     </div>

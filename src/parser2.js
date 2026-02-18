@@ -218,7 +218,7 @@ export function findPlayerPairing(html, playerName) {
                 return {
                     board: row.board || 'TBD',
                     color: 'White',
-                    colorIcon: 'pieces/WhiteKing.webp',
+                    colorIcon: 'pieces/wK.webp',
                     opponent: opponentInfo.name,
                     opponentRating: opponentInfo.rating,
                     opponentUrl: row.blackUrl,
@@ -240,7 +240,7 @@ export function findPlayerPairing(html, playerName) {
                 return {
                     board: row.board || 'TBD',
                     color: 'Black',
-                    colorIcon: 'pieces/BlackKing.webp',
+                    colorIcon: 'pieces/bK.webp',
                     opponent: opponentInfo.name,
                     opponentRating: opponentInfo.rating,
                     opponentUrl: row.whiteUrl,

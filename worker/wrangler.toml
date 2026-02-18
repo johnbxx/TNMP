@@ -15,3 +15,7 @@ ALLOWED_ORIGIN = "https://tnmpairings.com"
 [[kv_namespaces]]
 binding = "SUBSCRIBERS"
 id = "69d27221bb904515958233a6c9481e75"
+
+[[kv_namespaces]]
+binding = "GAMES"
+id = "dd3adec3b60b4002b71eaa1d1bae129e"

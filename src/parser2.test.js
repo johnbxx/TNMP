@@ -188,7 +188,7 @@ describe('findPlayerPairing', () => {
 
     it('includes colorIcon for display', () => {
         const pairing = findPlayerPairing(html, 'John Boyer');
-        expect(pairing.colorIcon).toContain('BlackKing');
+        expect(pairing.colorIcon).toContain('bK');
     });
 
     it('handles unrated opponent', () => {

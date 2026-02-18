@@ -6,8 +6,8 @@ const CACHE_NAME = '__SW_VERSION__'; // Replaced at build time by vite.config.js
 const STATIC_ASSETS = [
     '/',
     '/index.html',
-    '/pieces/BlackKing.webp',
-    '/pieces/WhiteKing.webp',
+    '/pieces/bK.webp',
+    '/pieces/wK.webp',
     '/pieces/Duck.webp',
 ];
 
@@ -84,8 +84,8 @@ self.addEventListener('push', (event) => {
     const title = data.title || 'Are the Pairings Up?';
     const options = {
         body: data.body || '',
-        icon: '/pieces/WhiteKing.webp',
-        badge: '/pieces/WhiteKing.webp',
+        icon: '/pieces/wK.webp',
+        badge: '/pieces/wK.webp',
         tag: `tnmp-${data.type || 'notification'}-r${data.round || 0}`,
         renotify: true,
         data: { url: data.url || '/' },

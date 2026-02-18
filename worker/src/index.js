@@ -1,5 +1,5 @@
 import { sendPushNotification } from './webpush.js';
-import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
+import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, extractPairingsColors, extractFullPgnGames, parsePairingsSections, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
 
 const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 const MI_BASE_URL = 'https://www.milibrary.org';
@@ -43,8 +43,19 @@ function corsResponse(data, status, env, request) {
 
 // --- Rate Limiting ---
 
+// --- Tournament Slug ---
+
+function slugifyTournament(name) {
+    return name
+        .toLowerCase()
+        .replace(/['']/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
 const RATE_LIMITS = {
     '/tournament-html': 60,
+    '/game': 60,
     '/og-state': 60,
     '/health': 30,
     '/push-subscribe': 10,
@@ -194,6 +205,25 @@ async function resolveTournament(env) {
     return meta;
 }
 
+// --- Helpers ---
+
+/**
+ * Merge gameColors from PGN parsing with pairings-derived colors.
+ * PGN data is preferred (has accurate board numbers from [Round "N.B"]).
+ * Pairings colors fill in rounds that PGN doesn't cover yet.
+ */
+function mergeGameColors(pgnColors, pairingsColors) {
+    if (!pairingsColors) return pgnColors || null;
+    if (!pgnColors) return pairingsColors;
+    const merged = { ...pgnColors };
+    for (const [rnd, games] of Object.entries(pairingsColors)) {
+        if (!merged[rnd]) {
+            merged[rnd] = games;
+        }
+    }
+    return merged;
+}
+
 // --- HTTP Routes ---
 
 async function handleTournamentHtml(request, env) {
@@ -208,11 +238,14 @@ async function handleTournamentHtml(request, env) {
         meta = await resolveTournament(env);
     }
 
+    // Merge PGN-derived colors with pairings-derived colors (persistent)
+    const pairingsColors = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json');
+
     return corsResponse({
         html: cached.html,
         fetchedAt: cached.fetchedAt,
         round: cached.round,
-        gameColors: cached.gameColors || null,
+        gameColors: mergeGameColors(cached.gameColors, pairingsColors),
         tournamentName: meta?.name || null,
         tournamentUrl: meta?.url || null,
         roundDates: meta?.roundDates || [],
@@ -371,6 +404,33 @@ async function handleOgState(request, env) {
         color: ogConfig.color,
         image: ogConfig.image,
     }, 200, env, request);
+}
+
+// --- Game Endpoint ---
+
+async function handleGetGame(request, env) {
+    const url = new URL(request.url);
+    const round = url.searchParams.get('round');
+    const board = url.searchParams.get('board');
+
+    if (!round || !board) {
+        return corsResponse({ error: 'round and board parameters are required' }, 400, env, request);
+    }
+
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    const slug = meta?.name ? slugifyTournament(meta.name) : null;
+    if (!slug) {
+        return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+    }
+
+    const key = `game:${slug}:${round}:${board}`;
+    const pgn = await env.GAMES.get(key);
+
+    if (!pgn) {
+        return corsResponse({ error: 'Game not found' }, 404, env, request);
+    }
+
+    return corsResponse({ pgn, round: parseInt(round), board: parseInt(board) }, 200, env, request);
 }
 
 // --- Push Notification Endpoints ---
@@ -660,7 +720,51 @@ async function handleScheduled(env) {
     }));
     console.log(`Cached tournament HTML in KV (${strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(gameColors).length} rounds of PGN colors).`);
 
+    // Store full PGN games in GAMES KV
+    const fullGames = extractFullPgnGames(html);
+    const slug = slugifyTournament(tournament.name);
+    let gameCount = 0;
+    for (const [roundNum, games] of Object.entries(fullGames)) {
+        // Write round index (metadata only, for future game browsing)
+        const indexData = games.map(g => ({
+            board: g.board, white: g.white, black: g.black,
+            result: g.result, whiteElo: g.whiteElo, blackElo: g.blackElo, eco: g.eco,
+        }));
+        await env.GAMES.put(`index:${slug}:${roundNum}`, JSON.stringify(indexData));
+
+        // Write individual games
+        for (const game of games) {
+            if (game.board !== null) {
+                await env.GAMES.put(`game:${slug}:${roundNum}:${game.board}`, game.pgn);
+                gameCount++;
+            }
+        }
+    }
+    console.log(`Stored ${gameCount} PGN games across ${Object.keys(fullGames).length} rounds in GAMES KV.`);
+
     const pairingsFound = await hasPairings(html);
+
+    // Capture pairings colors persistently — survives pairings table removal
+    if (pairingsFound) {
+        try {
+            const sections = await parsePairingsSections(html);
+            const newColors = extractPairingsColors(sections);
+            const existing = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json') || {};
+            let updated = false;
+            for (const [rnd, games] of Object.entries(newColors)) {
+                if (!existing[rnd]) {
+                    existing[rnd] = games;
+                    updated = true;
+                }
+            }
+            if (updated) {
+                await env.SUBSCRIBERS.put('cache:pairingsColors', JSON.stringify(existing));
+                console.log(`Persisted pairings colors for rounds: ${Object.keys(newColors).join(', ')}`);
+            }
+        } catch (err) {
+            console.error('Failed to capture pairings colors:', err.message);
+        }
+    }
 
     await env.SUBSCRIBERS.put('state:lastCheck', JSON.stringify({
         timestamp: new Date().toISOString(),
@@ -800,6 +904,9 @@ export default {
             }
             if (path === '/push-test' && request.method === 'POST') {
                 return await handlePushTest(request, env);
+            }
+            if (path === '/game' && request.method === 'GET') {
+                return await handleGetGame(request, env);
             }
             if (path === '/og-state' && request.method === 'GET') {
                 return await handleOgState(request, env);

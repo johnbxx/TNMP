@@ -250,9 +250,9 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
             if (round.isBye) {
                 iconHtml = '<img class="tracker-icon" src="pieces/Duck.webp" alt="Bye">';
             } else if (round.color === 'White') {
-                iconHtml = '<img class="tracker-icon" src="pieces/WhiteKing.webp" alt="White">';
+                iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
             } else if (round.color === 'Black') {
-                iconHtml = '<img class="tracker-icon" src="pieces/BlackKing.webp" alt="Black">';
+                iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
             } else {
                 // Color unknown — show a filled circle
                 iconHtml = '<span class="tracker-dot"></span>';
@@ -262,9 +262,9 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
             // Current round, in progress (no result yet)
             ringClass = 'ring-current';
             if (round && round.color === 'White') {
-                iconHtml = '<img class="tracker-icon" src="pieces/WhiteKing.webp" alt="White">';
+                iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
             } else if (round && round.color === 'Black') {
-                iconHtml = '<img class="tracker-icon" src="pieces/BlackKing.webp" alt="Black">';
+                iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
             } else {
                 iconHtml = `<span class="tracker-number">${i}</span>`;
             }
@@ -347,10 +347,13 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
         else if (round.result === 'D') resultHtml = '<div class="pairing-result">🤝 Draw</div>';
 
         let colorIcon = '';
-        if (round.color === 'White') colorIcon = '<img class="color-icon" src="pieces/WhiteKing.webp" alt="White">';
-        else if (round.color === 'Black') colorIcon = '<img class="color-icon" src="pieces/BlackKing.webp" alt="Black">';
+        if (round.color === 'White') colorIcon = '<img class="color-icon" src="pieces/wK.webp" alt="White">';
+        else if (round.color === 'Black') colorIcon = '<img class="color-icon" src="pieces/bK.webp" alt="Black">';
 
         const boardHtml = round.board ? `<div class="pairing-details"><span class="pairing-board">Board ${round.board}</span></div>` : '';
+        const viewGameHtml = (round.board && round.result && !round.isBye)
+            ? `<button class="view-game-btn" data-round="${roundNum}" data-board="${round.board}">View Game</button>`
+            : '';
 
         pairingInfoEl.innerHTML = `
             <div class="pairing-history-label">Round ${roundNum}</div>
@@ -360,6 +363,7 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
                 <span>vs ${opponentDisplay}${ratingText}</span>
             </div>
             ${boardHtml}
+            ${viewGameHtml}
         `;
     }
 
