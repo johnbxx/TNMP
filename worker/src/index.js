@@ -387,10 +387,20 @@ async function pushKey(endpoint) {
 }
 
 async function handlePushSubscribe(request, env) {
-    const { subscription, playerName } = await request.json();
+    const { subscription, playerName, oldEndpoint } = await request.json();
 
     if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
         return corsResponse({ success: false, error: 'Invalid push subscription' }, 400, env, request);
+    }
+
+    // Clean up old endpoint if the browser rotated it
+    if (oldEndpoint && oldEndpoint !== subscription.endpoint) {
+        const oldKey = await pushKey(oldEndpoint);
+        const oldRecord = await env.SUBSCRIBERS.get(oldKey, 'json');
+        if (oldRecord) {
+            console.log(`Cleaning up rotated push endpoint: ${oldKey}`);
+            await env.SUBSCRIBERS.delete(oldKey);
+        }
     }
 
     const key = await pushKey(subscription.endpoint);

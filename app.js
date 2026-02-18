@@ -9,7 +9,7 @@ import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './src/history.js';
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
 import { registerModalClose, trapFocus } from './src/modal.js';
-import { enablePush, disablePush, updatePushPrefs } from './src/push.js';
+import { enablePush, disablePush, updatePushPrefs, syncPushSubscription } from './src/push.js';
 
 // --- Main check logic ---
 
@@ -381,6 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wrappedCheckPairings();
     startCountdown(wrappedCheckPairings);
+    syncPushSubscription();
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('debug') === 'true') {

@@ -81,6 +81,28 @@ export async function checkPushStatus() {
 }
 
 /**
+ * Register a push subscription with the server, cleaning up any old endpoint.
+ * Saves the current endpoint to localStorage for rotation detection.
+ */
+async function registerWithServer(sub) {
+    const oldEndpoint = localStorage.getItem('pushEndpoint') || undefined;
+    const res = await fetch(`${WORKER_URL}/push-subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subscription: sub.toJSON(),
+            playerName: CONFIG.playerName,
+            oldEndpoint,
+        }),
+    });
+    const data = await res.json();
+    if (data.success) {
+        localStorage.setItem('pushEndpoint', sub.endpoint);
+    }
+    return data;
+}
+
+/**
  * Enable push notifications: prompt permission, subscribe, and register with server.
  */
 export async function enablePush() {
@@ -111,16 +133,7 @@ export async function enablePush() {
             applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
         });
 
-        const res = await fetch(`${WORKER_URL}/push-subscribe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                subscription: sub.toJSON(),
-                playerName: CONFIG.playerName,
-            }),
-        });
-
-        const data = await res.json();
+        const data = await registerWithServer(sub);
         if (!data.success) {
             showError(data.error || 'Failed to register push subscription.');
             return;
@@ -159,6 +172,7 @@ export async function disablePush() {
             }
             await sub.unsubscribe();
         }
+        localStorage.removeItem('pushEndpoint');
     } catch (err) {
         console.error('Push unsubscribe error:', err);
     }
@@ -210,23 +224,22 @@ function showToast(message) {
 }
 
 /**
- * Re-sync the push subscription with an updated player name.
- * Called when the user saves settings with a new name.
+ * Re-sync the push subscription with the server.
+ * Sends current playerName and detects endpoint rotation.
+ * Called on page load and when the user saves settings.
  */
-export async function syncPushName() {
-    const sub = await getSubscription();
-    if (!sub) return;
+export async function syncPushSubscription() {
+    if (!isPushSupported()) return;
 
     try {
-        await fetch(`${WORKER_URL}/push-subscribe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                subscription: sub.toJSON(),
-                playerName: CONFIG.playerName,
-            }),
-        });
+        const sub = await getSubscription();
+        if (!sub) return;
+
+        await registerWithServer(sub);
     } catch (err) {
-        console.warn('Push name sync failed:', err.message);
+        console.warn('Push sync failed:', err.message);
     }
 }
+
+// Keep the old name as an alias for settings.js
+export { syncPushSubscription as syncPushName };
