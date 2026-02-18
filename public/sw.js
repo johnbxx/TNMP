@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tnmp-v6';
+const CACHE_NAME = 'tnmp-v7';
 
 // Pre-cache only the HTML shell and piece images.
 // JS/CSS assets have content hashes in their filenames (via Vite)
@@ -41,18 +41,15 @@ self.addEventListener('fetch', (event) => {
         || url.pathname.startsWith('/pieces/');
 
     if (isNavigate) {
-        // Stale-while-revalidate for HTML shell — instant load, background refresh
+        // Network-first for HTML shell — always fresh, offline fallback from cache
         event.respondWith(
-            caches.match(event.request).then((cached) => {
-                const fetchPromise = fetch(event.request).then((response) => {
-                    if (response.ok) {
-                        const clone = response.clone();
-                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                    }
-                    return response;
-                }).catch(() => cached);
-                return cached || fetchPromise;
-            })
+            fetch(event.request).then((response) => {
+                if (response.ok) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                }
+                return response;
+            }).catch(() => caches.match(event.request))
         );
     } else if (isAsset) {
         // Cache-first for hashed assets, memes, and pieces
