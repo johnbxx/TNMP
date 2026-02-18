@@ -99,6 +99,16 @@ async function checkPairings() {
             } else {
                 showState(STATE.OFF_SEASON, 'Check back for the next TNM schedule.');
             }
+            // Backfill from standings if HTML is available, then show round tracker
+            if (CONFIG.playerName) {
+                let roundHistory = loadRoundHistory();
+                if (html) {
+                    roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
+                }
+                if (Object.keys(roundHistory.rounds).length > 0) {
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON);
+                }
+            }
             stopCountdown();
             return;
         }
@@ -109,6 +119,16 @@ async function checkPairings() {
             showState(STATE.OFF_SEASON, 'Round 1 pairings will be posted onsite at 6:30PM.', {
                 targetDate: today + 'T18:30:00',
             });
+            // Backfill from standings if HTML is available, then show round tracker
+            if (CONFIG.playerName) {
+                let roundHistory = loadRoundHistory();
+                if (html) {
+                    roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
+                }
+                if (Object.keys(roundHistory.rounds).length > 0) {
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON);
+                }
+            }
             stopCountdown();
             return;
         }
@@ -148,16 +168,28 @@ async function checkPairings() {
 
         if (!pairingsMatch) {
             console.log('Could not find <h2>Pairings</h2> header');
+            let displayedState = null;
             if (timeState === 'results_window') {
+                displayedState = STATE.RESULTS;
                 showState(STATE.RESULTS, 'The round is complete. Final standings are posted.');
                 stopCountdown();
             } else if (timeState === 'round_in_progress') {
+                displayedState = STATE.IN_PROGRESS;
                 showState(STATE.IN_PROGRESS, 'The round is being played right now!');
             } else if (timeState === 'too_early') {
+                displayedState = STATE.TOO_EARLY;
                 showState(STATE.TOO_EARLY, 'Pairings are posted Monday at 8PM Pacific. Check back then!');
                 stopCountdown();
             } else {
+                displayedState = STATE.NO;
                 showState(STATE.NO, "Waiting for pairings to be posted...");
+            }
+            // Backfill from standings even when pairings are missing
+            if (CONFIG.playerName) {
+                let roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
+                if (Object.keys(roundHistory.rounds).length > 0) {
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, displayedState);
+                }
             }
             return;
         }
@@ -179,16 +211,28 @@ async function checkPairings() {
         // (happens after final round when MI clears the pairings section)
         if (!table || rows.length < 2) {
             console.log('No pairings table found under Pairings header');
+            let displayedState = null;
             if (timeState === 'results_window') {
+                displayedState = STATE.RESULTS;
                 showState(STATE.RESULTS, 'The round is complete. Final standings are posted.');
                 stopCountdown();
             } else if (timeState === 'round_in_progress') {
+                displayedState = STATE.IN_PROGRESS;
                 showState(STATE.IN_PROGRESS, 'The round is being played right now!');
             } else if (timeState === 'too_early') {
+                displayedState = STATE.TOO_EARLY;
                 showState(STATE.TOO_EARLY, 'Pairings are posted Monday at 8PM Pacific. Check back then!');
                 stopCountdown();
             } else {
+                displayedState = STATE.NO;
                 showState(STATE.NO, 'Waiting for pairings to be posted...');
+            }
+            // Backfill from standings even when pairings table is missing
+            if (CONFIG.playerName) {
+                let roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
+                if (Object.keys(roundHistory.rounds).length > 0) {
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState);
+                }
             }
             return;
         }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tnmp-v7';
+const CACHE_NAME = '__SW_VERSION__'; // Replaced at build time by vite.config.js
 
 // Pre-cache only the HTML shell and piece images.
 // JS/CSS assets have content hashes in their filenames (via Vite)
