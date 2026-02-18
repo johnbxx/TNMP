@@ -216,7 +216,7 @@ export function hideOfflineBanner() {
  * @param {number} currentRound - Current/latest round number
  * @param {string} currentState - Current app state (STATE.YES, STATE.IN_PROGRESS, etc.)
  */
-export function renderRoundTracker(roundHistory, totalRounds, currentRound, currentState) {
+export function renderRoundTracker(roundHistory, totalRounds, currentRound, currentState, autoSelectRound = null) {
     const container = document.getElementById('round-tracker');
     if (!container) return;
 
@@ -295,6 +295,11 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
             const roundNum = parseInt(btn.dataset.round, 10);
             showRoundDetail(roundNum, trackerState.roundHistory, trackerState.currentRound);
         });
+    }
+
+    // Auto-select the last completed round when there's no live pairing
+    if (autoSelectRound) {
+        showRoundDetail(autoSelectRound, roundHistory, currentRound);
     }
 }
 

@@ -105,8 +105,10 @@ async function checkPairings() {
                 if (html) {
                     roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
                 }
-                if (Object.keys(roundHistory.rounds).length > 0) {
-                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON);
+                const rounds = Object.keys(roundHistory.rounds);
+                if (rounds.length > 0) {
+                    const lastRound = Math.max(...rounds.map(Number));
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON, lastRound);
                 }
             }
             stopCountdown();
@@ -125,8 +127,10 @@ async function checkPairings() {
                 if (html) {
                     roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
                 }
-                if (Object.keys(roundHistory.rounds).length > 0) {
-                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON);
+                const rounds = Object.keys(roundHistory.rounds);
+                if (rounds.length > 0) {
+                    const lastRound = Math.max(...rounds.map(Number));
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON, lastRound);
                 }
             }
             stopCountdown();
@@ -187,8 +191,10 @@ async function checkPairings() {
             // Backfill from standings even when pairings are missing
             if (CONFIG.playerName) {
                 let roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
-                if (Object.keys(roundHistory.rounds).length > 0) {
-                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, displayedState);
+                const rounds = Object.keys(roundHistory.rounds);
+                if (rounds.length > 0) {
+                    const lastRound = Math.max(...rounds.map(Number));
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, displayedState, lastRound);
                 }
             }
             return;
@@ -230,8 +236,10 @@ async function checkPairings() {
             // Backfill from standings even when pairings table is missing
             if (CONFIG.playerName) {
                 let roundHistory = backfillFromStandings(html, CONFIG.playerName, tournamentMeta.name, gameColors);
-                if (Object.keys(roundHistory.rounds).length > 0) {
-                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState);
+                const rounds = Object.keys(roundHistory.rounds);
+                if (rounds.length > 0) {
+                    const lastRound = Math.max(...rounds.map(Number));
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState, lastRound);
                 }
             }
             return;
