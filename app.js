@@ -148,45 +148,52 @@ async function checkPairings() {
 
         if (!pairingsMatch) {
             console.log('Could not find <h2>Pairings</h2> header');
-            if (timeState === 'round_in_progress') {
+            if (timeState === 'results_window') {
+                showState(STATE.RESULTS, 'The round is complete. Final standings are posted.');
+                stopCountdown();
+            } else if (timeState === 'round_in_progress') {
                 showState(STATE.IN_PROGRESS, 'The round is being played right now!');
+            } else if (timeState === 'too_early') {
+                showState(STATE.TOO_EARLY, 'Pairings are posted Monday at 8PM Pacific. Check back then!');
+                stopCountdown();
             } else {
-                showState(STATE.NO, "Couldn't find pairings section. Check the page directly.");
+                showState(STATE.NO, "Waiting for pairings to be posted...");
             }
             return;
         }
 
         const afterHeader = html.split(pairingsMatch[0])[1];
-        if (!afterHeader) {
-            console.log('No content after Pairings header');
-            showState(STATE.NO, "Couldn't find pairings table. Check the page directly.");
-            return;
-        }
 
         // Extract the round number
         const roundRegex = /Pairings for Round (\d+)/i;
-        const roundMatch = afterHeader.match(roundRegex);
+        const roundMatch = afterHeader ? afterHeader.match(roundRegex) : null;
         const roundNumber = roundMatch ? parseInt(roundMatch[1]) : 0;
         setLastRoundNumber(roundNumber || 1);
-        console.log(`Found Round ${roundNumber} pairings`);
 
         // Parse the table to check for results
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(afterHeader, 'text/html');
-        const table = doc.querySelector('table');
+        const doc = afterHeader ? new DOMParser().parseFromString(afterHeader, 'text/html') : null;
+        const table = doc ? doc.querySelector('table') : null;
+        const rows = table ? table.querySelectorAll('tr') : [];
 
-        if (!table) {
-            console.log('No table found after header');
-            showState(STATE.NO, "Couldn't find pairings table. Check the page directly.");
+        // No pairings table found — Pairings header exists but tables were removed
+        // (happens after final round when MI clears the pairings section)
+        if (!table || rows.length < 2) {
+            console.log('No pairings table found under Pairings header');
+            if (timeState === 'results_window') {
+                showState(STATE.RESULTS, 'The round is complete. Final standings are posted.');
+                stopCountdown();
+            } else if (timeState === 'round_in_progress') {
+                showState(STATE.IN_PROGRESS, 'The round is being played right now!');
+            } else if (timeState === 'too_early') {
+                showState(STATE.TOO_EARLY, 'Pairings are posted Monday at 8PM Pacific. Check back then!');
+                stopCountdown();
+            } else {
+                showState(STATE.NO, 'Waiting for pairings to be posted...');
+            }
             return;
         }
 
-        const rows = table.querySelectorAll('tr');
-        if (rows.length < 2) {
-            console.log('Table has no data rows');
-            showState(STATE.NO, "Pairings table appears empty. Check the page directly.");
-            return;
-        }
+        console.log(`Found Round ${roundNumber} pairings`);
 
         const firstDataRow = rows[1];
         const cells = firstDataRow.querySelectorAll('td');
