@@ -16,7 +16,7 @@ const SECURITY_HEADERS = {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://tnmp-notifications.johnfranklinboyer.workers.dev; frame-ancestors 'none';",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://tnmp-notifications.johnfranklinboyer.workers.dev https://lichess.org; frame-ancestors 'none';",
 };
 
 function addSecurityHeaders(response) {

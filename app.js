@@ -10,10 +10,10 @@ import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './s
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
 import { registerModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, updatePushPrefs, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGameViewer, closeGameViewerFull, openGameViewerWithPgn, viewerNavigateGame } from './src/game-viewer.js';
+import { openGameViewer, closeGameViewer, openGameViewerWithPgn, viewerNavigateGame } from './src/game-viewer.js';
 import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, getGamePgn } from './src/pgn-viewer.js';
 import { showToast } from './src/share.js';
-import { openGameBrowser, closeGameBrowser, reopenBrowser, prefetchGames, openGameWithPlayerNav } from './src/game-browser.js';
+import { openGameBrowser, closeGameBrowser, prefetchGames, openGameWithPlayerNav } from './src/game-browser.js';
 
 // --- Deep link handler ---
 
@@ -495,12 +495,26 @@ document.getElementById('viewer-comments').addEventListener('click', () => {
 // Comments are visible by default, so mark the button active initially
 document.getElementById('viewer-comments').classList.add('active');
 
-document.getElementById('viewer-analysis').addEventListener('click', () => {
+document.getElementById('viewer-analysis').addEventListener('click', async () => {
     const pgn = getGamePgn();
     if (!pgn) return;
-    // Extract just the moves (strip PGN headers), encode for lichess analysis URL
-    const moves = pgn.replace(/\[[^\]]*\]\s*/g, '').replace(/\d+\.\s*/g, '').trim().replace(/\s+/g, '_');
-    window.open(`https://lichess.org/analysis/pgn/${moves}`, '_blank');
+    // Use lichess API to import full PGN (with annotations/variations)
+    try {
+        const res = await fetch('https://lichess.org/api/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: 'pgn=' + encodeURIComponent(pgn),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.url) {
+                window.open(data.url, '_blank');
+                return;
+            }
+        }
+    } catch { /* network error */ }
+    // Fallback: open lichess paste page so user can paste manually
+    window.open('https://lichess.org/paste', '_blank');
 });
 
 document.getElementById('viewer-share').addEventListener('click', async () => {
@@ -515,24 +529,9 @@ document.getElementById('viewer-share').addEventListener('click', async () => {
     const black = fmt(hdr('Black'));
     const result = hdr('Result');
     const gameId = hdr('GameId');
-    const roundHeader = hdr('Round');
-    const event = hdr('Event');
 
-    // Parse round/board from "4.18" format
-    const roundParts = roundHeader.match(/^(\d+)(?:\.(\d+))?$/);
-    const roundNum = roundParts ? roundParts[1] : '';
-    const boardNum = roundParts ? roundParts[2] : '';
-
-    // Build share title and description
+    // Build share title
     const title = `${white} vs ${black} — ${result}`;
-    const descParts = [];
-    if (event) {
-        const colonIdx = event.indexOf(':');
-        descParts.push(colonIdx >= 0 ? event.substring(0, colonIdx).trim() : event);
-    }
-    if (roundNum) descParts.push(`Round ${roundNum}`);
-    if (boardNum) descParts.push(`Board ${boardNum}`);
-    const description = descParts.join(' | ');
 
     // Build deep link URL
     const gameUrl = gameId
@@ -543,7 +542,7 @@ document.getElementById('viewer-share').addEventListener('click', async () => {
     if (navigator.share && navigator.canShare) {
         const shareData = { title, url: gameUrl };
         if (navigator.canShare(shareData)) {
-            try { await navigator.share(shareData); } catch {}
+            try { await navigator.share(shareData); } catch { /* user cancelled */ }
             return;
         }
     }

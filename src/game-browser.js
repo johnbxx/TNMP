@@ -25,14 +25,14 @@ export function prefetchGames() {
     try {
         const cached = localStorage.getItem(GAMES_CACHE_KEY);
         if (cached) gamesData = JSON.parse(cached);
-    } catch {}
+    } catch { /* ignore corrupt cache */ }
     // Refresh from network in the background
     fetch(`${WORKER_URL}/games`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
             if (!data) return;
             gamesData = data;
-            try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(data)); } catch {}
+            try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
         })
         .catch(() => {});
 }

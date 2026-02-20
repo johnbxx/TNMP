@@ -2,7 +2,7 @@ import js from '@eslint/js';
 
 export default [
     {
-        ignores: ['dist/', 'node_modules/', 'worker/', 'public/', 'test/', 'scripts/', 'seed-pgn-colors.mjs'],
+        ignores: ['dist/', 'node_modules/', 'worker/', 'public/', 'test/', 'scripts/', 'seed-pgn-colors.mjs', '.wrangler/'],
     },
     js.configs.recommended,
     {
