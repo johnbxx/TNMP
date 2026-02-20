@@ -1,0 +1,102 @@
+/**
+ * ECO opening classification using position-based (EPD) matching.
+ *
+ * Replays a game's moves with chess.js, collects the EPD at each position,
+ * then walks backwards to find the deepest named opening position.
+ *
+ * The EPD database is generated from the lichess chess-openings dist files
+ * by scripts/build-eco-epd.js.
+ */
+
+import { Chess } from 'chess.js';
+import ecoEpd from './eco-epd.json';
+
+/**
+ * Convert a FEN string to EPD (strip halfmove and fullmove clocks).
+ */
+function fenToEpd(fen) {
+    return fen.split(' ').slice(0, 4).join(' ');
+}
+
+/**
+ * Extract and clean main-line move tokens from PGN move text.
+ * Strips variations, comments, NAGs, move numbers, and result tokens.
+ */
+export function extractMoveTokens(pgn) {
+    // Find move text after the last header
+    const lastHeader = pgn.lastIndexOf(']\n');
+    const moveText = lastHeader >= 0 ? pgn.substring(lastHeader + 2).trim() : pgn.trim();
+
+    // Strip nested variations by counting parens
+    let depth = 0;
+    let stripped = '';
+    for (const ch of moveText) {
+        if (ch === '(') { depth++; continue; }
+        if (ch === ')') { depth--; continue; }
+        if (depth === 0) stripped += ch;
+    }
+
+    return stripped
+        .replace(/\{[^}]*\}/g, '')       // Remove {comments}
+        .replace(/\$\d+/g, '')           // Remove $NAGs
+        .replace(/\d+\.{3}/g, '')        // Remove "1..."
+        .replace(/\d+\./g, '')           // Remove "1."
+        .replace(/[?!]+/g, '')           // Remove annotations
+        .trim()
+        .split(/\s+/)
+        .filter(t => t && !['1-0', '0-1', '1/2-1/2', '*'].includes(t));
+}
+
+/**
+ * Classify a PGN game's opening by position.
+ *
+ * @param {string} pgn - Full PGN text
+ * @returns {{ eco: string, name: string } | null}
+ */
+/**
+ * Replay a PGN's moves and return the final FEN position.
+ *
+ * @param {string} pgn - Full PGN text
+ * @returns {string} FEN string of the final position
+ */
+export function replayToFen(pgn) {
+    const moves = extractMoveTokens(pgn);
+    const chess = new Chess();
+    for (const san of moves) {
+        try { chess.move(san); } catch { break; }
+    }
+    return chess.fen();
+}
+
+/**
+ * Classify a PGN game's opening by position.
+ *
+ * @param {string} pgn - Full PGN text
+ * @returns {{ eco: string, name: string } | null}
+ */
+export function classifyOpening(pgn) {
+    const moves = extractMoveTokens(pgn);
+    if (moves.length === 0) return null;
+
+    const chess = new Chess();
+    const positions = [fenToEpd(chess.fen())];
+
+    for (const san of moves) {
+        try {
+            chess.move(san);
+            positions.push(fenToEpd(chess.fen()));
+        } catch {
+            break;
+        }
+    }
+
+    // Walk backwards to find the deepest named position
+    for (let i = positions.length - 1; i >= 0; i--) {
+        const match = ecoEpd[positions[i]];
+        if (match) {
+            return { eco: match.eco, name: match.name };
+        }
+    }
+
+    return null;
+}

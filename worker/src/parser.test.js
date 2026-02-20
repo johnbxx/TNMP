@@ -342,14 +342,19 @@ describe('extractFullPgnGames', () => {
         }
     });
 
-    it('retains the same games as extractPgnColors', () => {
+    it('deduplicates games by board number', () => {
         const colors = extractPgnColors(fullHtml);
         const full = extractFullPgnGames(fullHtml);
         // Same round numbers
         expect(Object.keys(full).sort()).toEqual(Object.keys(colors).sort());
-        // Same game count per round
+        // Deduplicated count should be <= raw count
         for (const roundNum of Object.keys(colors)) {
-            expect(full[roundNum].length).toBe(colors[roundNum].length);
+            expect(full[roundNum].length).toBeLessThanOrEqual(colors[roundNum].length);
+        }
+        // No duplicate boards within any round
+        for (const games of Object.values(full)) {
+            const boards = games.map(g => g.board).filter(b => b !== null);
+            expect(new Set(boards).size).toBe(boards.length);
         }
     });
 
@@ -384,6 +389,16 @@ describe('extractFullPgnGames', () => {
 
     it('returns empty object for HTML without PGN textareas', () => {
         expect(extractFullPgnGames('<html><body>No PGN</body></html>')).toEqual({});
+    });
+
+    it('extracts GameId from PGN headers', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        const allGames = Object.values(rounds).flat();
+        const withGameId = allGames.filter(g => g.gameId);
+        expect(withGameId.length).toBeGreaterThan(0);
+        for (const g of withGameId) {
+            expect(g.gameId).toMatch(/^\d+$/);
+        }
     });
 });
 

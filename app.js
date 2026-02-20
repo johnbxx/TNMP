@@ -1,7 +1,7 @@
 import { WORKER_URL, CONFIG, STATE, tournamentMeta, setTournamentMeta } from './src/config.js';
 import { findPlayerPairing } from './src/parser2.js';
 import { getTimeState } from './src/time.js';
-import { showLoading, showState, showError, updateTournamentLink, showOfflineBanner, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
+import { showLoading, showState, showError, updateTournamentLink, showOfflineBanner, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml, setCheckHandler } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown, setLastRoundNumber } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
 import { openSettings, closeSettings, saveSettings } from './src/settings.js';
@@ -10,8 +10,33 @@ import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './s
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
 import { registerModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, updatePushPrefs, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGameViewer, openGameViewerWithPgn } from './src/game-viewer.js';
-import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay } from './src/pgn-viewer.js';
+import { openGameViewer, closeGameViewer, closeGameViewerFull, openGameViewerWithPgn, viewerNavigateGame } from './src/game-viewer.js';
+import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, getGamePgn } from './src/pgn-viewer.js';
+import { showToast } from './src/share.js';
+import { openGameBrowser, closeGameBrowser, reopenBrowser, prefetchGames, openGameWithPlayerNav } from './src/game-browser.js';
+
+// --- Deep link handler ---
+
+async function handleGameDeepLink(gameId) {
+    try {
+        const response = await fetch(`${WORKER_URL}/game-by-id?id=${gameId}`);
+        if (!response.ok) {
+            console.log(`Game ${gameId} not found`);
+            return;
+        }
+        const data = await response.json();
+        openGameViewerWithPgn(data.pgn, 'White', {
+            round: data.round,
+            board: data.board,
+            eco: data.eco,
+            openingName: data.openingName,
+        });
+        // Clean URL so refreshing doesn't re-open the game
+        window.history.replaceState({}, '', window.location.pathname);
+    } catch (err) {
+        console.error('Failed to load deep-linked game:', err.message);
+    }
+}
 
 // --- Main check logic ---
 
@@ -89,8 +114,22 @@ async function checkPairings() {
 
         // Handle off-season states before trying to parse HTML
         if (timeState === 'off_season') {
-            const next = tournamentMeta.nextTournament;
-            if (next && next.startDate) {
+            // If the current tournament hasn't started yet, count down to its R1.
+            // Otherwise, count down to the next tournament.
+            const r1 = tournamentMeta.roundDates?.[0];
+            const r1Date = r1 ? new Date(r1) : null;
+            const currentNotStarted = r1Date && r1Date.getTime() > Date.now();
+
+            if (currentNotStarted) {
+                const dateStr = r1Date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+                const name = tournamentMeta.name || 'The next TNM';
+                showState(STATE.OFF_SEASON, `${name} starts ${dateStr}. Round 1 pairings will be posted onsite.`, {
+                    targetDate: r1,
+                    tournamentUrl: tournamentMeta.url,
+                    tournamentName: tournamentMeta.name,
+                });
+            } else if (tournamentMeta.nextTournament?.startDate) {
+                const next = tournamentMeta.nextTournament;
                 const nextDate = new Date(next.startDate + 'T00:00:00');
                 const dateStr = nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
                 showState(STATE.OFF_SEASON, `The next TNM starts ${dateStr}. Round 1 pairings will be posted onsite.`, {
@@ -338,11 +377,15 @@ const wrappedCheckPairings = async function() {
     await checkPairings();
 };
 
+// Register the check handler so showState can assign it to the button's onclick
+setCheckHandler(wrappedCheckPairings);
+
 // --- Register modal close handlers for backdrop clicks ---
 registerModalClose('settings-modal', closeSettings);
 registerModalClose('about-modal', closeAbout);
 registerModalClose('privacy-modal', closePrivacy);
 registerModalClose('viewer-modal', closeGameViewer);
+registerModalClose('browser-modal', closeGameBrowser);
 
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
@@ -350,6 +393,7 @@ document.addEventListener('keydown', (e) => {
     const aboutModal = document.getElementById('about-modal');
     const privacyModal = document.getElementById('privacy-modal');
     const viewerModal = document.getElementById('viewer-modal');
+    const browserModal = document.getElementById('browser-modal');
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
         if (e.key === 'ArrowLeft') { goToPrev(); e.preventDefault(); }
@@ -358,7 +402,14 @@ document.addEventListener('keydown', (e) => {
         else if (e.key === 'End') { goToEnd(); e.preventDefault(); }
         else if (e.key === ' ') { toggleAutoPlay(); e.preventDefault(); }
         else if (e.key === 'f' || e.key === 'F') { flipBoard(); }
+        else if (e.key === 'c' || e.key === 'C') {
+            const hidden = toggleComments();
+            document.getElementById('viewer-comments').classList.toggle('active', !hidden);
+        }
         else if (e.key === 'Escape') { closeGameViewer(); }
+    } else if (!browserModal.classList.contains('hidden')) {
+        trapFocus(e, 'browser-modal');
+        if (e.key === 'Escape') { closeGameBrowser(); }
     } else if (!settingsModal.classList.contains('hidden')) {
         trapFocus(e, 'settings-modal');
         if (e.key === 'Enter' && !['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
@@ -380,9 +431,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- Wire up event handlers (CSP-compliant, no inline handlers) ---
-document.getElementById('check-btn').addEventListener('click', wrappedCheckPairings);
-document.getElementById('share-btn').addEventListener('click', shareStatus);
+document.getElementById('games-btn').addEventListener('click', openGameBrowser);
 document.getElementById('settings-link').addEventListener('click', openSettings);
+document.getElementById('share-link').addEventListener('click', shareStatus);
 document.getElementById('about-link').addEventListener('click', openAbout);
 document.getElementById('privacy-link').addEventListener('click', openPrivacy);
 
@@ -407,19 +458,128 @@ document.getElementById('about-privacy-link').addEventListener('click', (e) => {
 // Privacy modal
 document.getElementById('close-privacy-btn').addEventListener('click', closePrivacy);
 
+// Hold-to-repeat: fires action once on press, then repeats while held.
+function holdToRepeat(btn, action) {
+    let timer = null;
+    const DELAY = 400;
+    const INTERVAL = 80;
+    const start = () => {
+        action();
+        timer = setTimeout(() => {
+            timer = setInterval(action, INTERVAL);
+        }, DELAY);
+    };
+    const stop = () => {
+        clearTimeout(timer);
+        clearInterval(timer);
+        timer = null;
+    };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); start(); });
+    btn.addEventListener('pointerup', stop);
+    btn.addEventListener('pointerleave', stop);
+    btn.addEventListener('pointercancel', stop);
+}
+
 // Game viewer modal
 document.getElementById('viewer-start').addEventListener('click', goToStart);
-document.getElementById('viewer-prev').addEventListener('click', goToPrev);
+holdToRepeat(document.getElementById('viewer-prev'), goToPrev);
 document.getElementById('viewer-play').addEventListener('click', toggleAutoPlay);
-document.getElementById('viewer-next').addEventListener('click', goToNext);
+holdToRepeat(document.getElementById('viewer-next'), goToNext);
 document.getElementById('viewer-end').addEventListener('click', goToEnd);
 document.getElementById('viewer-flip').addEventListener('click', flipBoard);
+
+document.getElementById('viewer-comments').addEventListener('click', () => {
+    const hidden = toggleComments();
+    document.getElementById('viewer-comments').classList.toggle('active', !hidden);
+});
+// Comments are visible by default, so mark the button active initially
+document.getElementById('viewer-comments').classList.add('active');
+
+document.getElementById('viewer-analysis').addEventListener('click', () => {
+    const pgn = getGamePgn();
+    if (!pgn) return;
+    // Extract just the moves (strip PGN headers), encode for lichess analysis URL
+    const moves = pgn.replace(/\[[^\]]*\]\s*/g, '').replace(/\d+\.\s*/g, '').trim().replace(/\s+/g, '_');
+    window.open(`https://lichess.org/analysis/pgn/${moves}`, '_blank');
+});
+
+document.getElementById('viewer-share').addEventListener('click', async () => {
+    const pgn = getGamePgn();
+    if (!pgn) return;
+
+    // Extract metadata from PGN headers
+    const hdr = (tag) => { const m = pgn.match(new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`)); return m ? m[1] : ''; };
+    const fmt = (name) => { const p = name.split(',').map(s => s.trim()); return p.length === 2 ? `${p[1]} ${p[0]}` : name; };
+
+    const white = fmt(hdr('White'));
+    const black = fmt(hdr('Black'));
+    const result = hdr('Result');
+    const gameId = hdr('GameId');
+    const roundHeader = hdr('Round');
+    const event = hdr('Event');
+
+    // Parse round/board from "4.18" format
+    const roundParts = roundHeader.match(/^(\d+)(?:\.(\d+))?$/);
+    const roundNum = roundParts ? roundParts[1] : '';
+    const boardNum = roundParts ? roundParts[2] : '';
+
+    // Build share title and description
+    const title = `${white} vs ${black} — ${result}`;
+    const descParts = [];
+    if (event) {
+        const colonIdx = event.indexOf(':');
+        descParts.push(colonIdx >= 0 ? event.substring(0, colonIdx).trim() : event);
+    }
+    if (roundNum) descParts.push(`Round ${roundNum}`);
+    if (boardNum) descParts.push(`Board ${boardNum}`);
+    const description = descParts.join(' | ');
+
+    // Build deep link URL
+    const gameUrl = gameId
+        ? `https://tnmpairings.com?game=${gameId}`
+        : window.location.href.split('?')[0];
+
+    // Mobile: Native Share API with rich data
+    if (navigator.share && navigator.canShare) {
+        const shareData = { title, url: gameUrl };
+        if (navigator.canShare(shareData)) {
+            try { await navigator.share(shareData); } catch {}
+            return;
+        }
+    }
+
+    // Desktop: Copy raw PGN to clipboard
+    try {
+        await navigator.clipboard.writeText(pgn);
+        showToast('PGN copied!');
+    } catch {
+        showToast('Could not copy to clipboard');
+    }
+});
+
+// Browser navigation in viewer header (event delegation for dynamically rendered buttons)
+document.getElementById('viewer-header').addEventListener('click', (e) => {
+    // "Back to games" button
+    if (e.target.closest('#viewer-back-to-browser')) {
+        closeGameViewer();
+        return;
+    }
+    // Prev/Next game arrows
+    const arrow = e.target.closest('[data-browse-round]');
+    if (arrow) {
+        viewerNavigateGame(arrow.dataset.browseRound, arrow.dataset.browseBoard);
+    }
+});
 
 // "View Game" button in round detail (event delegation on pairing-info)
 document.getElementById('pairing-info').addEventListener('click', (e) => {
     const btn = e.target.closest('.view-game-btn');
     if (!btn) return;
-    openGameViewer(btn.dataset.round, btn.dataset.board);
+    if (CONFIG.playerName) {
+        openGameWithPlayerNav(CONFIG.playerName, btn.dataset.round, btn.dataset.board);
+    } else {
+        openGameViewer(btn.dataset.round, btn.dataset.board);
+    }
 });
 
 // Debug panel
@@ -484,6 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
     wrappedCheckPairings();
     startCountdown(wrappedCheckPairings);
     syncPushSubscription();
+    prefetchGames();
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('debug') === 'true') {
@@ -491,5 +652,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (debugPanel) {
             debugPanel.style.display = 'block';
         }
+    }
+
+    // Deep link: ?game=GAMEID opens the game viewer directly
+    const gameId = urlParams.get('game');
+    if (gameId && /^\d{10,20}$/.test(gameId)) {
+        handleGameDeepLink(gameId);
     }
 });

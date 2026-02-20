@@ -1,5 +1,7 @@
 import { sendPushNotification } from './webpush.js';
 import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, extractPairingsColors, extractFullPgnGames, parsePairingsSections, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
+import { classifyOpening, replayToFen } from './eco.js';
+import { generateBoardSvg } from './og-board.js';
 
 const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 const MI_BASE_URL = 'https://www.milibrary.org';
@@ -56,7 +58,11 @@ function slugifyTournament(name) {
 const RATE_LIMITS = {
     '/tournament-html': 60,
     '/game': 60,
+    '/game-by-id': 60,
+    '/games': 30,
     '/og-state': 60,
+    '/og-game': 60,
+    '/og-game-image': 30,
     '/health': 30,
     '/push-subscribe': 10,
     '/push-unsubscribe': 5,
@@ -142,19 +148,70 @@ async function resolveTournament(env) {
     let current = null;
     let next = null;
 
-    for (let i = 0; i < tournaments.length; i++) {
-        const t = tournaments[i];
-        const start = parseListDate(t.startDate);
-        const end = parseListDate(t.endDate);
-        if (!start || !end) continue;
+    // Parse all tournament dates first
+    const parsed = tournaments.map(t => ({
+        ...t,
+        start: parseListDate(t.startDate),
+        end: parseListDate(t.endDate),
+    })).filter(t => t.start && t.end);
 
-        // Add a buffer: tournament is "active" until 7 days after its end date
-        const activeEnd = new Date(end.getTime() + 7 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < parsed.length; i++) {
+        const t = parsed[i];
+        const nextT = i + 1 < parsed.length ? parsed[i + 1] : null;
+
+        // A tournament stays "active" until 7 days before the next one starts.
+        // If there's no next tournament, use 7 days after this one ends.
+        const activeEnd = nextT
+            ? new Date(nextT.start.getTime() - 7 * 24 * 60 * 60 * 1000)
+            : new Date(t.end.getTime() + 7 * 24 * 60 * 60 * 1000);
 
         if (now <= activeEnd) {
             current = t;
-            next = i + 1 < tournaments.length ? tournaments[i + 1] : null;
+            next = nextT || null;
             break;
+        }
+    }
+
+    // If the earliest listed tournament hasn't started yet and is >7 days away,
+    // the previous tournament was delisted. Fall back to the persisted previous
+    // tournament so users still see its results/standings/games.
+    if (current && current.start && current.start.getTime() > now.getTime()) {
+        const sevenDaysBefore = new Date(current.start.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (now < sevenDaysBefore) {
+            const prev = await env.SUBSCRIBERS.get('state:previousTournament', 'json');
+            if (prev && prev.url) {
+                console.log(`Next listed tournament (${current.name}) is >7 days away; using previous: ${prev.name}`);
+                next = current;
+                const tournamentUrl = prev.url;
+                let roundDates = prev.roundDates || [];
+                let tournamentName = prev.name;
+                try {
+                    const res = await fetch(tournamentUrl, { headers });
+                    if (res.ok) {
+                        const html = await res.text();
+                        roundDates = parseRoundDates(html, currentYear);
+                        tournamentName = extractTournamentName(html) || prev.name;
+                    }
+                } catch (err) {
+                    console.error('Failed to refresh previous tournament page:', err.message);
+                }
+                const nextStart = parseListDate(next.startDate);
+                const meta = {
+                    name: tournamentName,
+                    url: tournamentUrl,
+                    roundDates,
+                    totalRounds: roundDates.length,
+                    nextTournament: {
+                        name: next.name,
+                        url: MI_BASE_URL + next.url,
+                        startDate: nextStart ? nextStart.toISOString().split('T')[0] : null,
+                    },
+                    resolvedAt: new Date().toISOString(),
+                };
+                await env.SUBSCRIBERS.put('cache:tournamentMeta', JSON.stringify(meta));
+                console.log(`Resolved tournament (from previous): ${meta.name} (${meta.totalRounds} rounds)`);
+                return meta;
+            }
         }
     }
 
@@ -201,6 +258,14 @@ async function resolveTournament(env) {
     };
 
     await env.SUBSCRIBERS.put('cache:tournamentMeta', JSON.stringify(meta));
+
+    // Persist as previous tournament for fallback when delisted from the listing page
+    await env.SUBSCRIBERS.put('state:previousTournament', JSON.stringify({
+        name: meta.name,
+        url: meta.url,
+        roundDates: meta.roundDates,
+    }));
+
     console.log(`Resolved tournament: ${meta.name} (${meta.totalRounds} rounds)`);
     return meta;
 }
@@ -431,6 +496,249 @@ async function handleGetGame(request, env) {
     }
 
     return corsResponse({ pgn, round: parseInt(round), board: parseInt(board) }, 200, env, request);
+}
+
+// --- Game by ID Endpoint ---
+
+async function handleGetGameById(request, env) {
+    const url = new URL(request.url);
+    const gameId = url.searchParams.get('id');
+
+    if (!gameId || !/^\d{10,20}$/.test(gameId)) {
+        return corsResponse({ error: 'Valid game ID is required' }, 400, env, request);
+    }
+
+    const mapping = await env.GAMES.get(`gameid:${gameId}`, 'json');
+    if (!mapping) {
+        return corsResponse({ error: 'Game not found' }, 404, env, request);
+    }
+
+    const pgn = await env.GAMES.get(`game:${mapping.slug}:${mapping.round}:${mapping.board}`);
+    if (!pgn) {
+        return corsResponse({ error: 'Game PGN not found' }, 404, env, request);
+    }
+
+    const indexData = await env.GAMES.get(`index:${mapping.slug}:${mapping.round}`, 'json');
+    const gameMeta = indexData?.find(g => g.board === mapping.board) || null;
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+
+    return corsResponse({
+        pgn,
+        round: mapping.round,
+        board: mapping.board,
+        gameId,
+        tournamentName: meta?.name || null,
+        eco: gameMeta?.eco || null,
+        openingName: gameMeta?.openingName || null,
+    }, 200, env, request);
+}
+
+// --- OG Game Metadata Endpoint ---
+
+async function handleOgGame(request, env) {
+    const url = new URL(request.url);
+    const gameId = url.searchParams.get('id');
+
+    if (!gameId || !/^\d{10,20}$/.test(gameId)) {
+        return corsResponse({ error: 'Valid game ID is required' }, 400, env, request);
+    }
+
+    const mapping = await env.GAMES.get(`gameid:${gameId}`, 'json');
+    if (!mapping) {
+        return corsResponse({ error: 'Game not found' }, 404, env, request);
+    }
+
+    const indexData = await env.GAMES.get(`index:${mapping.slug}:${mapping.round}`, 'json');
+    const gameMeta = indexData?.find(g => g.board === mapping.board) || null;
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+
+    // Format names from "Last, First" to "First Last"
+    const fmt = (name) => {
+        if (!name) return '';
+        const parts = name.split(',').map(s => s.trim());
+        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
+    };
+
+    return corsResponse({
+        white: fmt(gameMeta?.white),
+        black: fmt(gameMeta?.black),
+        whiteElo: gameMeta?.whiteElo || null,
+        blackElo: gameMeta?.blackElo || null,
+        result: gameMeta?.result || null,
+        round: mapping.round,
+        board: mapping.board,
+        eco: gameMeta?.eco || null,
+        openingName: gameMeta?.openingName || null,
+        tournamentName: meta?.name || null,
+    }, 200, env, request);
+}
+
+// --- OG Game Image Endpoint ---
+
+async function handleOgGameImage(request, env) {
+    const url = new URL(request.url);
+    const gameId = url.searchParams.get('id');
+
+    if (!gameId || !/^\d{10,20}$/.test(gameId)) {
+        return new Response('Invalid game ID', { status: 400 });
+    }
+
+    // Check PNG cache first
+    const cacheKey = `og-image:${gameId}`;
+    const cachedPng = await env.GAMES.get(cacheKey, 'arrayBuffer');
+    if (cachedPng) {
+        return new Response(cachedPng, {
+            headers: {
+                'Content-Type': 'image/png',
+                'Cache-Control': 'public, max-age=86400',
+            },
+        });
+    }
+
+    // Look up game
+    const mapping = await env.GAMES.get(`gameid:${gameId}`, 'json');
+    if (!mapping) {
+        return new Response('Game not found', { status: 404 });
+    }
+
+    const pgn = await env.GAMES.get(`game:${mapping.slug}:${mapping.round}:${mapping.board}`);
+    if (!pgn) {
+        return new Response('Game PGN not found', { status: 404 });
+    }
+
+    // Get metadata
+    const indexData = await env.GAMES.get(`index:${mapping.slug}:${mapping.round}`, 'json');
+    const gameMeta = indexData?.find(g => g.board === mapping.board) || null;
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+
+    // Replay to final position
+    const fen = replayToFen(pgn);
+
+    // Format names
+    const fmt = (name) => {
+        if (!name) return '';
+        const parts = name.split(',').map(s => s.trim());
+        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
+    };
+
+    // Generate SVG
+    const svg = generateBoardSvg({
+        fen,
+        white: fmt(gameMeta?.white),
+        black: fmt(gameMeta?.black),
+        whiteElo: gameMeta?.whiteElo || null,
+        blackElo: gameMeta?.blackElo || null,
+        result: gameMeta?.result || null,
+        eco: gameMeta?.eco || null,
+        openingName: gameMeta?.openingName || null,
+        tournamentName: meta?.name || null,
+        round: mapping.round,
+        board: mapping.board,
+    });
+
+    // Fetch font for text rendering (Inter from Google Fonts CDN)
+    const FONT_URL = 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2';
+    let fontBuffer;
+    try {
+        const fontRes = await fetch(FONT_URL);
+        fontBuffer = new Uint8Array(await fontRes.arrayBuffer());
+    } catch (err) {
+        console.error('Font fetch failed:', err);
+    }
+
+    // Convert SVG to PNG via resvg (dynamic import — only available in workerd runtime)
+    let pngBuffer;
+    try {
+        const { Resvg } = await import('@cf-wasm/resvg/workerd');
+        const resvg = await Resvg.async(svg, {
+            fitTo: { mode: 'width', value: 1200 },
+            font: {
+                loadSystemFonts: false,
+                fontBuffers: fontBuffer ? [fontBuffer] : [],
+            },
+        });
+        const pngData = resvg.render();
+        pngBuffer = pngData.asPng();
+    } catch (err) {
+        console.error('SVG→PNG conversion failed:', err);
+        return new Response('Image generation failed', { status: 500 });
+    }
+
+    // Cache the PNG
+    await env.GAMES.put(cacheKey, pngBuffer, {
+        metadata: { contentType: 'image/png' },
+    });
+
+    return new Response(pngBuffer, {
+        headers: {
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=86400',
+        },
+    });
+}
+
+// --- Games Index Endpoint ---
+
+async function handleGetGames(request, env) {
+    const url = new URL(request.url);
+    const roundParam = url.searchParams.get('round');
+
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    const slug = meta?.name ? slugifyTournament(meta.name) : null;
+    if (!slug) {
+        return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+    }
+
+    if (roundParam) {
+        const indexData = await env.GAMES.get(`index:${slug}:${roundParam}`, 'json');
+        if (!indexData) {
+            return corsResponse({ error: 'No games found for this round' }, 404, env, request);
+        }
+        return corsResponse({
+            rounds: { [roundParam]: indexData },
+            tournamentName: meta.name,
+        }, 200, env, request);
+    }
+
+    // All rounds: list keys matching index:${slug}:*
+    const rounds = {};
+    let cursor = undefined;
+    do {
+        const list = await env.GAMES.list({ prefix: `index:${slug}:`, cursor });
+        const entries = await Promise.all(
+            list.keys.map(async (k) => {
+                const roundNum = k.name.split(':').pop();
+                const data = await env.GAMES.get(k.name, 'json');
+                return { roundNum, data };
+            })
+        );
+        for (const { roundNum, data } of entries) {
+            if (data) rounds[roundNum] = data;
+        }
+        cursor = list.list_complete ? undefined : list.cursor;
+    } while (cursor);
+
+    // Fetch all PGNs in parallel
+    const pgns = {};
+    const pgnFetches = [];
+    for (const [roundNum, games] of Object.entries(rounds)) {
+        for (const game of games) {
+            if (game.board) {
+                pgnFetches.push(
+                    env.GAMES.get(`game:${slug}:${roundNum}:${game.board}`).then(pgn => {
+                        if (pgn) pgns[`${roundNum}:${game.board}`] = pgn;
+                    })
+                );
+            }
+        }
+    }
+    await Promise.all(pgnFetches);
+
+    return corsResponse({
+        rounds,
+        pgns,
+        tournamentName: meta.name,
+    }, 200, env, request);
 }
 
 // --- Push Notification Endpoints ---
@@ -674,8 +982,8 @@ async function handleScheduled(env) {
     const isResultsWindow = pDay === 2 && pHour >= 19;
 
     if (!isPairingsWindow && !isResultsWindow) {
-        // Outside pairings/results windows — only run the hourly cache refresh
-        if (pMinute !== 0) {
+        // Outside pairings/results windows — only run every-20-min cache refresh
+        if (pMinute % 20 !== 0) {
             console.log(`Cron skipped: Pacific ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][pDay]} ${pHour}:${String(pMinute).padStart(2, '0')} outside active window`);
             return;
         }
@@ -725,18 +1033,30 @@ async function handleScheduled(env) {
     const slug = slugifyTournament(tournament.name);
     let gameCount = 0;
     for (const [roundNum, games] of Object.entries(fullGames)) {
-        // Write round index (metadata only, for future game browsing)
-        const indexData = games.map(g => ({
-            board: g.board, white: g.white, black: g.black,
-            result: g.result, whiteElo: g.whiteElo, blackElo: g.blackElo, eco: g.eco,
-        }));
+        // Classify openings by position (EPD) for each game
+        const indexData = games.map(g => {
+            const opening = classifyOpening(g.pgn);
+            return {
+                board: g.board, white: g.white, black: g.black,
+                result: g.result, whiteElo: g.whiteElo, blackElo: g.blackElo,
+                eco: opening ? opening.eco : g.eco,
+                openingName: opening ? opening.name : null,
+                gameId: g.gameId || null,
+                section: g.section,
+            };
+        });
         await env.GAMES.put(`index:${slug}:${roundNum}`, JSON.stringify(indexData));
 
-        // Write individual games
+        // Write individual games + GameId reverse-lookup
         for (const game of games) {
             if (game.board !== null) {
                 await env.GAMES.put(`game:${slug}:${roundNum}:${game.board}`, game.pgn);
                 gameCount++;
+            }
+            if (game.gameId) {
+                await env.GAMES.put(`gameid:${game.gameId}`, JSON.stringify({
+                    slug, round: parseInt(roundNum), board: game.board,
+                }));
             }
         }
     }
@@ -908,8 +1228,20 @@ export default {
             if (path === '/game' && request.method === 'GET') {
                 return await handleGetGame(request, env);
             }
+            if (path === '/game-by-id' && request.method === 'GET') {
+                return await handleGetGameById(request, env);
+            }
+            if (path === '/games' && request.method === 'GET') {
+                return await handleGetGames(request, env);
+            }
             if (path === '/og-state' && request.method === 'GET') {
                 return await handleOgState(request, env);
+            }
+            if (path === '/og-game' && request.method === 'GET') {
+                return await handleOgGame(request, env);
+            }
+            if (path === '/og-game-image' && request.method === 'GET') {
+                return await handleOgGameImage(request, env);
             }
 
             if (path === '/health' && request.method === 'GET') {

@@ -43,8 +43,14 @@ export function getTimeState() {
                 }
             }
 
+            // Only enter off_season within 7 days of R1. Further out,
+            // fall through to results_window so users still see standings/games.
             if (nowMs < r1DayStart.getTime()) {
-                return 'off_season';
+                const sevenDaysBefore = new Date(r1DayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+                if (nowMs >= sevenDaysBefore.getTime()) {
+                    return 'off_season';
+                }
+                // More than 7 days out — fall through to day-of-week logic (results_window)
             }
 
             // R1 day: before 6:30PM = off_season_r1, after = round_in_progress

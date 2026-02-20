@@ -1,0 +1,18 @@
+[Event "2026 New Year TNM: 1600-1999"]
+[Site "San Francisco"]
+[Date "2026.01.06"]
+[Round "1.15"]
+[White "Powers, Christopher"]
+[Black "Mehta, Soham"]
+[Result "1-0"]
+[Annotator "Winslow,Elliott"]
+[ECO "B13"]
+[WhiteElo "1774"]
+[BlackElo "1525"]
+[WhiteFideId "-1"]
+[BlackFideId "-1"]
+[PlyCount "83"]
+[GameId "2264871174529198"]
+[EventDate "2026.??.??"]
+
+1. e4 c6 2. d4 d5 3. exd5 cxd5 4. c4 Nf6 5. Nc3 Bg4 $2 {[#]} 6. Qb3 $16 Nc6 7. cxd5 Na5 8. Qa4+ Bd7 9. Bb5 a6 10. Bxd7+ Nxd7 11. Nf3 b5 12. Qc2 Rc8 13. Qe2 Nf6 14. Ne5 Nxd5 15. Nxf7 $2 {[#]} (15. O-O $16 Nxc3 16. bxc3 e6 (16... Rxc3 $4 17. Bd2 Rc8 18. Qf3 f6 19. Bxa5 Qxa5 20. Rac1 $1) 17. a4) 15... Nxc3 $4 (15... Kxf7 16. Qh5+ g6 17. Qxd5+ Qxd5 18. Nxd5 Bg7 $15) 16. Qe6 $1 $18 Qd7 17. Qxd7+ (17. Nd6+ {is okay,} {as long as after} Kd8 (17... Qxd6 $6 18. Qxc8+ Kf7 19. Qxc3) {White doesn't play} 18. Qxd7+ $2 (18. Nf7+ Ke8 (18... Kc7 $2 19. Bf4+) 19. Qxd7+) 18... Kxd7 19. Nxc8 Nd5 20. Bd2 Nc4 $11 21. Rc1 $1 Nxb2 22. Na7 Nd3+ 23. Ke2 Nxc1+ $11) 17... Kxd7 18. Nxh8 $18 Nxa2 19. Bd2 Nc4 20. Rxa2 a5 21. Nf7 {In case anybody has lost count: White is one rook up.} a4 22. Ne5+ Ke6 23. Nxc4 Rxc4 24. Be3 Kd5 25. O-O e6 26. b3 $1 {This is Stockfish 17.1's best move by almost 1.00, but things start to get curious...} axb3 27. Ra5 Kc6 28. Ra6+ Kd5 29. Rb1 Ra4 30. Rxa4 {(Still won, but ...)} (30. Rb6 $142 Kc4 31. Rc6+ {wins that front b-pawn.}) 30... bxa4 {[#]} 31. Kf1 $2 ({The only winning move now is} 31. Bc1 $1) 31... Kc4 $1 $11 {[#] And this is the only move to draw...} 32. Ke2 $4 {[#]} ({And *here* the only move to draw is} 32. Rc1+ $1 Kd3 (32... Kd5 33. Rb1 $1 {(or else ...b2 and ...a3 wins)} Kc4 $1 $11 {repeats}) 33. Rd1+ Kc3 ({or} 33... Kc2 $11) ({or} 33... Kc4 $11) ({but not} 33... Ke4 $4 {when White is winning every which way, including} 34. d5 $1 a3 35. dxe6 b2 36. Bd4 b1=Q 37. Rxb1 Kxd4 38. Rb7 a2 39. Ra7) 34. Rc1+ Kd3 $1 (34... Kb4 $4 35. Bd2+ Ka3 (35... Kb5 36. Rc8 a3 37. Bc1 $1 $16) 36. Bc3 b2 37. Rb1 Bb4 38. Bxb2+ Ka2 39. Ra1+ Kxb2 40. Rxa4) (34... Kb2 $5 {is precarious:} 35. Rc8 $1 Bd6 $1 36. Rc6 $16 {Stockfish doesn't seem to connect the current evaluation with this long line yet:} Bf8 37. d5 $1 Ka2 $1 (37... exd5 $2 38. Bd4+ Ka2 39. Rc8 Bd6 40. Rd8 Bb4 41. Rb8 Bd6 42. Rb6 Be7 43. Rb7 Bf6 44. Ra7 a3 45. Bc5 b2 46. Rxa3+ Kb1 47. Ke2 Kc2 48. Ra2 Kb3 49. Ra7 b1=Q 50. Rb7+ Kc2 51. Rxb1 Kxb1 52. Kd3 {After all that, *this* is a winning ending.} (52. Kd2)) 38. dxe6 b2 39. Rb6 b1=Q+ 40. Rxb1 Kxb1 41. Bd4 a3 42. Ke2 a2 $14 {Better to just take the repetition on Move 34!})) (32. Bc1 $4 {This loses:} a3 $1 $19) 32... a3 $1 $19 {Winning; interesting that everything else *loses* (no draws!)} 33. Rc1+ (33. d5 b2) 33... Kd5 $1 34. Kd3 b2 35. Kc2 {[#]} Kc4 $4 ({Perhaps all Black could see was} 35... Kc4 36. Kb1+ $4 Kb3 37. Rc2 a2#) (35... bxc1=Q+ 36. Kxc1 (36. Bxc1 Kxd4) 36... Kc4 37. Kc2 Bb4 38. Bc1 Kxd4 39. Kb3 Bd6 40. Bxa3 Bxa3 41. Kxa3 Kd3 $19) 36. Rd1 $1 {[#] The unstoppable plan is 37.Bd2-c3xb2.} Bb4 37. Bd2 {(anyway)} Bd6 38. Bc3 Kd5 39. Re1 (39. Bxb2 {isn't bad, this is just easier.}) 39... Kc4 40. Rxe6 Bb4 41. Bxb4 Kxb4 42. d5 1-0

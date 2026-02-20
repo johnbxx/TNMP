@@ -3,12 +3,15 @@ import { Chess } from 'chess.js';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { _parseMoveText, _extractMoveText, _buildCleanPgn } from './pgn-viewer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let samplePgn;
+let annotatedPgn;
 
 beforeAll(() => {
     samplePgn = readFileSync(resolve(__dirname, '../test/fixtures/sample-game.pgn'), 'utf-8');
+    annotatedPgn = readFileSync(resolve(__dirname, '../test/fixtures/annotated-game.pgn'), 'utf-8');
 });
 
 describe('PGN loading with chess.js', () => {
@@ -97,5 +100,65 @@ describe('Move navigation logic', () => {
     it('last move is Rxb1', () => {
         const last = allMoves[allMoves.length - 1];
         expect(last.san).toBe('Rxb1');
+    });
+});
+
+describe('Annotated PGN parsing', () => {
+    it('extracts main line moves from heavily annotated PGN', () => {
+        const moveText = _extractMoveText(annotatedPgn);
+        const parsed = _parseMoveText(moveText);
+        // Main line should have 83 half-moves (PlyCount header says 83)
+        expect(parsed.length).toBe(83);
+        expect(parsed[0].san).toBe('e4');
+        expect(parsed[parsed.length - 1].san).toBe('d5'); // 42. d5 1-0
+    });
+
+    it('builds clean PGN that chess.js can load', () => {
+        const moveText = _extractMoveText(annotatedPgn);
+        const parsed = _parseMoveText(moveText);
+        const cleanPgn = _buildCleanPgn(annotatedPgn, parsed);
+
+        const chess = new Chess();
+        chess.loadPgn(cleanPgn);
+        expect(chess.history().length).toBe(83);
+        expect(chess.header().White).toBe('Powers, Christopher');
+        expect(chess.header().Black).toBe('Mehta, Soham');
+    });
+
+    it('preserves comments from annotations', () => {
+        const moveText = _extractMoveText(annotatedPgn);
+        const parsed = _parseMoveText(moveText);
+        // Move 5...Bg4 has a $2 NAG (blunder)
+        const bg4 = parsed[9]; // 5...Bg4 is the 10th half-move (index 9)
+        expect(bg4.san).toBe('Bg4');
+        expect(bg4.nags).toContain(2);
+    });
+
+    it('preserves variations', () => {
+        const moveText = _extractMoveText(annotatedPgn);
+        const parsed = _parseMoveText(moveText);
+        // 15. Nxf7 has a variation (15. O-O ...)
+        const nxf7 = parsed[28]; // 15. Nxf7 is the 29th half-move (index 28)
+        expect(nxf7.san).toBe('Nxf7');
+        expect(nxf7.variations).not.toBeNull();
+        expect(nxf7.variations.length).toBeGreaterThan(0);
+        expect(nxf7.variations[0][0].san).toBe('O-O');
+    });
+
+    it('handles deeply nested variations without error', () => {
+        const moveText = _extractMoveText(annotatedPgn);
+        const parsed = _parseMoveText(moveText);
+        // The game has variations nested 3+ levels deep — should not throw
+        expect(parsed.length).toBe(83);
+    });
+
+    it('works with unannotated PGN too', () => {
+        const moveText = _extractMoveText(samplePgn);
+        const parsed = _parseMoveText(moveText);
+        expect(parsed.length).toBe(92);
+        expect(parsed[0].san).toBe('e4');
+        // No annotations
+        const hasAnnotations = parsed.some(m => m.comment || m.nags || m.variations);
+        expect(hasAnnotations).toBe(false);
     });
 });

@@ -8,33 +8,42 @@ import {
 
 // Track which historical round detail is being shown (null = show live pairing)
 let selectedHistoryRound = null;
+
+// Registered check handler (set by app.js to wrappedCheckPairings)
+let checkHandler = null;
+export function setCheckHandler(fn) { checkHandler = fn; }
 let livePairingHtml = null;
 let fitAnswerRafId = null;
 const trackerState = { roundHistory: null, currentRound: null, listening: false };
 
-// Fit answer text to container width
-export function fitAnswerText() {
-    const el = document.getElementById('answer');
+// Shrink an element's font size until its text fits within its container width.
+// Returns a cancel function. Exported for reuse (game browser title, etc.).
+export function fitTextToContainer(el, { minSize = 16, widthFraction = 0.92 } = {}) {
     if (!el || !el.textContent) return;
-
     el.style.fontSize = '';
 
-    if (fitAnswerRafId) cancelAnimationFrame(fitAnswerRafId);
-    fitAnswerRafId = requestAnimationFrame(() => {
-        fitAnswerRafId = null;
+    const rafId = requestAnimationFrame(() => {
         const container = el.parentElement;
         if (!container) return;
-        const maxWidth = container.clientWidth * 0.92;
+        const maxWidth = container.clientWidth * widthFraction;
         if (maxWidth <= 0) return;
 
         const baseSize = parseFloat(getComputedStyle(el).fontSize);
         const textWidth = el.scrollWidth;
 
         if (textWidth > maxWidth) {
-            const newSize = Math.max(16, Math.floor(baseSize * (maxWidth / textWidth)));
+            const newSize = Math.max(minSize, Math.floor(baseSize * (maxWidth / textWidth)));
             el.style.fontSize = newSize + 'px';
         }
     });
+    return rafId;
+}
+
+// Fit answer text to container width
+export function fitAnswerText() {
+    const el = document.getElementById('answer');
+    if (fitAnswerRafId) cancelAnimationFrame(fitAnswerRafId);
+    fitAnswerRafId = fitTextToContainer(el);
 }
 
 window.addEventListener('resize', fitAnswerText);
@@ -59,7 +68,7 @@ export function showLoading() {
     document.getElementById('check-btn').disabled = true;
 }
 
-export function showState(state, info, pairingInfo = null, checkPairings = null) {
+export function showState(state, info, pairingInfo = null) {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('result').classList.remove('hidden');
     document.getElementById('check-btn').disabled = false;
@@ -112,13 +121,17 @@ export function showState(state, info, pairingInfo = null, checkPairings = null)
 
     // Display pairing info if available
     if (pairingInfo && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
-        const roundLabel = pairingInfo.round ? `<div class="pairing-history-label">Round ${pairingInfo.round}</div>` : '';
+        const headerParts = [];
+        if (pairingInfo.round) headerParts.push(`Round ${pairingInfo.round}`);
+        if (pairingInfo.board) headerParts.push(`Board ${pairingInfo.board}`);
+        const headerLabel = headerParts.length ? `<div class="pairing-history-label">${headerParts.join(' · ')}</div>` : '';
+
         if (pairingInfo.isBye) {
             const byeText = pairingInfo.byeType === 'full'
                 ? 'You have a full-point bye'
                 : 'You have a half-point bye';
             pairingInfoEl.innerHTML = `
-                ${roundLabel}
+                ${headerLabel}
                 <div class="pairing-opponent"><img class="color-icon" src="pieces/Duck.webp" alt="Duck">${byeText}</div>
             `;
         } else {
@@ -134,21 +147,17 @@ export function showState(state, info, pairingInfo = null, checkPairings = null)
             }
 
             pairingInfoEl.innerHTML = `
-                ${roundLabel}
+                ${headerLabel}
                 ${resultHtml}
                 <div class="pairing-opponent">
                     <img class="color-icon" src="${pairingInfo.colorIcon}" alt="${pairingInfo.color} piece">
                     <span>vs ${opponentDisplay}${ratingText}</span>
                 </div>
-                <div class="pairing-details">
-                    <span class="pairing-board">Board ${pairingInfo.board}</span>
-                </div>
             `;
         }
-        pairingInfoEl.classList.remove('hidden');
         setCurrentPairing(pairingInfo);
     } else {
-        pairingInfoEl.classList.add('hidden');
+        pairingInfoEl.innerHTML = '';
         setCurrentPairing(null);
     }
 
@@ -163,7 +172,7 @@ export function showState(state, info, pairingInfo = null, checkPairings = null)
             btn.onclick = () => window.open(linkUrl, '_blank');
         } else {
             btn.textContent = 'Check Again';
-            btn.onclick = checkPairings;
+            btn.onclick = checkHandler;
         }
     } else if (state === STATE.YES) {
         btn.textContent = 'View Pairings';
@@ -173,7 +182,7 @@ export function showState(state, info, pairingInfo = null, checkPairings = null)
         btn.onclick = () => window.open(CONFIG.tournamentUrl + '#Standings', '_blank');
     } else {
         btn.textContent = 'Check Again';
-        btn.onclick = checkPairings;
+        btn.onclick = checkHandler;
     }
 
     updateCountdownDisplay();
@@ -217,16 +226,17 @@ export function hideOfflineBanner() {
  * @param {string} currentState - Current app state (STATE.YES, STATE.IN_PROGRESS, etc.)
  */
 export function renderRoundTracker(roundHistory, totalRounds, currentRound, currentState, autoSelectRound = null) {
+    const section = document.getElementById('tracker-section');
     const container = document.getElementById('round-tracker');
-    if (!container) return;
+    if (!section || !container) return;
 
     if (!roundHistory || Object.keys(roundHistory.rounds).length === 0) {
-        container.classList.add('hidden');
+        section.classList.add('hidden');
         return;
     }
 
     totalRounds = totalRounds || 7;
-    container.classList.remove('hidden');
+    section.classList.remove('hidden');
 
     let html = '<div class="tracker-row">';
 
@@ -237,15 +247,15 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
         const isSelected = selectedHistoryRound === i;
 
         let className = 'tracker-round';
+        let resultClass = '';
         let iconHtml = '';
-        let ringClass = '';
 
         if (round && round.result) {
             // Completed round with result
-            if (round.result === 'W') ringClass = 'ring-win';
-            else if (round.result === 'L') ringClass = 'ring-loss';
-            else if (round.result === 'D') ringClass = 'ring-draw';
-            else if (round.result === 'H' || round.result === 'B' || round.result === 'U') ringClass = 'ring-bye';
+            if (round.result === 'W') resultClass = 'tracker-win';
+            else if (round.result === 'L') resultClass = 'tracker-loss';
+            else if (round.result === 'D') resultClass = 'tracker-draw';
+            else if (round.result === 'H' || round.result === 'B' || round.result === 'U') resultClass = 'tracker-bye';
 
             if (round.isBye) {
                 iconHtml = '<img class="tracker-icon" src="pieces/Duck.webp" alt="Bye">';
@@ -253,32 +263,25 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
                 iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
             } else if (round.color === 'Black') {
                 iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
-            } else {
-                // Color unknown — show a filled circle
-                iconHtml = '<span class="tracker-dot"></span>';
             }
             className += ' tracker-completed';
         } else if (isInProgress) {
-            // Current round, in progress (no result yet)
-            ringClass = 'ring-current';
+            resultClass = 'tracker-current';
             if (round && round.color === 'White') {
                 iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
             } else if (round && round.color === 'Black') {
                 iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
-            } else {
-                iconHtml = `<span class="tracker-number">${i}</span>`;
             }
-            className += ' tracker-current';
+            className += ' tracker-active';
         } else {
-            // Future round
-            iconHtml = `<span class="tracker-number">${i}</span>`;
             className += ' tracker-future';
         }
 
         if (isSelected) className += ' tracker-selected';
 
         const clickable = (round && round.result) || isCurrentRound ? 'data-clickable="true"' : '';
-        html += `<button class="${className} ${ringClass}" data-round="${i}" ${clickable} aria-label="Round ${i}">${iconHtml}</button>`;
+        const content = iconHtml || `<span class="tracker-number">${i}</span>`;
+        html += `<button class="${className} ${resultClass}" data-round="${i}" ${clickable} aria-label="Round ${i}">${content}</button>`;
     }
 
     html += '</div>';
@@ -310,14 +313,16 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
     const pairingInfoEl = document.getElementById('pairing-info');
     if (!pairingInfoEl) return;
 
-    // Toggle: clicking the same round again, or the current round, restores live pairing
-    if (selectedHistoryRound === roundNum || roundNum === currentRound) {
+    // Clicking the already-selected round does nothing
+    if (selectedHistoryRound === roundNum) return;
+
+    // Clicking the current round restores live pairing
+    if (roundNum === currentRound) {
         selectedHistoryRound = null;
         if (livePairingHtml !== null) {
             pairingInfoEl.innerHTML = livePairingHtml;
-            pairingInfoEl.classList.remove('hidden');
         } else {
-            pairingInfoEl.classList.add('hidden');
+            pairingInfoEl.innerHTML = '';
         }
         updateTrackerSelection();
         return;
@@ -331,8 +336,9 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
         const byeText = round.byeType === 'full' ? 'Full-point bye'
             : round.byeType === 'half' ? 'Half-point bye'
             : 'Bye';
+        const headerLabel = round.board ? `Round ${roundNum} · Board ${round.board}` : `Round ${roundNum}`;
         pairingInfoEl.innerHTML = `
-            <div class="pairing-history-label">Round ${roundNum}</div>
+            <div class="pairing-history-label">${headerLabel}</div>
             <div class="pairing-opponent"><img class="color-icon" src="pieces/Duck.webp" alt="Duck">${byeText}</div>
         `;
     } else {
@@ -350,24 +356,22 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
         if (round.color === 'White') colorIcon = '<img class="color-icon" src="pieces/wK.webp" alt="White">';
         else if (round.color === 'Black') colorIcon = '<img class="color-icon" src="pieces/bK.webp" alt="Black">';
 
-        const boardHtml = round.board ? `<div class="pairing-details"><span class="pairing-board">Board ${round.board}</span></div>` : '';
+        const headerLabel = round.board ? `Round ${roundNum} · Board ${round.board}` : `Round ${roundNum}`;
         const viewGameHtml = (round.board && round.result && !round.isBye)
             ? `<button class="view-game-btn" data-round="${roundNum}" data-board="${round.board}">View Game</button>`
             : '';
 
         pairingInfoEl.innerHTML = `
-            <div class="pairing-history-label">Round ${roundNum}</div>
+            <div class="pairing-history-label">${headerLabel}</div>
             ${resultHtml}
             <div class="pairing-opponent">
                 ${colorIcon}
                 <span>vs ${opponentDisplay}${ratingText}</span>
             </div>
-            ${boardHtml}
             ${viewGameHtml}
         `;
     }
 
-    pairingInfoEl.classList.remove('hidden');
     updateTrackerSelection();
 }
 
@@ -388,7 +392,7 @@ function updateTrackerSelection() {
  */
 export function saveLivePairingHtml() {
     const pairingInfoEl = document.getElementById('pairing-info');
-    if (pairingInfoEl && !pairingInfoEl.classList.contains('hidden')) {
+    if (pairingInfoEl && pairingInfoEl.innerHTML.trim()) {
         livePairingHtml = pairingInfoEl.innerHTML;
     } else {
         livePairingHtml = null;

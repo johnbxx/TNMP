@@ -31,8 +31,10 @@
 
         <div id="result" class="result hidden" role="status" aria-live="polite">
             <div id="answer" class="answer"></div>
-            <div id="pairing-info" class="pairing-info hidden"></div>
-            <div id="round-tracker" class="round-tracker hidden"></div>
+            <div id="tracker-section" class="tracker-section hidden">
+                <div id="round-tracker" class="round-tracker"></div>
+                <div id="pairing-info" class="pairing-info"></div>
+            </div>
             <div id="meme" class="meme"></div>
             <p id="round-info" class="round-info"></p>
         </div>
@@ -40,7 +42,7 @@
         <div class="refresh-container">
             <div class="button-row">
                 <button id="check-btn" class="check-btn" aria-label="Check pairings again">Check Again</button>
-                <button id="share-btn" class="share-btn" aria-label="Share current status">Share</button>
+                <button id="games-btn" class="share-btn" aria-label="Browse tournament games">View Games</button>
             </div>
             <div id="countdown" class="countdown" aria-live="off">Next check in <span id="countdown-time">60</span>s</div>
         </div>
@@ -49,6 +51,8 @@
             <a href="https://www.milibrary.org/chess/tournaments/2026-new-years-tuesday-night-marathon" target="_blank" rel="noopener">
                 View Tournament Page
             </a>
+            <span class="footer-divider" aria-hidden="true">•</span>
+            <button type="button" class="footer-link" id="share-link" aria-label="Share current status">Share</button>
             <span class="footer-divider" aria-hidden="true">•</span>
             <button type="button" class="footer-link" id="settings-link" aria-label="Open settings">Settings</button>
             <span class="footer-divider" aria-hidden="true">•</span>
@@ -206,14 +210,34 @@
                 <div id="viewer-board" class="viewer-board"></div>
                 <div id="viewer-moves" class="viewer-moves"></div>
             </div>
-            <div class="viewer-nav">
-                <button id="viewer-start" class="viewer-nav-btn" aria-label="Go to start">&#x23EE;</button>
-                <button id="viewer-prev" class="viewer-nav-btn" aria-label="Previous move">&#x23F4;</button>
-                <button id="viewer-play" class="viewer-nav-btn" aria-label="Play">&#x25B6;</button>
-                <button id="viewer-next" class="viewer-nav-btn" aria-label="Next move">&#x23F5;</button>
-                <button id="viewer-end" class="viewer-nav-btn" aria-label="Go to end">&#x23ED;</button>
-                <button id="viewer-flip" class="viewer-nav-btn" aria-label="Flip board">&#x21C5;</button>
+            <div class="viewer-toolbar">
+                <div class="viewer-tool-group">
+                    <button id="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg></button>
+                    <button id="viewer-flip" class="viewer-tool-btn" aria-label="Flip board"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
+                </div>
+                <div class="viewer-toolbar-sep"></div>
+                <div class="viewer-nav-group">
+                    <button id="viewer-start" class="viewer-nav-btn" aria-label="Go to start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
+                    <button id="viewer-prev" class="viewer-nav-btn" aria-label="Previous move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
+                    <button id="viewer-play" class="viewer-nav-btn" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg></button>
+                    <button id="viewer-next" class="viewer-nav-btn" aria-label="Next move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></svg></button>
+                    <button id="viewer-end" class="viewer-nav-btn" aria-label="Go to end"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></svg></button>
+                </div>
+                <div class="viewer-toolbar-sep"></div>
+                <div class="viewer-tool-group">
+                    <button id="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+                    <button id="viewer-share" class="viewer-tool-btn" aria-label="Share game"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
+                </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Game Browser Modal -->
+    <div id="browser-modal" class="modal hidden" role="dialog" aria-label="Tournament Games" aria-modal="true">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-content-browser">
+            <h2 id="browser-title">Tournament Games</h2>
+            <div id="browser-content" class="browser-content"></div>
         </div>
     </div>
 

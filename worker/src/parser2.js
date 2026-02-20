@@ -430,7 +430,8 @@ export function extractPairingsColors(sections) {
  * Returns { [roundNumber]: [{ white, black, result, board, whiteElo, blackElo, eco, pgn }] }
  */
 export function extractFullPgnGames(html) {
-    const rounds = {};
+    // Use a Map keyed by "round:board" to deduplicate (last write wins)
+    const gameMap = new Map();
 
     const textareaRegex = /<textarea\s+id="pgn-textarea-(\d+)"[^>]*>([\s\S]*?)<\/textarea>/gi;
     let taMatch;
@@ -447,14 +448,28 @@ export function extractFullPgnGames(html) {
             const whiteEloMatch = game.match(/\[WhiteElo\s+"([^"]+)"\]/);
             const blackEloMatch = game.match(/\[BlackElo\s+"([^"]+)"\]/);
             const ecoMatch = game.match(/\[ECO\s+"([^"]+)"\]/);
+            const eventMatch = game.match(/\[Event\s+"([^"]+)"\]/);
+            const gameIdMatch = game.match(/\[GameId\s+"([^"]+)"\]/);
 
             if (!roundMatch || !whiteMatch || !blackMatch) continue;
 
             const roundNum = parseInt(roundMatch[1], 10);
             const board = roundMatch[2] ? parseInt(roundMatch[2], 10) : null;
-            if (!rounds[roundNum]) rounds[roundNum] = [];
 
-            rounds[roundNum].push({
+            // Extract section name from Event header (e.g., "2026 New Year TNM: 1600-1999" → "1600-1999")
+            let section = null;
+            if (eventMatch) {
+                const colonIdx = eventMatch[1].indexOf(':');
+                if (colonIdx >= 0) {
+                    section = eventMatch[1].substring(colonIdx + 1).trim();
+                    // Normalize: uppercase leading U (e.g., "u1600" → "U1600")
+                    section = section.replace(/^u(?=\d)/i, 'U');
+                }
+            }
+
+            const key = `${roundNum}:${board}`;
+            gameMap.set(key, {
+                roundNum,
                 white: whiteMatch[1],
                 black: blackMatch[1],
                 result: resultMatch ? resultMatch[1] : null,
@@ -462,9 +477,19 @@ export function extractFullPgnGames(html) {
                 whiteElo: whiteEloMatch ? whiteEloMatch[1] : null,
                 blackElo: blackEloMatch ? blackEloMatch[1] : null,
                 eco: ecoMatch ? ecoMatch[1] : null,
+                gameId: gameIdMatch ? gameIdMatch[1] : null,
+                section,
                 pgn: game.trim(),
             });
         }
+    }
+
+    // Group deduplicated games by round
+    const rounds = {};
+    for (const game of gameMap.values()) {
+        const { roundNum, ...gameData } = game;
+        if (!rounds[roundNum]) rounds[roundNum] = [];
+        rounds[roundNum].push(gameData);
     }
 
     return rounds;

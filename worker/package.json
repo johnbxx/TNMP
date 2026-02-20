@@ -11,5 +11,9 @@
   "devDependencies": {
     "vitest": "^4.0.18",
     "wrangler": "^4.62.0"
+  },
+  "dependencies": {
+    "@cf-wasm/resvg": "^0.3.3",
+    "chess.js": "^1.4.0"
   }
 }

@@ -41,11 +41,19 @@ export async function onRequest(context) {
         return addSecurityHeaders(response);
     }
 
-    // Crawlers: fetch state and inject OG tags
+    // Crawlers: check for game deep link or generic state
+    const url = new URL(request.url);
+    const gameId = url.searchParams.get('game');
+    const isGameLink = gameId && /^\d{10,20}$/.test(gameId);
+
     try {
-        const [response, stateResponse] = await Promise.all([
+        const fetchUrl = isGameLink
+            ? `${WORKER_URL}/og-game?id=${gameId}`
+            : `${WORKER_URL}/og-state`;
+
+        const [response, dataResponse] = await Promise.all([
             next(),
-            fetch(`${WORKER_URL}/og-state`, {
+            fetch(fetchUrl, {
                 signal: AbortSignal.timeout(2000),
             }).catch(() => null),
         ]);
@@ -58,11 +66,11 @@ export async function onRequest(context) {
 
         let html = await response.text();
 
-        // Build OG tags from worker state or use fallbacks
+        // Build OG tags from worker data or use fallbacks
         let ogTags;
-        if (stateResponse?.ok) {
-            const data = await stateResponse.json();
-            ogTags = buildOgTags(data);
+        if (dataResponse?.ok) {
+            const data = await dataResponse.json();
+            ogTags = isGameLink ? buildGameOgTags(data, gameId) : buildOgTags(data);
         } else {
             ogTags = buildFallbackOgTags();
         }
@@ -103,6 +111,36 @@ function buildOgTags(data) {
     <meta property="og:site_name" content="Are the Pairings Up?">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="theme-color" content="${color}">`;
+}
+
+function buildGameOgTags(data, gameId) {
+    const white = escapeHtml(data.white || 'White');
+    const black = escapeHtml(data.black || 'Black');
+    const result = escapeHtml(data.result || '*');
+    const title = `${white} vs ${black} — ${result}`;
+
+    const descParts = [];
+    if (data.tournamentName) descParts.push(escapeHtml(data.tournamentName));
+    if (data.round) descParts.push(`Round ${data.round}`);
+    if (data.board) descParts.push(`Board ${data.board}`);
+    if (data.eco) {
+        const openingStr = data.openingName ? `${data.eco} ${data.openingName}` : data.eco;
+        descParts.push(escapeHtml(openingStr));
+    }
+    const description = descParts.join(' | ');
+    const imageUrl = `${WORKER_URL}/og-game-image?id=${gameId}`;
+    const gameUrl = `${SITE_URL}?game=${gameId}`;
+
+    return `    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${imageUrl}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="${gameUrl}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Are the Pairings Up?">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#0f0f23">`;
 }
 
 function buildFallbackOgTags() {

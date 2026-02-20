@@ -5,9 +5,9 @@ compatibility_date = "2024-01-01"
 [triggers]
 # Pairings: every minute Mon 8PM-midnight Pacific → Tue in UTC
 # Results: every 5 min Tue 7PM-midnight Pacific → Wed in UTC
-# Cache refresh: hourly 24/7
+# Cache refresh: every 20 min 24/7
 # Windows cover both PST (UTC-8) and PDT (UTC-7) — handleScheduled() guards against early fires.
-crons = ["* 3-8 * * TUE", "*/5 2-8 * * WED", "0 * * * *"]
+crons = ["* 3-8 * * TUE", "*/5 2-8 * * WED", "*/20 * * * *"]
 
 [vars]
 ALLOWED_ORIGIN = "https://tnmpairings.com"
