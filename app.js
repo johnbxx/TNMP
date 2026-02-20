@@ -27,6 +27,17 @@ function downloadPgn(pgnText, filename) {
     URL.revokeObjectURL(url);
 }
 
+const TOURNAMENT_SLUGS = {
+    '2026 New Year\'s Tuesday Night Marathon': '2026NY',
+    '2026 Spring Tuesday Night Marathon': '2026Spring',
+    '3rd Silman Memorial Tuesday Night Marathon': '2026Silman',
+};
+
+function tournamentSlug() {
+    const name = getTournamentMeta().name;
+    return (name && TOURNAMENT_SLUGS[name]) || null;
+}
+
 const SECTION_SLUGS = {
     '2000+': '2000',
     '1600-1999': 'u2000',
@@ -319,7 +330,7 @@ document.getElementById('browser-modal').addEventListener('click', (e) => {
     const pgns = games.map(g => getCachedPgn(g.round, g.board)).filter(Boolean);
     if (pgns.length === 0) { showToast('No PGN data available'); return; }
     const pgnText = pgns.join('\n\n');
-    const slug = getTournamentMeta().slug;
+    const slug = tournamentSlug();
     const filter = getActiveFilter();
     const prefix = slug || 'games';
     let filename;
@@ -476,7 +487,7 @@ sharePopover.addEventListener('click', async (e) => {
         } catch { showToast('Could not copy to clipboard'); }
 
     } else if (action === 'download') {
-        const slug = getTournamentMeta().slug;
+        const slug = tournamentSlug();
         const white = getHeader(pgn, 'White')?.split(',')[0] || 'White';
         const black = getHeader(pgn, 'Black')?.split(',')[0] || 'Black';
         const round = getHeader(pgn, 'Round')?.split('.')[0];
