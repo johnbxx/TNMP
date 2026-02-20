@@ -1274,6 +1274,8 @@ async function handleScheduled(env) {
     }));
     console.log(`Cached tournament HTML in KV (${strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(gameColors).length} rounds of PGN colors).`);
 
+    const slug = slugifyTournament(tournament.name);
+
     // Parse and persist standings per section
     try {
         const standings = parseStandings(strippedHtml);
@@ -1290,7 +1292,6 @@ async function handleScheduled(env) {
 
     // Store full PGN games in GAMES KV
     const fullGames = extractFullPgnGames(html);
-    const slug = slugifyTournament(tournament.name);
     let gameCount = 0;
     for (const [roundNum, games] of Object.entries(fullGames)) {
         // Classify openings by position (EPD) for each game
