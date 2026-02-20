@@ -400,6 +400,16 @@ describe('extractFullPgnGames', () => {
             expect(g.gameId).toMatch(/^\d+$/);
         }
     });
+
+    it('extracts date from PGN headers', () => {
+        const rounds = extractFullPgnGames(fullHtml);
+        const allGames = Object.values(rounds).flat();
+        const withDate = allGames.filter(g => g.date);
+        expect(withDate.length).toBeGreaterThan(0);
+        for (const g of withDate) {
+            expect(g.date).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
+        }
+    });
 });
 
 // --- extractPairingsColors ---

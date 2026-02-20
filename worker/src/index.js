@@ -59,6 +59,30 @@ function corsResponse(data, status, env, request) {
     });
 }
 
+// --- Player Name Normalization ---
+
+function normalizePlayerName(name) {
+    const t = name.trim();
+    const parts = t.split(/,\s*/);
+    // Already "Last, First" format
+    if (parts.length >= 2) return t.toLowerCase().replace(/\s+/g, '');
+    // "First Last" → "last,first"
+    const words = t.split(/\s+/);
+    if (words.length >= 2) {
+        const last = words[words.length - 1];
+        const first = words.slice(0, -1).join(' ');
+        return `${last},${first}`.toLowerCase().replace(/\s+/g, '');
+    }
+    return t.toLowerCase();
+}
+
+// Format "Last, First" → "First Last" for display
+function formatPlayerName(name) {
+    const parts = name.split(/,\s*/);
+    if (parts.length >= 2) return `${parts[1]} ${parts[0]}`;
+    return name;
+}
+
 // --- Rate Limiting ---
 
 // --- Tournament Slug ---
@@ -81,6 +105,8 @@ const RATE_LIMITS = {
     '/og-state': 60,
     '/og-game': 60,
     '/og-game-image': 30,
+    '/query': 30,
+    '/tournaments': 60,
     '/health': 30,
     '/push-subscribe': 10,
     '/push-unsubscribe': 5,
@@ -661,7 +687,7 @@ async function handlePlayerHistory(request, env) {
             // W/L/D with opponent
             const opponent = rankMap[roundData.opponentRank];
 
-            // Try to resolve color from pairings colors, then game index
+            // Try to resolve color from pairings colors, then D1
             let color = null;
             let board = null;
 
@@ -676,20 +702,16 @@ async function handlePlayerHistory(request, env) {
                 }
             }
 
-            // Fallback: check game index from GAMES KV
+            // Fallback: check D1 games table
             if (!color) {
-                try {
-                    const indexData = await env.GAMES.get(`index:${slug}:${roundNum}`, 'json');
-                    if (indexData) {
-                        for (const game of indexData) {
-                            for (const regex of patterns) {
-                                if (regex.test(game.white)) { color = 'White'; board = game.board || null; break; }
-                                if (regex.test(game.black)) { color = 'Black'; board = game.board || null; break; }
-                            }
-                            if (color) break;
-                        }
-                    }
-                } catch { /* GAMES KV may not exist */ }
+                const norm = normalizePlayerName(playerName);
+                const gameRow = await env.DB.prepare(
+                    'SELECT white_norm, board FROM games WHERE tournament_slug = ? AND round = ? AND (white_norm = ? OR black_norm = ?)'
+                ).bind(slug, roundNum, norm, norm).first();
+                if (gameRow) {
+                    color = gameRow.white_norm === norm ? 'White' : 'Black';
+                    board = gameRow.board;
+                }
             }
 
             rounds[roundNum] = {
@@ -753,14 +775,15 @@ async function handleGetGame(request, env) {
         return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
     }
 
-    const key = `game:${slug}:${round}:${board}`;
-    const pgn = await env.GAMES.get(key);
+    const row = await env.DB.prepare(
+        'SELECT pgn FROM games WHERE tournament_slug = ? AND round = ? AND board = ?'
+    ).bind(slug, parseInt(round), parseInt(board)).first();
 
-    if (!pgn) {
+    if (!row) {
         return corsResponse({ error: 'Game not found' }, 404, env, request);
     }
 
-    return corsResponse({ pgn, round: parseInt(round), board: parseInt(board) }, 200, env, request);
+    return corsResponse({ pgn: row.pgn, round: parseInt(round), board: parseInt(board) }, 200, env, request);
 }
 
 // --- Game by ID Endpoint ---
@@ -773,28 +796,24 @@ async function handleGetGameById(request, env) {
         return corsResponse({ error: 'Valid game ID is required' }, 400, env, request);
     }
 
-    const mapping = await env.GAMES.get(`gameid:${gameId}`, 'json');
-    if (!mapping) {
+    const row = await env.DB.prepare(
+        `SELECT g.pgn, g.round, g.board, g.game_id, g.eco, g.opening_name, t.name as tournament_name
+         FROM games g JOIN tournaments t ON g.tournament_slug = t.slug
+         WHERE g.game_id = ?`
+    ).bind(gameId).first();
+
+    if (!row) {
         return corsResponse({ error: 'Game not found' }, 404, env, request);
     }
 
-    const pgn = await env.GAMES.get(`game:${mapping.slug}:${mapping.round}:${mapping.board}`);
-    if (!pgn) {
-        return corsResponse({ error: 'Game PGN not found' }, 404, env, request);
-    }
-
-    const indexData = await env.GAMES.get(`index:${mapping.slug}:${mapping.round}`, 'json');
-    const gameMeta = indexData?.find(g => g.board === mapping.board) || null;
-    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-
     return corsResponse({
-        pgn,
-        round: mapping.round,
-        board: mapping.board,
-        gameId,
-        tournamentName: meta?.name || null,
-        eco: gameMeta?.eco || null,
-        openingName: gameMeta?.openingName || null,
+        pgn: row.pgn,
+        round: row.round,
+        board: row.board,
+        gameId: row.game_id,
+        tournamentName: row.tournament_name,
+        eco: row.eco,
+        openingName: row.opening_name,
     }, 200, env, request);
 }
 
@@ -808,33 +827,28 @@ async function handleOgGame(request, env) {
         return corsResponse({ error: 'Valid game ID is required' }, 400, env, request);
     }
 
-    const mapping = await env.GAMES.get(`gameid:${gameId}`, 'json');
-    if (!mapping) {
+    const row = await env.DB.prepare(
+        `SELECT g.white, g.black, g.white_elo, g.black_elo, g.result,
+                g.round, g.board, g.eco, g.opening_name, t.name as tournament_name
+         FROM games g JOIN tournaments t ON g.tournament_slug = t.slug
+         WHERE g.game_id = ?`
+    ).bind(gameId).first();
+
+    if (!row) {
         return corsResponse({ error: 'Game not found' }, 404, env, request);
     }
 
-    const indexData = await env.GAMES.get(`index:${mapping.slug}:${mapping.round}`, 'json');
-    const gameMeta = indexData?.find(g => g.board === mapping.board) || null;
-    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-
-    // Format names from "Last, First" to "First Last"
-    const fmt = (name) => {
-        if (!name) return '';
-        const parts = name.split(',').map(s => s.trim());
-        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
-    };
-
     return corsResponse({
-        white: fmt(gameMeta?.white),
-        black: fmt(gameMeta?.black),
-        whiteElo: gameMeta?.whiteElo || null,
-        blackElo: gameMeta?.blackElo || null,
-        result: gameMeta?.result || null,
-        round: mapping.round,
-        board: mapping.board,
-        eco: gameMeta?.eco || null,
-        openingName: gameMeta?.openingName || null,
-        tournamentName: meta?.name || null,
+        white: formatPlayerName(row.white),
+        black: formatPlayerName(row.black),
+        whiteElo: row.white_elo,
+        blackElo: row.black_elo,
+        result: row.result,
+        round: row.round,
+        board: row.board,
+        eco: row.eco,
+        openingName: row.opening_name,
+        tournamentName: row.tournament_name,
     }, 200, env, request);
 }
 
@@ -860,45 +874,34 @@ async function handleOgGameImage(request, env) {
         });
     }
 
-    // Look up game
-    const mapping = await env.GAMES.get(`gameid:${gameId}`, 'json');
-    if (!mapping) {
+    // Look up game in D1
+    const row = await env.DB.prepare(
+        `SELECT g.pgn, g.white, g.black, g.white_elo, g.black_elo, g.result,
+                g.round, g.board, g.eco, g.opening_name, t.name as tournament_name
+         FROM games g JOIN tournaments t ON g.tournament_slug = t.slug
+         WHERE g.game_id = ?`
+    ).bind(gameId).first();
+
+    if (!row) {
         return new Response('Game not found', { status: 404 });
     }
 
-    const pgn = await env.GAMES.get(`game:${mapping.slug}:${mapping.round}:${mapping.board}`);
-    if (!pgn) {
-        return new Response('Game PGN not found', { status: 404 });
-    }
-
-    // Get metadata
-    const indexData = await env.GAMES.get(`index:${mapping.slug}:${mapping.round}`, 'json');
-    const gameMeta = indexData?.find(g => g.board === mapping.board) || null;
-    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-
     // Replay to final position
-    const fen = replayToFen(pgn);
-
-    // Format names
-    const fmt = (name) => {
-        if (!name) return '';
-        const parts = name.split(',').map(s => s.trim());
-        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
-    };
+    const fen = replayToFen(row.pgn);
 
     // Generate SVG
     const svg = generateBoardSvg({
         fen,
-        white: fmt(gameMeta?.white),
-        black: fmt(gameMeta?.black),
-        whiteElo: gameMeta?.whiteElo || null,
-        blackElo: gameMeta?.blackElo || null,
-        result: gameMeta?.result || null,
-        eco: gameMeta?.eco || null,
-        openingName: gameMeta?.openingName || null,
-        tournamentName: meta?.name || null,
-        round: mapping.round,
-        board: mapping.board,
+        white: formatPlayerName(row.white),
+        black: formatPlayerName(row.black),
+        whiteElo: row.white_elo,
+        blackElo: row.black_elo,
+        result: row.result,
+        eco: row.eco,
+        openingName: row.opening_name,
+        tournamentName: row.tournament_name,
+        round: row.round,
+        board: row.board,
     });
 
     // Fetch font for text rendering (Inter from Google Fonts CDN)
@@ -954,55 +957,250 @@ async function handleGetGames(request, env) {
         return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
     }
 
+    let rows;
     if (roundParam) {
-        const indexData = await env.GAMES.get(`index:${slug}:${roundParam}`, 'json');
-        if (!indexData) {
+        const result = await env.DB.prepare(
+            'SELECT * FROM games WHERE tournament_slug = ? AND round = ? ORDER BY board'
+        ).bind(slug, parseInt(roundParam)).all();
+        rows = result.results;
+        if (rows.length === 0) {
             return corsResponse({ error: 'No games found for this round' }, 404, env, request);
         }
-        return corsResponse({
-            rounds: { [roundParam]: indexData },
-            tournamentName: meta.name,
-        }, 200, env, request);
+    } else {
+        const result = await env.DB.prepare(
+            'SELECT * FROM games WHERE tournament_slug = ? ORDER BY round, board'
+        ).bind(slug).all();
+        rows = result.results;
     }
 
-    // All rounds: list keys matching index:${slug}:*
+    // Shape response to match existing frontend contract
     const rounds = {};
-    let cursor = undefined;
-    do {
-        const list = await env.GAMES.list({ prefix: `index:${slug}:`, cursor });
-        const entries = await Promise.all(
-            list.keys.map(async (k) => {
-                const roundNum = k.name.split(':').pop();
-                const data = await env.GAMES.get(k.name, 'json');
-                return { roundNum, data };
-            })
-        );
-        for (const { roundNum, data } of entries) {
-            if (data) rounds[roundNum] = data;
-        }
-        cursor = list.list_complete ? undefined : list.cursor;
-    } while (cursor);
-
-    // Fetch all PGNs in parallel
     const pgns = {};
-    const pgnFetches = [];
-    for (const [roundNum, games] of Object.entries(rounds)) {
-        for (const game of games) {
-            if (game.board) {
-                pgnFetches.push(
-                    env.GAMES.get(`game:${slug}:${roundNum}:${game.board}`).then(pgn => {
-                        if (pgn) pgns[`${roundNum}:${game.board}`] = pgn;
-                    })
-                );
-            }
+    for (const row of rows) {
+        const rnd = String(row.round);
+        if (!rounds[rnd]) rounds[rnd] = [];
+        rounds[rnd].push({
+            board: row.board,
+            white: row.white,
+            black: row.black,
+            result: row.result,
+            whiteElo: row.white_elo,
+            blackElo: row.black_elo,
+            eco: row.eco,
+            openingName: row.opening_name,
+            gameId: row.game_id,
+            section: row.section,
+        });
+        if (!roundParam && row.pgn) {
+            pgns[`${row.round}:${row.board}`] = row.pgn;
         }
     }
-    await Promise.all(pgnFetches);
+
+    const response = { rounds, tournamentName: meta.name };
+    if (!roundParam) response.pgns = pgns;
+    return corsResponse(response, 200, env, request);
+}
+
+// --- Query Endpoint ---
+
+function parseEcoFilter(eco) {
+    return eco.split(',').map(part => {
+        const range = part.trim().match(/^([A-E])(\d{2})-([A-E])?(\d{2})$/i);
+        if (range) {
+            const letter = range[1].toUpperCase();
+            return { type: 'range', from: `${letter}${range[2]}`, to: `${range[3]?.toUpperCase() || letter}${range[4]}` };
+        }
+        return { type: 'exact', code: part.trim().toUpperCase() };
+    });
+}
+
+async function handleQuery(request, env) {
+    const url = new URL(request.url);
+    const player = url.searchParams.get('player');
+    const color = url.searchParams.get('color')?.toLowerCase();
+    const opponent = url.searchParams.get('opponent');
+    const eco = url.searchParams.get('eco');
+    const result = url.searchParams.get('result')?.toLowerCase();
+    const minRating = url.searchParams.get('minRating');
+    const maxRating = url.searchParams.get('maxRating');
+    const tournament = url.searchParams.get('tournament');
+    const section = url.searchParams.get('section');
+    const after = url.searchParams.get('after');
+    const before = url.searchParams.get('before');
+    const include = url.searchParams.get('include');
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+
+    // Build dynamic WHERE clause
+    const conditions = [];
+    const params = [];
+
+    // Tournament filter
+    if (tournament && tournament !== 'all') {
+        conditions.push('g.tournament_slug = ?');
+        params.push(tournament);
+    } else if (!tournament) {
+        // Default: current tournament
+        const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+        const slug = meta?.name ? slugifyTournament(meta.name) : null;
+        if (!slug) return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+        conditions.push('g.tournament_slug = ?');
+        params.push(slug);
+    }
+
+    // Player filter
+    if (player) {
+        const norm = normalizePlayerName(player);
+        if (color === 'white') {
+            conditions.push('g.white_norm = ?');
+            params.push(norm);
+        } else if (color === 'black') {
+            conditions.push('g.black_norm = ?');
+            params.push(norm);
+        } else {
+            conditions.push('(g.white_norm = ? OR g.black_norm = ?)');
+            params.push(norm, norm);
+        }
+    }
+
+    // Opponent filter (requires player)
+    if (opponent && player) {
+        const oppNorm = normalizePlayerName(opponent);
+        conditions.push('(g.white_norm = ? OR g.black_norm = ?)');
+        params.push(oppNorm, oppNorm);
+    }
+
+    // ECO filter
+    if (eco) {
+        const filters = parseEcoFilter(eco);
+        const ecoConds = filters.map(f => {
+            if (f.type === 'range') {
+                params.push(f.from, f.to);
+                return '(g.eco >= ? AND g.eco <= ?)';
+            }
+            params.push(f.code);
+            return 'g.eco = ?';
+        });
+        conditions.push(`(${ecoConds.join(' OR ')})`);
+    }
+
+    // Result filter (requires player)
+    if (result && player) {
+        const norm = normalizePlayerName(player);
+        if (result === 'win') {
+            conditions.push('((g.white_norm = ? AND g.result = ?) OR (g.black_norm = ? AND g.result = ?))');
+            params.push(norm, '1-0', norm, '0-1');
+        } else if (result === 'loss') {
+            conditions.push('((g.white_norm = ? AND g.result = ?) OR (g.black_norm = ? AND g.result = ?))');
+            params.push(norm, '0-1', norm, '1-0');
+        } else if (result === 'draw') {
+            conditions.push('g.result = ?');
+            params.push('1/2-1/2');
+        }
+    }
+
+    // Rating filter (opponent rating, requires player)
+    if ((minRating || maxRating) && player) {
+        const norm = normalizePlayerName(player);
+        // Opponent is black when player is white, and vice versa
+        const ratingConds = [];
+        if (minRating && maxRating) {
+            ratingConds.push('(g.white_norm = ? AND g.black_elo >= ? AND g.black_elo <= ?)');
+            params.push(norm, parseInt(minRating), parseInt(maxRating));
+            ratingConds.push('(g.black_norm = ? AND g.white_elo >= ? AND g.white_elo <= ?)');
+            params.push(norm, parseInt(minRating), parseInt(maxRating));
+        } else if (minRating) {
+            ratingConds.push('(g.white_norm = ? AND g.black_elo >= ?)');
+            params.push(norm, parseInt(minRating));
+            ratingConds.push('(g.black_norm = ? AND g.white_elo >= ?)');
+            params.push(norm, parseInt(minRating));
+        } else {
+            ratingConds.push('(g.white_norm = ? AND g.black_elo <= ?)');
+            params.push(norm, parseInt(maxRating));
+            ratingConds.push('(g.black_norm = ? AND g.white_elo <= ?)');
+            params.push(norm, parseInt(maxRating));
+        }
+        conditions.push(`(${ratingConds.join(' OR ')})`);
+    }
+
+    // Section filter
+    if (section) {
+        conditions.push('g.section = ?');
+        params.push(section);
+    }
+
+    // Date range
+    if (after) {
+        conditions.push('g.date >= ?');
+        params.push(after);
+    }
+    if (before) {
+        conditions.push('g.date <= ?');
+        params.push(before);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const selectCols = include === 'pgn'
+        ? 'g.*, t.name as tournament_name, t.short_code'
+        : `g.tournament_slug, g.round, g.board, g.white, g.black, g.white_elo, g.black_elo,
+           g.result, g.eco, g.opening_name, g.section, g.date, g.game_id,
+           t.name as tournament_name, t.short_code`;
+
+    // Count total matches
+    const countResult = await env.DB.prepare(
+        `SELECT COUNT(*) as total FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where}`
+    ).bind(...params).first();
+
+    // Fetch page
+    const result2 = await env.DB.prepare(
+        `SELECT ${selectCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+
+    const games = result2.results.map(row => {
+        const game = {
+            tournament: row.tournament_name,
+            tournamentSlug: row.tournament_slug,
+            shortCode: row.short_code,
+            round: row.round,
+            board: row.board,
+            white: formatPlayerName(row.white),
+            black: formatPlayerName(row.black),
+            whiteElo: row.white_elo,
+            blackElo: row.black_elo,
+            result: row.result,
+            eco: row.eco,
+            openingName: row.opening_name,
+            section: row.section,
+            date: row.date,
+            gameId: row.game_id,
+        };
+        if (include === 'pgn') game.pgn = row.pgn;
+        return game;
+    });
 
     return corsResponse({
-        rounds,
-        pgns,
-        tournamentName: meta.name,
+        games,
+        total: countResult.total,
+        limit,
+        offset,
+    }, 200, env, request);
+}
+
+// --- Tournaments Endpoint ---
+
+async function handleTournaments(request, env) {
+    const result = await env.DB.prepare(
+        'SELECT * FROM tournaments ORDER BY start_date DESC'
+    ).all();
+
+    return corsResponse({
+        tournaments: result.results.map(t => ({
+            slug: t.slug,
+            name: t.name,
+            shortCode: t.short_code,
+            startDate: t.start_date,
+            totalRounds: t.total_rounds,
+        })),
     }, 200, env, request);
 }
 
@@ -1309,38 +1507,52 @@ async function handleScheduled(env) {
         console.error('Failed to persist standings:', err.message);
     }
 
-    // Store full PGN games in GAMES KV
+    // Store games in D1
     const fullGames = extractFullPgnGames(html);
     let gameCount = 0;
-    for (const [roundNum, games] of Object.entries(fullGames)) {
-        // Classify openings by position (EPD) for each game
-        const indexData = games.map(g => {
-            const opening = classifyOpening(g.pgn);
-            return {
-                board: g.board, white: g.white, black: g.black,
-                result: g.result, whiteElo: g.whiteElo, blackElo: g.blackElo,
-                eco: opening ? opening.eco : g.eco,
-                openingName: opening ? opening.name : null,
-                gameId: g.gameId || null,
-                section: g.section,
-            };
-        });
-        await env.GAMES.put(`index:${slug}:${roundNum}`, JSON.stringify(indexData));
+    try {
+        // Upsert tournament
+        const shortCode = getTournamentSlug(tournament.name);
+        const startDate = meta?.roundDates?.[0] || null;
+        await env.DB.prepare(
+            'INSERT OR REPLACE INTO tournaments (slug, name, short_code, start_date, total_rounds) VALUES (?, ?, ?, ?, ?)'
+        ).bind(slug, tournament.name, shortCode, startDate, meta?.totalRounds || null).run();
 
-        // Write individual games + GameId reverse-lookup
-        for (const game of games) {
-            if (game.board !== null) {
-                await env.GAMES.put(`game:${slug}:${roundNum}:${game.board}`, game.pgn);
+        // Batch insert games (D1 supports up to 100 statements per batch)
+        const stmts = [];
+        for (const [roundNum, games] of Object.entries(fullGames)) {
+            for (const g of games) {
+                if (g.board === null) continue;
+                const opening = classifyOpening(g.pgn);
+                stmts.push(
+                    env.DB.prepare(
+                        `INSERT OR REPLACE INTO games
+                         (tournament_slug, round, board, white, black, white_norm, black_norm,
+                          white_elo, black_elo, result, eco, opening_name, section, date, game_id, pgn)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    ).bind(
+                        slug, parseInt(roundNum), g.board,
+                        g.white, g.black,
+                        normalizePlayerName(g.white), normalizePlayerName(g.black),
+                        g.whiteElo ? parseInt(g.whiteElo) : null,
+                        g.blackElo ? parseInt(g.blackElo) : null,
+                        g.result,
+                        opening ? opening.eco : g.eco,
+                        opening ? opening.name : null,
+                        g.section, g.date, g.gameId || null, g.pgn
+                    )
+                );
                 gameCount++;
             }
-            if (game.gameId) {
-                await env.GAMES.put(`gameid:${game.gameId}`, JSON.stringify({
-                    slug, round: parseInt(roundNum), board: game.board,
-                }));
-            }
         }
+        // D1 batch supports up to 100 statements; chunk if needed
+        for (let i = 0; i < stmts.length; i += 100) {
+            await env.DB.batch(stmts.slice(i, i + 100));
+        }
+        console.log(`Stored ${gameCount} games across ${Object.keys(fullGames).length} rounds in D1.`);
+    } catch (err) {
+        console.error('Failed to store games in D1:', err.message);
     }
-    console.log(`Stored ${gameCount} PGN games across ${Object.keys(fullGames).length} rounds in GAMES KV.`);
 
     const pairingsFound = await hasPairings(html);
 
@@ -1528,6 +1740,12 @@ export default {
             }
             if (path === '/og-game-image' && request.method === 'GET') {
                 return await handleOgGameImage(request, env);
+            }
+            if (path === '/query' && request.method === 'GET') {
+                return await handleQuery(request, env);
+            }
+            if (path === '/tournaments' && request.method === 'GET') {
+                return await handleTournaments(request, env);
             }
 
             if (path === '/health' && request.method === 'GET') {

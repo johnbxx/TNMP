@@ -550,6 +550,7 @@ export function extractFullPgnGames(html) {
             const ecoMatch = game.match(/\[ECO\s+"([^"]+)"\]/);
             const eventMatch = game.match(/\[Event\s+"([^"]+)"\]/);
             const gameIdMatch = game.match(/\[GameId\s+"([^"]+)"\]/);
+            const dateMatch = game.match(/\[Date\s+"([^"]+)"\]/);
 
             if (!roundMatch || !whiteMatch || !blackMatch) continue;
 
@@ -578,6 +579,7 @@ export function extractFullPgnGames(html) {
                 blackElo: blackEloMatch ? blackEloMatch[1] : null,
                 eco: ecoMatch ? ecoMatch[1] : null,
                 gameId: gameIdMatch ? gameIdMatch[1] : null,
+                date: dateMatch ? dateMatch[1] : null,
                 section,
                 pgn: game.trim(),
             });

@@ -19,3 +19,9 @@ id = "69d27221bb904515958233a6c9481e75"
 [[kv_namespaces]]
 binding = "GAMES"
 id = "dd3adec3b60b4002b71eaa1d1bae129e"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tnmp-games"
+database_id = "571ae443-e8d3-4ffa-819b-51cbd9471d47"
+migrations_dir = "migrations"
