@@ -28,7 +28,7 @@ function downloadPgn(pgnText, filename) {
 }
 
 const TOURNAMENT_SLUGS = {
-    '2026 New Year\'s Tuesday Night Marathon': '2026NY',
+    '2026 New Years Tuesday Night Marathon': '2026NY',
     '2026 Spring Tuesday Night Marathon': '2026Spring',
     '3rd Silman Memorial Tuesday Night Marathon': '2026Silman',
 };
