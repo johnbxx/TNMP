@@ -2,7 +2,7 @@ import { WORKER_URL } from './config.js';
 import { openModal, closeModal } from './modal.js';
 import { initViewer, destroyViewer } from './pgn-viewer.js';
 import { loadRoundHistory } from './history.js';
-import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navigateToGame, closeGameBrowser, clearNavContext, getCachedPgn, getCachedGameMeta, getActiveFilter, isEmbeddedBrowser, renderBrowserInPanel, hideBrowserPanel, highlightActiveGame } from './game-browser.js';
+import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navigateToGame, clearNavContext, getCachedPgn, getCachedGameMeta, getActiveFilter, isEmbeddedBrowser, renderBrowserInPanel, hideBrowserPanel, highlightActiveGame } from './game-browser.js';
 
 const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
 
@@ -113,19 +113,54 @@ export function closeGameViewer() {
 }
 
 /**
- * Close the game viewer without returning to browser (full close).
- */
-export function closeGameViewerFull() {
-    destroyViewer();
-    if (isEmbeddedBrowser()) hideBrowserPanel();
-    closeModal('viewer-modal');
-    closeGameBrowser();
-}
-
-/**
  * Navigate to prev/next game from the viewer.
  */
 export function viewerNavigateGame(round, board) {
     destroyViewer();
     navigateToGame(round, board);
+}
+
+/**
+ * Update the prev/next navigation arrows in the viewer header.
+ * Pure View function — creates DOM elements and manages CSS classes.
+ */
+export function updateNavArrows(prev, next) {
+    const nav = document.querySelector('.viewer-browser-nav');
+    if (!nav) return;
+    const arrows = nav.querySelectorAll('.viewer-browse-arrow');
+    if (arrows.length < 2) return;
+
+    // Replace prev arrow
+    if (prev) {
+        const el = document.createElement('button');
+        el.className = 'viewer-browse-arrow';
+        el.dataset.browseRound = prev.round;
+        el.dataset.browseBoard = prev.board;
+        el.setAttribute('aria-label', 'Previous game');
+        el.textContent = '\u2039';
+        arrows[0].replaceWith(el);
+    } else {
+        const el = document.createElement('span');
+        el.className = 'viewer-browse-arrow viewer-browse-disabled';
+        el.textContent = '\u2039';
+        arrows[0].replaceWith(el);
+    }
+
+    // Replace next arrow (re-query after prev replacement)
+    const updatedArrows = nav.querySelectorAll('.viewer-browse-arrow');
+    const nextArrow = updatedArrows[updatedArrows.length - 1];
+    if (next) {
+        const el = document.createElement('button');
+        el.className = 'viewer-browse-arrow';
+        el.dataset.browseRound = next.round;
+        el.dataset.browseBoard = next.board;
+        el.setAttribute('aria-label', 'Next game');
+        el.textContent = '\u203A';
+        nextArrow.replaceWith(el);
+    } else {
+        const el = document.createElement('span');
+        el.className = 'viewer-browse-arrow viewer-browse-disabled';
+        el.textContent = '\u203A';
+        nextArrow.replaceWith(el);
+    }
 }

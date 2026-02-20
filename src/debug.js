@@ -1,5 +1,5 @@
 import { STATE } from './config.js';
-import { lastRoundNumber } from './countdown.js';
+import { getLastRoundNumber } from './state.js';
 import { showState } from './ui.js';
 
 const MOCK_PAIRINGS = {
@@ -60,7 +60,7 @@ const MOCK_PAIRINGS = {
 };
 
 export function previewState(state, pairingType) {
-    const round = lastRoundNumber;
+    const round = getLastRoundNumber();
     const pairing = pairingType ? MOCK_PAIRINGS[pairingType] : MOCK_PAIRINGS.normal;
     switch (state) {
         case STATE.YES:

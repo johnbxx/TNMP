@@ -69,6 +69,13 @@
     --transition-fast: 0.2s ease;
     --transition-medium: 0.3s ease;
     --transition-slow: 0.5s ease;
+
+    /* Viewer layout (read by JS in syncDesktopLayout) */
+    --viewer-layout-gap: 12;       /* px, gap between board and moves */
+    --viewer-min-moves-w: 160;     /* px, minimum moves panel width (side-by-side) */
+    --viewer-min-moves-h: 120;     /* px, minimum moves panel height (stacked) */
+    --viewer-min-board: 200;       /* px, minimum board size */
+    --viewer-stacked-threshold: 1.15; /* stacked if board is >15% larger than side-by-side */
 }
 
 * {
@@ -1334,11 +1341,73 @@ html.off-season .meme {
 .move-variation {
     color: var(--text-muted);
     font-size: 0.92em;
+    cursor: pointer;
+    padding: 0.1rem 0.15rem;
+    border-radius: 3px;
+    transition: background var(--transition-fast);
+}
+
+.move-variation:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.move-variation.move-current {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 .move-variation-block {
     color: var(--text-faint);
     font-size: 0.92em;
+}
+
+/* Branch popover — centered overlay when branch mode prompts a choice */
+.branch-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 20;
+    border-radius: inherit;
+}
+
+.branch-popover {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(30, 30, 40, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    min-width: 100px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.branch-option {
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 0.4rem 0.75rem;
+    border-radius: 3px;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.branch-option:hover,
+.branch-option.branch-selected {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--text-primary);
+}
+
+.branch-option.branch-main {
+    font-weight: 600;
 }
 
 /* Toolbar: full-width dark bar spanning modal bottom */
@@ -1441,6 +1510,84 @@ html.off-season .meme {
 .viewer-nav-btn:disabled:hover {
     background: transparent;
     color: var(--text-muted);
+}
+
+/* Toolbar tooltips */
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: var(--surface-primary, #1a1a2e);
+    color: var(--text-primary, #e0e0e0);
+    font-size: 0.7rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    transition-delay: 0s;
+    z-index: 100;
+}
+
+[data-tooltip]:hover::after {
+    opacity: 1;
+    transition-delay: 0.5s;
+}
+
+[data-tooltip]:active::after {
+    opacity: 0;
+    transition-delay: 0s;
+}
+
+/* Share popover */
+.share-btn-wrapper {
+    position: relative;
+}
+
+.share-popover {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-primary, #1a1a2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    min-width: 150px;
+    overflow: hidden;
+}
+
+.share-popover.hidden {
+    display: none;
+}
+
+.share-option {
+    background: none;
+    border: none;
+    color: var(--text-primary, #e0e0e0);
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.share-option:hover {
+    background: var(--overlay-light, rgba(255, 255, 255, 0.08));
+}
+
+.share-option.hidden {
+    display: none;
 }
 
 /* Emphasize play button */
@@ -1857,6 +2004,32 @@ html.off-season .meme {
     border-color: rgba(255, 255, 255, 0.2);
     background: var(--overlay-light);
     opacity: 1;
+}
+
+.browser-download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    color: var(--text-faint);
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity var(--transition-fast);
+    margin-left: 0.2rem;
+}
+
+.browser-download-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.browser-download-btn:hover {
+    opacity: 0.8;
 }
 
 .browser-games {

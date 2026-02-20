@@ -7,6 +7,22 @@ const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 const MI_BASE_URL = 'https://www.milibrary.org';
 const META_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
+// Manual tournament short codes for PGN filenames
+const TOURNAMENT_SLUGS = {
+    '2026 Spring Tuesday Night Marathon': '2026Spring',
+    '3rd Silman Memorial Tuesday Night Marathon': '2026Silman',
+};
+
+function getTournamentSlug(name) {
+    if (!name) return null;
+    if (TOURNAMENT_SLUGS[name]) return TOURNAMENT_SLUGS[name];
+    // Fallback: extract year + first significant word
+    const yearMatch = name.match(/\b(20\d{2})\b/);
+    const words = name.replace(/\b(Tuesday|Night|Marathon|the|of|and)\b/gi, '').trim().split(/\s+/);
+    const keyword = words.find(w => w.length > 2 && !/^\d+$/.test(w)) || 'TNM';
+    return yearMatch ? `${yearMatch[1]}${keyword}` : keyword;
+}
+
 // --- Helpers ---
 
 function jsonResponse(data, status = 200) {
@@ -200,6 +216,7 @@ async function resolveTournament(env) {
                 const nextStart = parseListDate(next.startDate);
                 const meta = {
                     name: tournamentName,
+                    slug: getTournamentSlug(tournamentName),
                     url: tournamentUrl,
                     roundDates,
                     totalRounds: roundDates.length,
@@ -252,6 +269,7 @@ async function resolveTournament(env) {
 
     const meta = {
         name: tournamentName,
+        slug: getTournamentSlug(tournamentName),
         url: tournamentUrl,
         roundDates,
         totalRounds: roundDates.length,
@@ -314,6 +332,7 @@ async function handleTournamentHtml(request, env) {
         round: cached.round,
         gameColors: mergeGameColors(cached.gameColors, pairingsColors),
         tournamentName: meta?.name || null,
+        tournamentSlug: meta?.slug || null,
         tournamentUrl: meta?.url || null,
         roundDates: meta?.roundDates || [],
         totalRounds: meta?.totalRounds || 0,

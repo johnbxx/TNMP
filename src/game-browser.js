@@ -1,49 +1,31 @@
-import { WORKER_URL } from './config.js';
 import { openModal, closeModal } from './modal.js';
 import { openGameViewer } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
+import { formatName, resultClass, resultSymbol, normalizeSection } from './utils.js';
+import { getGamesData, fetchGamesData, buildPlayerList, buildSectionList } from './browser-data.js';
+import {
+    getBrowsingGame, setBrowsingGame, setNavList,
+    getSelectedPlayer, setSelectedPlayer,
+    setOpenedFromBrowser,
+    isEmbeddedBrowser, setEmbeddedPanel,
+    getSelectedRound, setSelectedRound,
+    getPlayerList, setPlayerList,
+    getSectionList, setSectionList,
+    getVisibleSections, setVisibleSections,
+    clearNavContext, buildNavList,
+} from './state.js';
 
-let embeddedPanel = false; // true when browser is rendered inside the viewer panel
-
-let gamesData = null;
-let selectedRound = null;
-let selectedPlayer = null; // formatted name of the selected player filter
-let playerList = [];       // unique formatted player names, sorted
-let sectionList = [];      // unique section names across all rounds
-let visibleSections = new Set(); // sections currently shown
-let browsingGame = null;   // { round, board } of the game currently open from browser
-let navList = [];          // ordered list of { round, board } for prev/next navigation
-let openedFromBrowser = false; // whether the current game was opened from the browser modal
-
-const GAMES_CACHE_KEY = 'gamesData';
-
-/**
- * Prefetch game data in the background so the browser opens instantly.
- * Loads from localStorage first, then refreshes from the network.
- */
-export function prefetchGames() {
-    if (gamesData) return;
-    // Load from localStorage immediately
-    try {
-        const cached = localStorage.getItem(GAMES_CACHE_KEY);
-        if (cached) gamesData = JSON.parse(cached);
-    } catch { /* ignore corrupt cache */ }
-    // Refresh from network in the background
-    fetch(`${WORKER_URL}/games`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-            if (!data) return;
-            gamesData = data;
-            try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
-        })
-        .catch(() => {});
-}
+// Re-export for external consumers
+export { prefetchGames, getCachedPgn, getCachedGameMeta } from './browser-data.js';
+export { clearNavContext, hasBrowserContext, hasNavContext, getAdjacentGame, getActiveFilter, clearFilter, isEmbeddedBrowser } from './state.js';
 
 /**
  * Open the game browser modal and fetch all game indices.
  */
 export async function openGameBrowser() {
     openModal('browser-modal');
+
+    let gamesData = getGamesData();
 
     // If we already have data, just re-render (no fetch needed)
     if (gamesData) {
@@ -54,13 +36,15 @@ export async function openGameBrowser() {
         }
         const containerEl = document.getElementById('browser-content');
         const roundNumbers = Object.keys(gamesData.rounds).map(Number).sort((a, b) => a - b);
+        const selectedRound = getSelectedRound();
         if (!selectedRound || !roundNumbers.includes(selectedRound)) {
-            selectedRound = roundNumbers[roundNumbers.length - 1];
+            setSelectedRound(roundNumbers[roundNumbers.length - 1]);
         }
-        if (playerList.length === 0) playerList = buildPlayerList();
-        if (sectionList.length === 0) {
-            sectionList = buildSectionList();
-            visibleSections = new Set(sectionList);
+        if (getPlayerList().length === 0) setPlayerList(buildPlayerList());
+        if (getSectionList().length === 0) {
+            const sl = buildSectionList();
+            setSectionList(sl);
+            setVisibleSections(new Set(sl));
         }
         renderBrowser(containerEl, roundNumbers);
         return;
@@ -70,9 +54,7 @@ export async function openGameBrowser() {
     containerEl.innerHTML = '<p class="viewer-loading">Loading games...</p>';
 
     try {
-        const response = await fetch(`${WORKER_URL}/games`);
-        if (!response.ok) throw new Error('Failed to fetch games');
-        gamesData = await response.json();
+        gamesData = await fetchGamesData();
 
         const roundNumbers = Object.keys(gamesData.rounds)
             .map(Number)
@@ -83,17 +65,17 @@ export async function openGameBrowser() {
             return;
         }
 
-        // Update modal title with tournament name
         if (gamesData.tournamentName) {
             const titleEl = document.getElementById('browser-title');
             titleEl.textContent = gamesData.tournamentName;
             fitTextToContainer(titleEl);
         }
 
-        selectedRound = roundNumbers[roundNumbers.length - 1];
-        playerList = buildPlayerList();
-        sectionList = buildSectionList();
-        visibleSections = new Set(sectionList);
+        setSelectedRound(roundNumbers[roundNumbers.length - 1]);
+        setPlayerList(buildPlayerList());
+        const sl = buildSectionList();
+        setSectionList(sl);
+        setVisibleSections(new Set(sl));
         renderBrowser(containerEl, roundNumbers);
     } catch (err) {
         containerEl.innerHTML = `<p class="viewer-error">Failed to load games: ${err.message}</p>`;
@@ -109,17 +91,6 @@ export function closeGameBrowser() {
 }
 
 /**
- * Reset navigation state (player filter, browsing game, nav list).
- * Called when closing the viewer without returning to the browser.
- */
-export function clearNavContext() {
-    browsingGame = null;
-    openedFromBrowser = false;
-    navList = [];
-    selectedPlayer = null;
-}
-
-/**
  * Hide the browser modal without clearing state (for navigating to a game).
  */
 function hideBrowser() {
@@ -127,42 +98,31 @@ function hideBrowser() {
 }
 
 /**
- * Re-open the browser modal with current state (re-renders to reflect any filter changes).
+ * Re-open the browser modal with current state.
  */
 export function reopenBrowser() {
-    browsingGame = null;
+    setBrowsingGame(null);
     openGameBrowser();
 }
 
 /**
- * Whether the browser is currently embedded in the viewer panel (desktop combined layout).
- */
-export function isEmbeddedBrowser() {
-    return embeddedPanel;
-}
-
-/**
  * Render the game browser into the viewer's side panel (desktop combined layout).
- * Returns true if successful, false if no data.
  */
 export async function renderBrowserInPanel() {
     const panelEl = document.getElementById('viewer-browser-panel');
     if (!panelEl) return false;
 
-    embeddedPanel = true;
+    setEmbeddedPanel(true);
     panelEl.classList.remove('hidden');
 
-    // Show the modal with the has-browser class
     const modalContent = panelEl.closest('.modal-content-viewer');
     if (modalContent) modalContent.classList.add('has-browser');
 
+    let gamesData = getGamesData();
     if (!gamesData) {
         panelEl.innerHTML = '<p class="viewer-loading" style="padding:1rem">Loading games...</p>';
         try {
-            const response = await fetch(`${WORKER_URL}/games`);
-            if (!response.ok) throw new Error('Failed to fetch games');
-            gamesData = await response.json();
-            try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(gamesData)); } catch { /* quota */ }
+            gamesData = await fetchGamesData();
         } catch {
             panelEl.innerHTML = '<p class="viewer-error" style="padding:1rem">Could not load games.</p>';
             return false;
@@ -172,16 +132,17 @@ export async function renderBrowserInPanel() {
     const roundNumbers = Object.keys(gamesData.rounds).map(Number).sort((a, b) => a - b);
     if (roundNumbers.length === 0) return false;
 
+    const selectedRound = getSelectedRound();
     if (!selectedRound || !roundNumbers.includes(selectedRound)) {
-        selectedRound = roundNumbers[roundNumbers.length - 1];
+        setSelectedRound(roundNumbers[roundNumbers.length - 1]);
     }
-    if (playerList.length === 0) playerList = buildPlayerList();
-    if (sectionList.length === 0) {
-        sectionList = buildSectionList();
-        visibleSections = new Set(sectionList);
+    if (getPlayerList().length === 0) setPlayerList(buildPlayerList());
+    if (getSectionList().length === 0) {
+        const sl = buildSectionList();
+        setSectionList(sl);
+        setVisibleSections(new Set(sl));
     }
 
-    // Title + browser content container
     let titleText = gamesData.tournamentName || 'Tournament Games';
     panelEl.innerHTML = `<h2>${titleText}</h2><div class="browser-content"></div>`;
     const containerEl = panelEl.querySelector('.browser-content');
@@ -194,8 +155,8 @@ export async function renderBrowserInPanel() {
  * Highlight the currently active game row in the browser panel.
  */
 export function highlightActiveGame() {
-    // Work in whichever container is active (panel or modal)
-    const panelEl = embeddedPanel ? document.getElementById('viewer-browser-panel') : document.getElementById('browser-content');
+    const browsingGame = getBrowsingGame();
+    const panelEl = isEmbeddedBrowser() ? document.getElementById('viewer-browser-panel') : document.getElementById('browser-content');
     if (!panelEl || !browsingGame) return;
     panelEl.querySelectorAll('.browser-game-row').forEach(row => {
         const isActive = Number(row.dataset.gameRound) === Number(browsingGame.round)
@@ -208,7 +169,7 @@ export function highlightActiveGame() {
  * Hide the browser panel (on viewer close).
  */
 export function hideBrowserPanel() {
-    embeddedPanel = false;
+    setEmbeddedPanel(false);
     const panelEl = document.getElementById('viewer-browser-panel');
     if (panelEl) {
         panelEl.classList.add('hidden');
@@ -219,120 +180,20 @@ export function hideBrowserPanel() {
 }
 
 /**
- * Whether the game was opened from the browser modal (for return-to-browser on close).
- */
-export function hasBrowserContext() {
-    return openedFromBrowser && browsingGame !== null;
-}
-
-/**
- * Whether there's active navigation context (for showing prev/next arrows).
- */
-export function hasNavContext() {
-    return gamesData !== null && browsingGame !== null && navList.length > 0;
-}
-
-/**
- * Get the currently active filter (player or section), if any.
- * @returns {{ type: string, label: string } | null}
- */
-export function getActiveFilter() {
-    if (selectedPlayer) {
-        return { type: 'player', label: selectedPlayer };
-    }
-    if (sectionList.length > 1 && visibleSections.size < sectionList.length) {
-        return { type: 'section', label: [...visibleSections][0] };
-    }
-    return null;
-}
-
-/**
- * Clear the active filter, rebuild navList, and return updated prev/next.
- * @returns {{ prev: {round,board}|null, next: {round,board}|null }}
- */
-export function clearFilter() {
-    selectedPlayer = null;
-    visibleSections = new Set(sectionList);
-    navList = buildNavList();
-    return {
-        prev: getAdjacentGame(-1),
-        next: getAdjacentGame(+1),
-    };
-}
-
-/**
  * Open the game browser modal with the current filter pre-applied.
- * Does NOT change openedFromBrowser — the browser's game-row click sets it.
  */
 export function openBrowserWithCurrentFilter() {
     openGameBrowser();
 }
 
 /**
- * Build the navigation list based on current browser context.
- * - Player filter active: all of that player's games across rounds
- * - No filter: all games across all rounds, respecting section visibility
- */
-function buildNavList() {
-    if (!gamesData) return [];
-    const roundNumbers = Object.keys(gamesData.rounds).map(Number).sort((a, b) => a - b);
-    const normalize = (s) => s ? s.replace(/^u(?=\d)/i, 'U') : '';
-
-    if (selectedPlayer) {
-        // Player-filtered: one entry per round where the player appears
-        const playerLower = selectedPlayer.toLowerCase();
-        const list = [];
-        for (const r of roundNumbers) {
-            const match = (gamesData.rounds[r] || []).find(g =>
-                formatName(g.white).toLowerCase() === playerLower ||
-                formatName(g.black).toLowerCase() === playerLower
-            );
-            if (match) list.push({ round: r, board: match.board });
-        }
-        return list;
-    }
-
-    // All games across all rounds, section-filtered, sorted by round then board
-    const list = [];
-    for (const r of roundNumbers) {
-        const games = gamesData.rounds[r] || [];
-        const filtered = sectionList.length > 1
-            ? games.filter(g => !g.section || visibleSections.has(normalize(g.section)))
-            : games;
-        const sorted = [...filtered].sort((a, b) => (a.board || 999) - (b.board || 999));
-        for (const g of sorted) {
-            list.push({ round: r, board: g.board });
-        }
-    }
-    return list;
-}
-
-/**
- * Get the adjacent game (prev or next) from the navigation list with wrapping.
- * @param {number} direction - -1 for prev, +1 for next
- * @returns {{ round: number, board: number } | null}
- */
-export function getAdjacentGame(direction) {
-    if (!gamesData || !browsingGame || navList.length === 0) return null;
-
-    const currentIdx = navList.findIndex(
-        g => Number(g.round) === Number(browsingGame.round) && Number(g.board) === Number(browsingGame.board)
-    );
-    if (currentIdx === -1) return null;
-    if (navList.length <= 1) return null;
-
-    // Wrap around
-    const newIdx = (currentIdx + direction + navList.length) % navList.length;
-    return { round: navList[newIdx].round, board: navList[newIdx].board };
-}
-
-/**
  * Navigate to an adjacent game from the viewer.
  */
 export function navigateToGame(round, board) {
-    browsingGame = { round: Number(round), board: Number(board) };
-    // Auto-detect orientation when player filter is active
+    setBrowsingGame({ round: Number(round), board: Number(board) });
     let orientation = 'White';
+    const selectedPlayer = getSelectedPlayer();
+    const gamesData = getGamesData();
     if (selectedPlayer && gamesData) {
         const games = gamesData.rounds[round];
         if (games) {
@@ -347,85 +208,32 @@ export function navigateToGame(round, board) {
 
 /**
  * Set up player-filtered navigation and open a game.
- * Used when entering from the main page's round tracker "View Game" button.
- * @param {string} playerName - The player's name (e.g. "John Boyer")
- * @param {number|string} round - Round number
- * @param {number|string} board - Board number
  */
 export function openGameWithPlayerNav(playerName, round, board) {
-    openedFromBrowser = false;
+    setOpenedFromBrowser(false);
+    const gamesData = getGamesData();
     if (!gamesData) {
-        // No games data yet — just open without nav context
-        browsingGame = null;
-        navList = [];
+        setBrowsingGame(null);
+        setNavList([]);
         openGameViewer(round, board);
         return;
     }
-    selectedPlayer = playerName;
-    browsingGame = { round: Number(round), board: Number(board) };
-    navList = buildNavList();
-    // Don't pass orientation — let game-viewer.js use round history color
+    setSelectedPlayer(playerName);
+    setBrowsingGame({ round: Number(round), board: Number(board) });
+    setNavList(buildNavList());
     openGameViewer(round, board);
 }
 
-/**
- * Get a cached PGN from the browser's prefetched data.
- * @returns {string|null}
- */
-export function getCachedPgn(round, board) {
-    if (!gamesData?.pgns) return null;
-    return gamesData.pgns[`${round}:${board}`] || null;
-}
-
-/**
- * Get cached game metadata (eco, openingName) from the browser's index data.
- * @returns {{ eco: string, openingName: string } | null}
- */
-export function getCachedGameMeta(round, board) {
-    if (!gamesData?.rounds) return null;
-    const games = gamesData.rounds[round];
-    if (!games) return null;
-    const game = games.find(g => String(g.board) === String(board));
-    if (!game) return null;
-    return { eco: game.eco || null, openingName: game.openingName || null, gameId: game.gameId || null };
-}
-
-function formatName(name) {
-    const parts = name.split(',').map(s => s.trim());
-    return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
-}
-
-function buildPlayerList() {
-    const names = new Set();
-    for (const games of Object.values(gamesData.rounds)) {
-        for (const g of games) {
-            if (g.white) names.add(formatName(g.white));
-            if (g.black) names.add(formatName(g.black));
-        }
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-}
-
-function buildSectionList() {
-    const sections = new Set();
-    for (const games of Object.values(gamesData.rounds)) {
-        for (const g of games) {
-            if (g.section) {
-                // Normalize casing on the client side too (in case of stale KV data)
-                sections.add(g.section.replace(/^u(?=\d)/i, 'U'));
-            }
-        }
-    }
-    // Custom sort: rating sections descending, then "Extra Games" last
-    const order = (s) => {
-        if (/extra/i.test(s)) return 9999;
-        const m = s.match(/^(\d+)/);
-        return m ? -parseInt(m[1], 10) : 0;
-    };
-    return [...sections].sort((a, b) => order(a) - order(b));
-}
+// --- Rendering ---
 
 function renderBrowser(containerEl, roundNumbers) {
+    const selectedRound = getSelectedRound();
+    const selectedPlayer = getSelectedPlayer();
+    const embedded = isEmbeddedBrowser();
+    const sectionList = getSectionList();
+    const visibleSections = getVisibleSections();
+    const playerList = getPlayerList();
+
     const searchHtml = `
         <div class="browser-search" id="browser-search">
             <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false">
@@ -436,10 +244,12 @@ function renderBrowser(containerEl, roundNumbers) {
     let tabsHtml = '<div class="browser-rounds" id="browser-rounds">';
     for (const r of roundNumbers) {
         const active = r === selectedRound ? ' browser-round-active' : '';
-        const label = embeddedPanel ? `R${r}` : `Round ${r}`;
+        const label = embedded ? `R${r}` : `Round ${r}`;
         tabsHtml += `<button class="browser-round-btn${active}" data-round="${r}">${label}</button>`;
     }
     tabsHtml += '</div>';
+
+    const downloadBtn = '<button type="button" id="browser-export" class="browser-download-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>';
 
     let sectionsHtml = '';
     if (sectionList.length > 1) {
@@ -448,6 +258,7 @@ function renderBrowser(containerEl, roundNumbers) {
             const active = visibleSections.has(s) ? ' browser-section-active' : '';
             sectionsHtml += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
         }
+        sectionsHtml += downloadBtn;
         sectionsHtml += '</div>';
     }
 
@@ -459,7 +270,7 @@ function renderBrowser(containerEl, roundNumbers) {
     const autocomplete = document.getElementById('browser-autocomplete');
     const clearBtn = document.getElementById('browser-search-clear');
 
-    // Pre-populate search if a player filter is already active (e.g. opened from viewer chip)
+    // Pre-populate search if a player filter is already active
     if (selectedPlayer) {
         searchInput.value = selectedPlayer;
         clearBtn.classList.remove('hidden');
@@ -475,9 +286,8 @@ function renderBrowser(containerEl, roundNumbers) {
             document.getElementById('browser-rounds').classList.remove('hidden');
             const sectionsEl = document.getElementById('browser-sections');
             if (sectionsEl) sectionsEl.classList.remove('hidden');
-            // If we had a player selected and user cleared the input, reset
-            if (selectedPlayer) {
-                selectedPlayer = null;
+            if (getSelectedPlayer()) {
+                setSelectedPlayer(null);
                 clearBtn.classList.add('hidden');
                 renderGamesList();
             }
@@ -486,7 +296,6 @@ function renderBrowser(containerEl, roundNumbers) {
         document.getElementById('browser-rounds').classList.add('hidden');
         const sectionsEl = document.getElementById('browser-sections');
         if (sectionsEl) sectionsEl.classList.add('hidden');
-        // Show matching players in dropdown
         const matches = playerList.filter(name => name.toLowerCase().includes(query)).slice(0, 8);
         if (matches.length === 0) {
             autocomplete.innerHTML = '<div class="browser-ac-empty">No players found</div>';
@@ -498,14 +307,12 @@ function renderBrowser(containerEl, roundNumbers) {
         autocomplete.classList.remove('hidden');
     });
 
-    // Click on autocomplete item
     autocomplete.addEventListener('click', (e) => {
         const item = e.target.closest('[data-player]');
         if (!item) return;
         selectPlayer(item.dataset.player, searchInput, autocomplete, clearBtn);
     });
 
-    // Keyboard navigation in autocomplete
     searchInput.addEventListener('keydown', (e) => {
         if (autocomplete.classList.contains('hidden')) return;
         const items = autocomplete.querySelectorAll('.browser-ac-item');
@@ -533,16 +340,8 @@ function renderBrowser(containerEl, roundNumbers) {
         }
     });
 
-    // Close autocomplete on outside click
-    containerEl.addEventListener('click', (e) => {
-        if (!e.target.closest('#browser-search')) {
-            autocomplete.classList.add('hidden');
-        }
-    });
-
-    // Clear button
     clearBtn.addEventListener('click', () => {
-        selectedPlayer = null;
+        setSelectedPlayer(null);
         searchInput.value = '';
         clearBtn.classList.add('hidden');
         autocomplete.classList.add('hidden');
@@ -553,75 +352,93 @@ function renderBrowser(containerEl, roundNumbers) {
         renderGamesList();
     });
 
-    // Event delegation for round tabs
-    containerEl.querySelector('.browser-rounds').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-round]');
-        if (!btn) return;
-        selectedRound = parseInt(btn.dataset.round, 10);
-        containerEl.querySelectorAll('.browser-round-btn').forEach(b =>
-            b.classList.toggle('browser-round-active', parseInt(b.dataset.round) === selectedRound)
-        );
-        renderGamesList();
-    });
+    // Event delegation on containerEl — attach only once to avoid listener accumulation
+    if (!containerEl.dataset.browserListeners) {
+        containerEl.dataset.browserListeners = 'true';
 
-    // Section toggle buttons — exclusive filter: click = show ONLY this section, click again = show all
-    const sectionsRow = document.getElementById('browser-sections');
-    if (sectionsRow) {
-        sectionsRow.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-section]');
-            if (!btn) return;
-            const section = btn.dataset.section;
-            const isOnlyThisSelected = visibleSections.size === 1 && visibleSections.has(section);
-            if (isOnlyThisSelected) {
-                // Already filtering to this section — restore all
-                visibleSections = new Set(sectionList);
-            } else {
-                // Filter to ONLY this section
-                visibleSections = new Set([section]);
+        containerEl.addEventListener('click', (e) => {
+            // Dismiss autocomplete when clicking outside search
+            if (!e.target.closest('#browser-search')) {
+                const ac = containerEl.querySelector('#browser-autocomplete');
+                if (ac) ac.classList.add('hidden');
             }
-            // Update button active states
-            sectionsRow.querySelectorAll('.browser-section-btn').forEach(b =>
-                b.classList.toggle('browser-section-active', visibleSections.has(b.dataset.section))
-            );
-            renderGamesList();
-        });
-    }
 
-    // Event delegation for game rows
-    containerEl.addEventListener('click', (e) => {
-        const row = e.target.closest('[data-game-round]');
-        if (!row) return;
-        const round = row.dataset.gameRound;
-        const board = row.dataset.gameBoard;
-        browsingGame = { round: Number(round), board: Number(board) };
-        openedFromBrowser = true;
-        navList = buildNavList();
+            // Round tab clicks
+            const roundBtn = e.target.closest('.browser-round-btn[data-round]');
+            if (roundBtn) {
+                const r = parseInt(roundBtn.dataset.round, 10);
+                setSelectedRound(r);
+                containerEl.querySelectorAll('.browser-round-btn').forEach(b =>
+                    b.classList.toggle('browser-round-active', parseInt(b.dataset.round) === r)
+                );
+                renderGamesList();
+                return;
+            }
 
-        if (embeddedPanel) {
-            // Desktop combined: swap game in-place, no modal transitions
-            highlightActiveGame();
-            // Detect orientation for player filter
-            let orientation = 'White';
-            if (selectedPlayer && gamesData) {
-                const games = gamesData.rounds[round];
-                if (games) {
-                    const match = games.find(g => String(g.board) === String(board));
-                    if (match && formatName(match.black).toLowerCase() === selectedPlayer.toLowerCase()) {
-                        orientation = 'Black';
+            // Section filter clicks
+            const sectionBtn = e.target.closest('.browser-section-btn[data-section]');
+            if (sectionBtn) {
+                const section = sectionBtn.dataset.section;
+                const vs = getVisibleSections();
+                const allSections = getSectionList();
+                const allVisible = vs.size === allSections.length;
+                if (allVisible) {
+                    // First click from "all visible" — isolate this section
+                    setVisibleSections(new Set([section]));
+                } else if (vs.has(section)) {
+                    // Toggle off — but if it would leave none, show all
+                    const next = new Set(vs);
+                    next.delete(section);
+                    setVisibleSections(next.size > 0 ? next : new Set(allSections));
+                } else {
+                    // Toggle on
+                    const next = new Set(vs);
+                    next.add(section);
+                    // If all are now selected, normalize to full set
+                    setVisibleSections(next.size === allSections.length ? new Set(allSections) : next);
+                }
+                containerEl.querySelectorAll('.browser-section-btn').forEach(b =>
+                    b.classList.toggle('browser-section-active', getVisibleSections().has(b.dataset.section))
+                );
+                renderGamesList();
+                return;
+            }
+
+            // Game row clicks
+            const row = e.target.closest('[data-game-round]');
+            if (row) {
+                const round = row.dataset.gameRound;
+                const board = row.dataset.gameBoard;
+                setBrowsingGame({ round: Number(round), board: Number(board) });
+                setOpenedFromBrowser(true);
+                setNavList(buildNavList());
+
+                if (isEmbeddedBrowser()) {
+                    highlightActiveGame();
+                    let orientation = 'White';
+                    const sp = getSelectedPlayer();
+                    const gd = getGamesData();
+                    if (sp && gd) {
+                        const games = gd.rounds[round];
+                        if (games) {
+                            const match = games.find(g => String(g.board) === String(board));
+                            if (match && formatName(match.black).toLowerCase() === sp.toLowerCase()) {
+                                orientation = 'Black';
+                            }
+                        }
                     }
+                    openGameViewer(round, board, orientation);
+                } else {
+                    hideBrowser();
+                    setTimeout(() => openGameViewer(round, board, 'White'), 150);
                 }
             }
-            openGameViewer(round, board, orientation);
-        } else {
-            // Mobile: close browser, then open viewer after transition
-            hideBrowser();
-            setTimeout(() => openGameViewer(round, board, 'White'), 150);
-        }
-    });
+        });
+    }
 }
 
 function selectPlayer(name, searchInput, autocomplete, clearBtn) {
-    selectedPlayer = name;
+    setSelectedPlayer(name);
     searchInput.value = name;
     searchInput.blur();
     autocomplete.classList.add('hidden');
@@ -643,21 +460,22 @@ function highlightMatch(name, query) {
 
 function renderGamesList() {
     const gamesEl = document.getElementById('browser-games');
+    const gamesData = getGamesData();
     if (!gamesEl || !gamesData) return;
 
-    if (selectedPlayer) {
-        renderPlayerGames(gamesEl);
+    if (getSelectedPlayer()) {
+        renderPlayerGames(gamesEl, gamesData);
     } else {
-        renderRoundGames(gamesEl);
+        renderRoundGames(gamesEl, gamesData);
     }
 }
 
-function renderPlayerGames(gamesEl) {
+function renderPlayerGames(gamesEl, gamesData) {
     const roundNumbers = Object.keys(gamesData.rounds)
         .map(Number)
         .sort((a, b) => a - b);
 
-    const playerLower = selectedPlayer.toLowerCase();
+    const playerLower = getSelectedPlayer().toLowerCase();
     let html = '';
     let totalMatches = 0;
 
@@ -680,33 +498,30 @@ function renderPlayerGames(gamesEl) {
     }
 }
 
-function renderRoundGames(gamesEl) {
+function renderRoundGames(gamesEl, gamesData) {
+    const selectedRound = getSelectedRound();
+    const sectionList = getSectionList();
+    const visibleSections = getVisibleSections();
     const games = gamesData.rounds[selectedRound] || [];
     if (games.length === 0) {
         gamesEl.innerHTML = '<p class="browser-empty">No games for this round.</p>';
         return;
     }
 
-    // Normalize section names for matching
-    const normalize = (s) => s ? s.replace(/^u(?=\d)/i, 'U') : '';
-
-    // Filter by visible sections (if section toggles exist)
     const filtered = sectionList.length > 1
-        ? games.filter(g => !g.section || visibleSections.has(normalize(g.section)))
+        ? games.filter(g => !g.section || visibleSections.has(normalizeSection(g.section)))
         : games;
 
     const sorted = [...filtered].sort((a, b) => (a.board || 999) - (b.board || 999));
 
-    // Group by section (if sections exist), in sectionList order
     const sections = new Map();
     for (const s of sectionList) sections.set(s, []);
     for (const game of sorted) {
-        const key = normalize(game.section);
+        const key = normalizeSection(game.section);
         if (!sections.has(key)) sections.set(key, []);
         sections.get(key).push(game);
     }
 
-    // Count non-empty sections for deciding whether to show headers
     let nonEmptySections = 0;
     for (const [, g] of sections) { if (g.length > 0) nonEmptySections++; }
     const hasSections = nonEmptySections > 1;
@@ -729,26 +544,49 @@ function renderRoundGames(gamesEl) {
     }
 }
 
-function resultClass(result, side) {
-    if (result === '1/2-1/2') return 'browser-draw';
-    if ((result === '1-0' && side === 'white') || (result === '0-1' && side === 'black')) return 'browser-winner';
-    if ((result === '1-0' && side === 'black') || (result === '0-1' && side === 'white')) return 'browser-loser';
-    return '';
+/**
+ * Return {round, board} pairs for all games matching the current browser view.
+ * Respects player filter, section filter, and selected round.
+ */
+export function getFilteredGames() {
+    const gamesData = getGamesData();
+    if (!gamesData) return [];
+
+    const selectedPlayer = getSelectedPlayer();
+    if (selectedPlayer) {
+        const playerLower = selectedPlayer.toLowerCase();
+        const result = [];
+        const roundNumbers = Object.keys(gamesData.rounds).map(Number).sort((a, b) => a - b);
+        for (const round of roundNumbers) {
+            const games = gamesData.rounds[round] || [];
+            const match = games.find(g =>
+                formatName(g.white).toLowerCase() === playerLower ||
+                formatName(g.black).toLowerCase() === playerLower
+            );
+            if (match) result.push({ round, board: match.board });
+        }
+        return result;
+    }
+
+    const selectedRound = getSelectedRound();
+    const games = gamesData.rounds[selectedRound] || [];
+    const sectionList = getSectionList();
+    const visibleSections = getVisibleSections();
+    const filtered = sectionList.length > 1
+        ? games.filter(g => !g.section || visibleSections.has(normalizeSection(g.section)))
+        : games;
+    return filtered
+        .sort((a, b) => (a.board || 999) - (b.board || 999))
+        .map(g => ({ round: selectedRound, board: g.board }));
 }
 
-function resultSymbol(result, side) {
-    if (result === '1/2-1/2') return '\u00BD';
-    if ((result === '1-0' && side === 'white') || (result === '0-1' && side === 'black')) return '1';
-    if ((result === '1-0' && side === 'black') || (result === '0-1' && side === 'white')) return '0';
-    return '';
-}
+// Test-only export
+export { highlightMatch as _highlightMatch };
 
-// Test-only exports (underscore-prefixed convention)
-export { formatName as _formatName, resultClass as _resultClass, resultSymbol as _resultSymbol, highlightMatch as _highlightMatch };
-
-function renderGameRow(game, round = selectedRound, boardLabel = null) {
-    const whiteClass = resultClass(game.result, 'white');
-    const blackClass = resultClass(game.result, 'black');
+function renderGameRow(game, round, boardLabel = null) {
+    if (round === undefined) round = getSelectedRound();
+    const whiteClass = resultClass(game.result, 'white', 'browser');
+    const blackClass = resultClass(game.result, 'black', 'browser');
     const whiteScore = resultSymbol(game.result, 'white');
     const blackScore = resultSymbol(game.result, 'black');
 

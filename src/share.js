@@ -1,30 +1,33 @@
 import { STATE } from './config.js';
-import { parseResult } from './parser2.js';
-import { currentState, currentPairing } from './countdown.js';
+import { resultDisplay } from './utils.js';
+import { getCurrentState, getCurrentPairing, getRoundInfo } from './state.js';
+import { showToast } from './toast.js';
 
-export function getShareText() {
-    const roundInfo = document.getElementById('round-info').textContent;
+function getShareText() {
+    const roundInfo = getRoundInfo();
+    const state = getCurrentState();
+    const pairing = getCurrentPairing();
 
     let text = '';
     let pairingText = '';
 
-    if (currentPairing && (currentState === STATE.YES || currentState === STATE.IN_PROGRESS || currentState === STATE.RESULTS)) {
-        if (currentPairing.isBye) {
-            pairingText = currentPairing.byeType === 'full'
+    if (pairing && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
+        if (pairing.isBye) {
+            pairingText = pairing.byeType === 'full'
                 ? ' I have a full-point bye this round.'
                 : ' I have a half-point bye this round.';
-        } else if (currentState === STATE.RESULTS && currentPairing.playerResult) {
-            const result = parseResult(currentPairing.playerResult);
-            const ratingText = currentPairing.opponentRating ? ` (${currentPairing.opponentRating})` : '';
+        } else if (state === STATE.RESULTS && pairing.playerResult) {
+            const result = resultDisplay(pairing.playerResult);
+            const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
             const outcomeText = result.outcome === 'win' ? 'Won' : result.outcome === 'loss' ? 'Lost' : 'Drew';
-            pairingText = ` ${outcomeText} with ${currentPairing.color} vs ${currentPairing.opponent}${ratingText} on Board ${currentPairing.board}.`;
+            pairingText = ` ${outcomeText} with ${pairing.color} vs ${pairing.opponent}${ratingText} on Board ${pairing.board}.`;
         } else {
-            const ratingText = currentPairing.opponentRating ? ` (${currentPairing.opponentRating})` : '';
-            pairingText = ` Playing ${currentPairing.color} vs ${currentPairing.opponent}${ratingText} on Board ${currentPairing.board}.`;
+            const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
+            pairingText = ` Playing ${pairing.color} vs ${pairing.opponent}${ratingText} on Board ${pairing.board}.`;
         }
     }
 
-    switch (currentState) {
+    switch (state) {
         case STATE.YES:
             text = `The pairings are UP! ${roundInfo}${pairingText}`;
             break;
@@ -47,13 +50,6 @@ export function getShareText() {
             text = 'Checking if the pairings are up...';
     }
     return text;
-}
-
-export function showToast(message) {
-    const toast = document.getElementById('share-toast');
-    toast.textContent = message;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 export async function shareStatus() {

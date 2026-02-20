@@ -1,20 +1,68 @@
-import { STATE, CONFIG, tournamentMeta } from './config.js';
+import { STATE, CONFIG, getTournamentMeta } from './config.js';
 import { getRandomMeme } from './memes.js';
-import { parseResult } from './parser2.js';
-import {
-    setCurrentState, setCurrentPairing, lastRoundNumber,
-    offSeasonInterval, startOffSeasonCountdown, updateCountdownDisplay
-} from './countdown.js';
+import { getLastRoundNumber, getSelectedHistoryRound, setSelectedHistoryRound, getLivePairingHtml, setLivePairingHtml, getTrackerState } from './state.js';
+import { stopOffSeasonCountdown, startOffSeasonCountdown, updateCountdownDisplay } from './countdown.js';
+import { resultDisplay } from './utils.js';
 
-// Track which historical round detail is being shown (null = show live pairing)
-let selectedHistoryRound = null;
+const COLOR_ICONS = {
+    White: 'pieces/wK.webp',
+    Black: 'pieces/bK.webp',
+};
 
-// Registered check handler (set by app.js to wrappedCheckPairings)
-let checkHandler = null;
-export function setCheckHandler(fn) { checkHandler = fn; }
-let livePairingHtml = null;
+/**
+ * Build pairing info HTML shared between showState() and showRoundDetail().
+ * @param {object} opts
+ * @param {number} [opts.round] - Round number
+ * @param {number} [opts.board] - Board number
+ * @param {boolean} [opts.isBye] - Is this a bye?
+ * @param {string} [opts.byeType] - 'full', 'half', or undefined
+ * @param {string} [opts.opponent] - Opponent name
+ * @param {string} [opts.opponentRating] - Opponent rating
+ * @param {string} [opts.opponentUrl] - Opponent profile URL
+ * @param {string} [opts.color] - 'White' or 'Black'
+ * @param {string} [opts.colorIcon] - Custom icon path (overrides color lookup)
+ * @param {object} [opts.result] - { emoji, text } for result display
+ * @param {string} [opts.extra] - Extra HTML appended at the end
+ */
+function renderPairingHtml(opts) {
+    const headerParts = [];
+    if (opts.round) headerParts.push(`Round ${opts.round}`);
+    if (opts.board) headerParts.push(`Board ${opts.board}`);
+    const headerLabel = headerParts.length
+        ? `<div class="pairing-history-label">${headerParts.join(' \u00B7 ')}</div>` : '';
+
+    if (opts.isBye) {
+        const byeText = opts.byeType === 'full' ? (opts.isLive ? 'You have a full-point bye' : 'Full-point bye')
+            : opts.byeType === 'half' ? (opts.isLive ? 'You have a half-point bye' : 'Half-point bye')
+            : 'Bye';
+        return `
+            ${headerLabel}
+            <div class="pairing-opponent"><img class="color-icon" src="pieces/Duck.webp" alt="Duck">${byeText}</div>
+        `;
+    }
+
+    const ratingText = opts.opponentRating ? ` (${opts.opponentRating})` : '';
+    const opponentDisplay = opts.opponentUrl
+        ? `<a href="${opts.opponentUrl}" target="_blank" class="opponent-link">${opts.opponent}</a>`
+        : (opts.opponent || 'Unknown');
+    const resultHtml = opts.result
+        ? `<div class="pairing-result">${opts.result.emoji} ${opts.result.text}</div>` : '';
+    const iconSrc = opts.colorIcon || COLOR_ICONS[opts.color] || '';
+    const colorIconHtml = iconSrc
+        ? `<img class="color-icon" src="${iconSrc}" alt="${opts.color || ''} piece">` : '';
+
+    return `
+        ${headerLabel}
+        ${resultHtml}
+        <div class="pairing-opponent">
+            ${colorIconHtml}
+            <span>vs ${opponentDisplay}${ratingText}</span>
+        </div>
+        ${opts.extra || ''}
+    `;
+}
+
 let fitAnswerRafId = null;
-const trackerState = { roundHistory: null, currentRound: null, listening: false };
 
 // Shrink an element's font size until its text fits within its container width.
 // Returns a cancel function. Exported for reuse (game browser title, etc.).
@@ -40,7 +88,7 @@ export function fitTextToContainer(el, { minSize = 16, widthFraction = 0.92 } = 
 }
 
 // Fit answer text to container width
-export function fitAnswerText() {
+function fitAnswerText() {
     const el = document.getElementById('answer');
     if (fitAnswerRafId) cancelAnimationFrame(fitAnswerRafId);
     fitAnswerRafId = fitTextToContainer(el);
@@ -52,12 +100,12 @@ window.addEventListener('resize', fitAnswerText);
 export function updateTournamentLink() {
     const link = document.querySelector('.footer a[target="_blank"]');
     if (!link) return;
-    const url = tournamentMeta.url || CONFIG.tournamentUrl;
+    const url = getTournamentMeta().url || CONFIG.tournamentUrl;
     if (url) {
         link.href = url;
     }
-    if (tournamentMeta.name) {
-        link.textContent = `View ${tournamentMeta.name}`;
+    if (getTournamentMeta().name) {
+        link.textContent = `View ${getTournamentMeta().name}`;
     }
 }
 
@@ -78,13 +126,11 @@ export function showState(state, info, pairingInfo = null) {
     const roundInfoEl = document.getElementById('round-info');
     const pairingInfoEl = document.getElementById('pairing-info');
 
-    setCurrentState(state);
-
     const STATE_CONFIG = {
         [STATE.YES]:         { className: 'yes',         answer: 'YES' },
         [STATE.NO]:          { className: 'no',          answer: 'NO' },
         [STATE.TOO_EARLY]:   { className: 'too-early',   answer: 'CHILL' },
-        [STATE.IN_PROGRESS]: { className: 'in-progress', answer: `ROUND ${lastRoundNumber}` },
+        [STATE.IN_PROGRESS]: { className: 'in-progress', answer: `ROUND ${getLastRoundNumber()}` },
         [STATE.RESULTS]:     { className: 'results',     answer: 'COMPLETE' },
         [STATE.OFF_SEASON]:  { className: 'off-season',  answer: 'REST' },
     };
@@ -95,9 +141,7 @@ export function showState(state, info, pairingInfo = null) {
     fitAnswerText();
 
     // Clear any running off-season countdown
-    if (offSeasonInterval) {
-        clearInterval(offSeasonInterval);
-    }
+    stopOffSeasonCountdown();
 
     if (state === STATE.OFF_SEASON) {
         const offSeasonData = pairingInfo;
@@ -121,58 +165,37 @@ export function showState(state, info, pairingInfo = null) {
 
     // Display pairing info if available
     if (pairingInfo && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
-        const headerParts = [];
-        if (pairingInfo.round) headerParts.push(`Round ${pairingInfo.round}`);
-        if (pairingInfo.board) headerParts.push(`Board ${pairingInfo.board}`);
-        const headerLabel = headerParts.length ? `<div class="pairing-history-label">${headerParts.join(' · ')}</div>` : '';
-
-        if (pairingInfo.isBye) {
-            const byeText = pairingInfo.byeType === 'full'
-                ? 'You have a full-point bye'
-                : 'You have a half-point bye';
-            pairingInfoEl.innerHTML = `
-                ${headerLabel}
-                <div class="pairing-opponent"><img class="color-icon" src="pieces/Duck.webp" alt="Duck">${byeText}</div>
-            `;
-        } else {
-            const ratingText = pairingInfo.opponentRating ? ` (${pairingInfo.opponentRating})` : '';
-            const opponentDisplay = pairingInfo.opponentUrl
-                ? `<a href="${pairingInfo.opponentUrl}" target="_blank" class="opponent-link">${pairingInfo.opponent}</a>`
-                : pairingInfo.opponent;
-
-            let resultHtml = '';
-            if (state === STATE.RESULTS && pairingInfo.playerResult) {
-                const result = parseResult(pairingInfo.playerResult);
-                resultHtml = `<div class="pairing-result">${result.emoji} ${result.text}</div>`;
-            }
-
-            pairingInfoEl.innerHTML = `
-                ${headerLabel}
-                ${resultHtml}
-                <div class="pairing-opponent">
-                    <img class="color-icon" src="${pairingInfo.colorIcon}" alt="${pairingInfo.color} piece">
-                    <span>vs ${opponentDisplay}${ratingText}</span>
-                </div>
-            `;
-        }
-        setCurrentPairing(pairingInfo);
+        const result = (state === STATE.RESULTS && pairingInfo.playerResult)
+            ? resultDisplay(pairingInfo.playerResult) : null;
+        pairingInfoEl.innerHTML = renderPairingHtml({
+            round: pairingInfo.round,
+            board: pairingInfo.board,
+            isBye: pairingInfo.isBye,
+            byeType: pairingInfo.byeType,
+            isLive: true,
+            opponent: pairingInfo.opponent,
+            opponentRating: pairingInfo.opponentRating,
+            opponentUrl: pairingInfo.opponentUrl,
+            color: pairingInfo.color,
+            colorIcon: pairingInfo.colorIcon,
+            result,
+        });
     } else {
         pairingInfoEl.innerHTML = '';
-        setCurrentPairing(null);
     }
 
-    // Update button based on state
+    // Update button text based on state (onclick wired by app.js)
     const btn = document.getElementById('check-btn');
     if (state === STATE.OFF_SEASON) {
-        const linkUrl = tournamentMeta.nextTournament?.url
-            || tournamentMeta.url
+        const linkUrl = getTournamentMeta().nextTournament?.url
+            || getTournamentMeta().url
             || CONFIG.tournamentUrl;
         if (linkUrl) {
             btn.textContent = 'View Tournament Info';
             btn.onclick = () => window.open(linkUrl, '_blank');
         } else {
             btn.textContent = 'Check Again';
-            btn.onclick = checkHandler;
+            btn.onclick = null;
         }
     } else if (state === STATE.YES) {
         btn.textContent = 'View Pairings';
@@ -182,7 +205,7 @@ export function showState(state, info, pairingInfo = null) {
         btn.onclick = () => window.open(CONFIG.tournamentUrl + '#Standings', '_blank');
     } else {
         btn.textContent = 'Check Again';
-        btn.onclick = checkHandler;
+        btn.onclick = null;
     }
 
     updateCountdownDisplay();
@@ -244,7 +267,7 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
         const round = roundHistory.rounds[i];
         const isCurrentRound = i === currentRound;
         const isInProgress = isCurrentRound && (currentState === STATE.IN_PROGRESS || currentState === STATE.YES);
-        const isSelected = selectedHistoryRound === i;
+        const isSelected = getSelectedHistoryRound() === i;
 
         let className = 'tracker-round';
         let resultClass = '';
@@ -288,15 +311,17 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
     container.innerHTML = html;
 
     // Use event delegation — single listener on container, set up once
-    trackerState.roundHistory = roundHistory;
-    trackerState.currentRound = currentRound;
-    if (!trackerState.listening) {
-        trackerState.listening = true;
+    const ts = getTrackerState();
+    ts.roundHistory = roundHistory;
+    ts.currentRound = currentRound;
+    if (!ts.listening) {
+        ts.listening = true;
         container.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-clickable="true"]');
             if (!btn) return;
             const roundNum = parseInt(btn.dataset.round, 10);
-            showRoundDetail(roundNum, trackerState.roundHistory, trackerState.currentRound);
+            const s = getTrackerState();
+            showRoundDetail(roundNum, s.roundHistory, s.currentRound);
         });
     }
 
@@ -314,59 +339,35 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
     if (!pairingInfoEl) return;
 
     // Clicking the already-selected round does nothing
-    if (selectedHistoryRound === roundNum) return;
+    if (getSelectedHistoryRound() === roundNum) return;
 
     // Clicking the current round restores live pairing (only if there is one)
-    if (roundNum === currentRound && livePairingHtml !== null) {
-        selectedHistoryRound = null;
-        pairingInfoEl.innerHTML = livePairingHtml;
+    if (roundNum === currentRound && getLivePairingHtml() !== null) {
+        setSelectedHistoryRound(null);
+        pairingInfoEl.innerHTML = getLivePairingHtml();
         updateTrackerSelection();
         return;
     }
 
-    selectedHistoryRound = roundNum;
+    setSelectedHistoryRound(roundNum);
     const round = roundHistory.rounds[roundNum];
     if (!round) return;
 
-    if (round.isBye) {
-        const byeText = round.byeType === 'full' ? 'Full-point bye'
-            : round.byeType === 'half' ? 'Half-point bye'
-            : 'Bye';
-        const headerLabel = round.board ? `Round ${roundNum} · Board ${round.board}` : `Round ${roundNum}`;
-        pairingInfoEl.innerHTML = `
-            <div class="pairing-history-label">${headerLabel}</div>
-            <div class="pairing-opponent"><img class="color-icon" src="pieces/Duck.webp" alt="Duck">${byeText}</div>
-        `;
-    } else {
-        const ratingText = round.opponentRating ? ` (${round.opponentRating})` : '';
-        const opponentDisplay = round.opponentUrl
-            ? `<a href="${round.opponentUrl}" target="_blank" class="opponent-link">${round.opponent}</a>`
-            : (round.opponent || 'Unknown');
-
-        let resultHtml = '';
-        if (round.result === 'W') resultHtml = '<div class="pairing-result">🎉 You won!</div>';
-        else if (round.result === 'L') resultHtml = '<div class="pairing-result">😞 You lost</div>';
-        else if (round.result === 'D') resultHtml = '<div class="pairing-result">🤝 Draw</div>';
-
-        let colorIcon = '';
-        if (round.color === 'White') colorIcon = '<img class="color-icon" src="pieces/wK.webp" alt="White">';
-        else if (round.color === 'Black') colorIcon = '<img class="color-icon" src="pieces/bK.webp" alt="Black">';
-
-        const headerLabel = round.board ? `Round ${roundNum} · Board ${round.board}` : `Round ${roundNum}`;
-        const viewGameHtml = (round.board && round.result && !round.isBye)
-            ? `<button class="view-game-btn" data-round="${roundNum}" data-board="${round.board}">View Game</button>`
-            : '';
-
-        pairingInfoEl.innerHTML = `
-            <div class="pairing-history-label">${headerLabel}</div>
-            ${resultHtml}
-            <div class="pairing-opponent">
-                ${colorIcon}
-                <span>vs ${opponentDisplay}${ratingText}</span>
-            </div>
-            ${viewGameHtml}
-        `;
-    }
+    const viewGameHtml = (!round.isBye && round.board && round.result)
+        ? `<button class="view-game-btn" data-round="${roundNum}" data-board="${round.board}">View Game</button>`
+        : '';
+    pairingInfoEl.innerHTML = renderPairingHtml({
+        round: roundNum,
+        board: round.board,
+        isBye: round.isBye,
+        byeType: round.byeType,
+        opponent: round.opponent,
+        opponentRating: round.opponentRating,
+        opponentUrl: round.opponentUrl,
+        color: round.color,
+        result: resultDisplay(round.result),
+        extra: viewGameHtml,
+    });
 
     updateTrackerSelection();
 }
@@ -379,7 +380,7 @@ function updateTrackerSelection() {
     if (!container) return;
     container.querySelectorAll('.tracker-round').forEach(btn => {
         const roundNum = parseInt(btn.dataset.round, 10);
-        btn.classList.toggle('tracker-selected', roundNum === selectedHistoryRound);
+        btn.classList.toggle('tracker-selected', roundNum === getSelectedHistoryRound());
     });
 }
 
@@ -389,11 +390,11 @@ function updateTrackerSelection() {
 export function saveLivePairingHtml() {
     const pairingInfoEl = document.getElementById('pairing-info');
     if (pairingInfoEl && pairingInfoEl.innerHTML.trim()) {
-        livePairingHtml = pairingInfoEl.innerHTML;
+        setLivePairingHtml(pairingInfoEl.innerHTML);
     } else {
-        livePairingHtml = null;
+        setLivePairingHtml(null);
     }
-    selectedHistoryRound = null;
+    setSelectedHistoryRound(null);
 }
 
 export function showError(message) {

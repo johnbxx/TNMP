@@ -1,5 +1,6 @@
 /* global atob, Notification */
 import { WORKER_URL, VAPID_PUBLIC_KEY, CONFIG } from './config.js';
+import { showToast } from './toast.js';
 
 /**
  * Convert base64url VAPID key to Uint8Array for PushManager.subscribe().
@@ -18,7 +19,7 @@ function urlBase64ToUint8Array(base64String) {
 /**
  * Check if push is supported in this browser.
  */
-export function isPushSupported() {
+function isPushSupported() {
     return 'serviceWorker' in navigator
         && 'PushManager' in window
         && 'Notification' in window;
@@ -205,22 +206,6 @@ export async function updatePushPrefs() {
         console.warn('Push preferences sync failed:', err.message);
         showToast('Offline — will sync later');
     }
-}
-
-function showToast(message) {
-    let toast = document.getElementById('push-toast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'push-toast';
-        toast.className = 'share-toast';
-        toast.setAttribute('role', 'status');
-        toast.setAttribute('aria-live', 'polite');
-        document.body.appendChild(toast);
-    }
-    toast.textContent = message;
-    toast.classList.add('show');
-    clearTimeout(toast._hideTimer);
-    toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 /**

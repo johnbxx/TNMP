@@ -1,213 +1,77 @@
 import { Chess } from 'chess.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import '@chrisoakman/chessboard2/dist/chessboard2.min.css';
-import { lookupOpening } from './eco.js';
+import { formatName, resultClass, resultSymbol, getHeader } from './utils.js';
+import { parseMoveText, extractMoveText, nagToSymbol } from './pgn-parser.js';
 
 // --- State ---
 
-let chess = null;
 let board = null;
-let moveHistory = [];    // Array of { san, from, to, fen } from chess.history({verbose: true})
-let annotatedMoves = []; // Parsed annotation tree for display
-let currentMoveIndex = -1; // -1 = initial position
+let nodes = [];          // Flat array of tree nodes, index = node ID. nodes[0] = root (start position).
+let mainLineEnd = 0;     // Node ID of the last main-line move (cached for goToEnd)
+let currentNodeId = 0;   // Currently displayed node ID (0 = start position)
+let annotatedMoves = []; // Parsed annotation tree (from pgn-parser) — used by renderers
 let startingFen = null;
 let autoPlayTimer = null;
 let isPlaying = false;
 let rawPgn = null;       // Original PGN text for export
 
-// --- PGN Header Parsing ---
-
-function getHeader(pgn, tag) {
-    const m = pgn.match(new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`));
-    return m ? m[1] : '';
-}
-
-// --- PGN Annotation Parser ---
-
-// NAG symbols for common codes
-const NAG_SYMBOLS = {
-    1: '!', 2: '?', 3: '!!', 4: '??', 5: '!?', 6: '?!',
-    10: '=', 13: '\u221E', // ∞ unclear
-    14: '\u2A72', 15: '\u2A71', // ⩲ ⩱ slight advantage
-    16: '\u00B1', 17: '\u2213', // ± ∓ moderate advantage
-    18: '+\u2212', 19: '\u2212+', // +− −+ decisive advantage
-};
+// --- Move Tree ---
 
 /**
- * Parse PGN move text into an annotated move tree.
- * Returns array of move objects: { san, moveNum, isBlack, comment, nags, variations[] }
- * Each variation is itself an array of the same structure.
+ * Build a flat array of position nodes by walking the annotated move tree with chess.js.
+ * nodes[0] is the root (starting position, before any moves).
+ * Each node: { id, parentId, fen, san, from, to, comment, nags, mainChild, children, isVariation, ply }
  */
-function parseMoveText(moveText) {
-    const tokens = tokenizeMoveText(moveText);
-    return parseTokens(tokens, 0).moves;
-}
+function buildMoveTree(moves, fen) {
+    const root = { id: 0, parentId: -1, fen, san: null, from: null, to: null, comment: null, nags: null, mainChild: null, children: [], isVariation: false, ply: 0 };
+    const result = [root];
 
-function tokenizeMoveText(text) {
-    const tokens = [];
-    let i = 0;
-    while (i < text.length) {
-        const ch = text[i];
-        // Whitespace
-        if (/\s/.test(ch)) { i++; continue; }
-        // Brace comment
-        if (ch === '{') {
-            const end = text.indexOf('}', i + 1);
-            if (end === -1) { tokens.push({ type: 'comment', value: text.substring(i + 1).trim() }); break; }
-            tokens.push({ type: 'comment', value: text.substring(i + 1, end).trim() });
-            i = end + 1;
-            continue;
-        }
-        // Line comment
-        if (ch === ';') {
-            const end = text.indexOf('\n', i + 1);
-            if (end === -1) { i = text.length; continue; }
-            i = end + 1;
-            continue;
-        }
-        // Variation start/end
-        if (ch === '(') { tokens.push({ type: 'var_start' }); i++; continue; }
-        if (ch === ')') { tokens.push({ type: 'var_end' }); i++; continue; }
-        // NAG
-        if (ch === '$') {
-            const m = text.substring(i).match(/^\$(\d+)/);
-            if (m) { tokens.push({ type: 'nag', value: parseInt(m[1], 10) }); i += m[0].length; continue; }
-        }
-        // Result
-        const resultMatch = text.substring(i).match(/^(1-0|0-1|1\/2-1\/2|\*)/);
-        if (resultMatch && (i === 0 || /[\s)]/.test(text[i - 1]))) {
-            tokens.push({ type: 'result', value: resultMatch[1] });
-            i += resultMatch[0].length;
-            continue;
-        }
-        // Move number (e.g., "1." or "1..." or "15...")
-        const numMatch = text.substring(i).match(/^(\d+)(\.{1,3})/);
-        if (numMatch) {
-            tokens.push({ type: 'move_number', value: parseInt(numMatch[1], 10), dots: numMatch[2] });
-            i += numMatch[0].length;
-            continue;
-        }
-        // SAN move (includes standard piece moves, castling, pawn moves)
-        const sanMatch = text.substring(i).match(/^([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|O-O-O[+#]?|O-O[+#]?)/);
-        if (sanMatch) {
-            tokens.push({ type: 'move', value: sanMatch[1] });
-            i += sanMatch[0].length;
-            continue;
-        }
-        // Skip diagram markers [%...] or unknown characters
-        i++;
-    }
-    return tokens;
-}
+    function walk(moves, parentId, basePly, isVariation) {
+        let prevId = parentId;
+        let ply = basePly;
+        for (const m of moves) {
+            const prev = result[prevId];
+            const engine = new Chess(prev.fen);
+            const move = engine.move(m.san);
+            if (!move) break; // invalid move — stop this line
 
-function parseTokens(tokens, startIdx) {
-    const moves = [];
-    let i = startIdx;
-    let pendingComment = null;
-    let pendingNags = [];
-
-    while (i < tokens.length) {
-        const tok = tokens[i];
-        if (tok.type === 'var_end') {
-            // End of a variation — attach trailing comment/nags to last move
-            if (moves.length > 0 && pendingComment) {
-                moves[moves.length - 1].comment = (moves[moves.length - 1].comment || '') +
-                    (moves[moves.length - 1].comment ? ' ' : '') + pendingComment;
-                pendingComment = null;
-            }
-            return { moves, nextIdx: i + 1 };
-        }
-        if (tok.type === 'result') { i++; continue; }
-        if (tok.type === 'move_number') { i++; continue; }
-        if (tok.type === 'comment') {
-            pendingComment = tok.value;
-            i++;
-            continue;
-        }
-        if (tok.type === 'nag') {
-            pendingNags.push(tok.value);
-            i++;
-            continue;
-        }
-        if (tok.type === 'move') {
-            const move = {
-                san: tok.value,
-                comment: pendingComment,
-                nags: pendingNags.length > 0 ? [...pendingNags] : null,
-                variations: null,
+            const node = {
+                id: result.length,
+                parentId: prevId,
+                fen: engine.fen(),
+                san: m.san,
+                from: move.from,
+                to: move.to,
+                comment: m.comment,
+                nags: m.nags,
+                mainChild: null,
+                children: [],
+                isVariation,
+                ply: ply + 1,
             };
-            pendingComment = null;
-            pendingNags = [];
-            moves.push(move);
-            i++;
+            result.push(node);
 
-            // Collect post-move annotations (comments, NAGs, variations)
-            while (i < tokens.length) {
-                if (tokens[i].type === 'comment') {
-                    move.comment = (move.comment || '') + (move.comment ? ' ' : '') + tokens[i].value;
-                    i++;
-                } else if (tokens[i].type === 'nag') {
-                    if (!move.nags) move.nags = [];
-                    move.nags.push(tokens[i].value);
-                    i++;
-                } else if (tokens[i].type === 'var_start') {
-                    i++;
-                    const sub = parseTokens(tokens, i);
-                    if (!move.variations) move.variations = [];
-                    move.variations.push(sub.moves);
-                    i = sub.nextIdx;
-                } else {
-                    break;
+            // Link parent → child. First child added becomes mainChild.
+            if (prev.mainChild === null) prev.mainChild = node.id;
+            prev.children.push(node.id);
+
+            // Process variations branching from this move's parent position
+            if (m.variations) {
+                for (const variation of m.variations) {
+                    walk(variation, prevId, ply - 1, true);
                 }
             }
-            continue;
+
+            prevId = node.id;
+            ply++;
         }
-        if (tok.type === 'var_start') {
-            // Variation before any move in this context — attach to previous move if exists
-            i++;
-            const sub = parseTokens(tokens, i);
-            if (moves.length > 0) {
-                const prev = moves[moves.length - 1];
-                if (!prev.variations) prev.variations = [];
-                prev.variations.push(sub.moves);
-            }
-            i = sub.nextIdx;
-            continue;
-        }
-        i++;
     }
-    // Attach any trailing comment to last move
-    if (moves.length > 0 && pendingComment) {
-        moves[moves.length - 1].comment = (moves[moves.length - 1].comment || '') +
-            (moves[moves.length - 1].comment ? ' ' : '') + pendingComment;
-    }
-    return { moves, nextIdx: i };
-}
 
-/**
- * Extract the move text portion from a full PGN string.
- */
-function extractMoveText(pgn) {
-    const lastHeader = pgn.lastIndexOf(']\n');
-    return lastHeader >= 0 ? pgn.substring(lastHeader + 2).trim() : pgn.trim();
-}
+    walk(moves, 0, 0, false);
 
-/**
- * Build a clean PGN (headers + main line moves only) for chess.js.
- */
-function buildCleanPgn(pgn, mainLineMoves) {
-    const lastHeader = pgn.lastIndexOf(']\n');
-    const headers = lastHeader >= 0 ? pgn.substring(0, lastHeader + 2) : '';
-    const moveStr = mainLineMoves.map(m => m.san).join(' ');
-    return headers + '\n' + moveStr;
+    return result;
 }
-
-function nagToSymbol(nag) {
-    return NAG_SYMBOLS[nag] || `$${nag}`;
-}
-
-// Export parser functions for testing
-export { parseMoveText as _parseMoveText, extractMoveText as _extractMoveText, buildCleanPgn as _buildCleanPgn };
 
 // --- Public API ---
 
@@ -224,19 +88,19 @@ export function initViewer(pgn, playerColor, meta = {}) {
     const moveText = extractMoveText(pgn);
     annotatedMoves = parseMoveText(moveText);
 
-    // Load only main line into chess.js (avoids choking on nested variations)
-    chess = new Chess();
-    const cleanPgn = buildCleanPgn(pgn, annotatedMoves);
-    chess.loadPgn(cleanPgn);
+    // Extract starting FEN from headers (if any)
+    const fenHeader = getHeader(pgn, 'FEN');
+    startingFen = fenHeader || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-    // Store full move history from the loaded game
-    moveHistory = chess.history({ verbose: true });
+    // Build position-annotated tree (eagerly computes FEN for every node including variations)
+    nodes = buildMoveTree(annotatedMoves, startingFen);
 
-    // Store starting FEN (in case of non-standard start)
-    startingFen = chess.header().FEN || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    // Cache last main-line node for goToEnd
+    let endId = 0;
+    while (nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
+    mainLineEnd = endId;
 
-    // Start at initial position
-    currentMoveIndex = -1;
+    currentNodeId = 0;
 
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
@@ -257,30 +121,69 @@ export function initViewer(pgn, playerColor, meta = {}) {
 }
 
 /**
- * Navigate to a specific move index (-1 = start position).
+ * Navigate to a node by ID. Node 0 = start position.
  */
-export function goToMove(index) {
-    if (index < -1) index = -1;
-    if (index >= moveHistory.length) index = moveHistory.length - 1;
-    currentMoveIndex = index;
+function goToMove(nodeId) {
+    if (nodeId < 0 || nodeId >= nodes.length) return;
+    dismissBranchPopover();
+    currentNodeId = nodeId;
+    const node = nodes[nodeId];
 
-    // Replay moves from start to reach the desired position
-    const tempChess = new Chess(startingFen);
-    for (let i = 0; i <= index; i++) {
-        tempChess.move(moveHistory[i].san);
-    }
-
-    board.position(tempChess.fen());
-    highlightSquares(index >= 0 ? moveHistory[index] : null);
+    board.position(node.fen);
+    highlightSquares(node);
     highlightCurrentMove();
     updateNavigationButtons();
     updatePlayButton();
 }
 
-export function goToStart() { stopAutoPlay(); updatePlayButton(); goToMove(-1); }
-export function goToPrev() { stopAutoPlay(); updatePlayButton(); goToMove(currentMoveIndex - 1); }
-export function goToNext() { stopAutoPlay(); updatePlayButton(); goToMove(currentMoveIndex + 1); }
-export function goToEnd() { stopAutoPlay(); updatePlayButton(); goToMove(moveHistory.length - 1); }
+export function goToStart() {
+    stopAutoPlay(); updatePlayButton();
+    if (nodes[currentNodeId].isVariation) {
+        // In a variation — go to the branch point
+        let id = currentNodeId;
+        while (id > 0 && nodes[id].isVariation) id = nodes[id].parentId;
+        goToMove(id);
+    } else {
+        goToMove(0);
+    }
+}
+export function goToPrev() {
+    stopAutoPlay(); updatePlayButton();
+    dismissBranchPopover();
+    const parent = nodes[currentNodeId].parentId;
+    if (parent >= 0) goToMove(parent);
+}
+export function goToNext() {
+    stopAutoPlay(); updatePlayButton();
+
+    // If branch popover is open, "next" selects the highlighted option
+    if (branchChoices.length > 0) {
+        branchPopoverNavigate('select');
+        return;
+    }
+
+    const node = nodes[currentNodeId];
+    if (node.mainChild === null) return; // end of line — do nothing
+
+    // Branch mode: if the current node has multiple continuations, show popover
+    if (branchMode && node.children.length > 1) {
+        showBranchPopover(node);
+        return;
+    }
+
+    goToMove(node.mainChild);
+}
+export function goToEnd() {
+    stopAutoPlay(); updatePlayButton();
+    if (nodes[currentNodeId].isVariation) {
+        // In a variation — go to the end of this variation line
+        let id = currentNodeId;
+        while (nodes[id].mainChild !== null) id = nodes[id].mainChild;
+        goToMove(id);
+    } else {
+        goToMove(mainLineEnd);
+    }
+}
 
 export function flipBoard() {
     if (board) {
@@ -299,11 +202,140 @@ export function toggleComments() {
     return commentsHidden;
 }
 
+let branchMode = false;
+
+export function toggleBranchMode() {
+    branchMode = !branchMode;
+    if (!branchMode) dismissBranchPopover();
+    return branchMode;
+}
+
+let branchChoices = [];  // node IDs of current branch options
+let branchSelectedIdx = 0;
+
+/**
+ * Format a line preview starting from a node: "3. Bc4 Bc5 4. c3 ..."
+ * Shows up to maxMoves half-moves, with trailing ellipsis if the line continues.
+ */
+function formatLinePreview(startNodeId, maxMoves = 6) {
+    const parts = [];
+    let id = startNodeId;
+    let count = 0;
+    while (id !== null && count < maxMoves) {
+        const n = nodes[id];
+        const ply = n.ply;
+        const moveNum = Math.floor((ply - 1) / 2) + 1;
+        const isWhite = ply % 2 === 1;
+        if (isWhite) {
+            parts.push(`${moveNum}.\u00A0${n.san}`);
+        } else if (count === 0) {
+            // First move is black — show move number with dots
+            parts.push(`${moveNum}...\u00A0${n.san}`);
+        } else {
+            parts.push(n.san);
+        }
+        id = n.mainChild;
+        count++;
+    }
+    if (id !== null) parts.push('\u2026');
+    return parts.join(' ');
+}
+
+/**
+ * Show a centered popover with branch choices and line previews.
+ */
+function showBranchPopover(node) {
+    dismissBranchPopover();
+    branchChoices = node.children.slice();
+    branchSelectedIdx = 0;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'branch-overlay';
+    overlay.id = 'branch-popover';
+
+    const popover = document.createElement('div');
+    popover.className = 'branch-popover';
+
+    for (let i = 0; i < branchChoices.length; i++) {
+        const childId = branchChoices[i];
+        const btn = document.createElement('button');
+        btn.className = 'branch-option';
+        if (childId === node.mainChild) btn.classList.add('branch-main');
+        if (i === branchSelectedIdx) btn.classList.add('branch-selected');
+        btn.textContent = formatLinePreview(childId);
+        btn.dataset.nodeId = childId;
+        btn.dataset.branchIdx = i;
+        btn.addEventListener('click', () => {
+            dismissBranchPopover();
+            goToMove(childId);
+        });
+        popover.appendChild(btn);
+    }
+
+    overlay.appendChild(popover);
+
+    // Click on overlay background dismisses
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) dismissBranchPopover();
+    });
+
+    const modal = document.querySelector('.modal-content-viewer');
+    if (modal) modal.appendChild(overlay);
+}
+
+function dismissBranchPopover() {
+    const existing = document.getElementById('branch-popover');
+    if (existing) existing.remove();
+    branchChoices = [];
+    branchSelectedIdx = 0;
+}
+
+/**
+ * Returns true if the branch popover is currently visible.
+ */
+export function isBranchPopoverOpen() {
+    return branchChoices.length > 0;
+}
+
+/**
+ * Navigate within the branch popover. Called by keyboard handler.
+ * @param {'up'|'down'|'select'} action
+ */
+export function branchPopoverNavigate(action) {
+    if (branchChoices.length === 0) return;
+    if (action === 'up') {
+        branchSelectedIdx = (branchSelectedIdx - 1 + branchChoices.length) % branchChoices.length;
+        updateBranchSelection();
+    } else if (action === 'down') {
+        branchSelectedIdx = (branchSelectedIdx + 1) % branchChoices.length;
+        updateBranchSelection();
+    } else if (action === 'select') {
+        const childId = branchChoices[branchSelectedIdx];
+        dismissBranchPopover();
+        goToMove(childId);
+    }
+}
+
+function updateBranchSelection() {
+    const popover = document.querySelector('.branch-popover');
+    if (!popover) return;
+    popover.querySelectorAll('.branch-option').forEach((btn, i) => {
+        btn.classList.toggle('branch-selected', i === branchSelectedIdx);
+    });
+}
+
 /**
  * Return the full PGN text for the current game.
  */
 export function getGamePgn() {
     return rawPgn || null;
+}
+
+/**
+ * Return just the move text (no headers) for the current game.
+ */
+export function getGameMoves() {
+    return rawPgn ? extractMoveText(rawPgn) : null;
 }
 
 export function destroyViewer() {
@@ -312,13 +344,15 @@ export function destroyViewer() {
         board.destroy();
         board = null;
     }
-    chess = null;
-    moveHistory = [];
+    nodes = [];
+    mainLineEnd = 0;
+    currentNodeId = 0;
     annotatedMoves = [];
-    currentMoveIndex = -1;
     startingFen = null;
     rawPgn = null;
     commentsHidden = false;
+    branchMode = false;
+    dismissBranchPopover();
 
     // Clear square highlights
     if (highlightStyleEl) {
@@ -352,18 +386,19 @@ export function toggleAutoPlay() {
 
 function startAutoPlay() {
     if (isPlaying) return;
-    // If at the end, restart from the beginning
-    if (currentMoveIndex >= moveHistory.length - 1) {
-        goToMove(-1);
+    // If at the end of main line, restart from the beginning
+    if (currentNodeId === mainLineEnd) {
+        goToMove(0);
     }
     isPlaying = true;
     autoPlayTimer = setInterval(() => {
-        if (currentMoveIndex >= moveHistory.length - 1) {
+        const next = nodes[currentNodeId].mainChild;
+        if (next === null) {
             stopAutoPlay();
             updatePlayButton();
             return;
         }
-        goToMove(currentMoveIndex + 1);
+        goToMove(next);
     }, AUTO_PLAY_INTERVAL_MS);
     updatePlayButton();
 }
@@ -387,20 +422,6 @@ function updatePlayButton() {
 
 // --- Internal Rendering ---
 
-function resultClass(result, side) {
-    if (result === '1/2-1/2') return 'viewer-draw';
-    if ((result === '1-0' && side === 'white') || (result === '0-1' && side === 'black')) return 'viewer-winner';
-    if ((result === '1-0' && side === 'black') || (result === '0-1' && side === 'white')) return 'viewer-loser';
-    return '';
-}
-
-function resultSymbol(result, side) {
-    if (result === '1/2-1/2') return '\u00BD';
-    if ((result === '1-0' && side === 'white') || (result === '0-1' && side === 'black')) return '1';
-    if ((result === '1-0' && side === 'black') || (result === '0-1' && side === 'white')) return '0';
-    return '';
-}
-
 function renderGameHeader(pgn, meta = {}) {
     const headerEl = document.getElementById('viewer-header');
     if (!headerEl) return;
@@ -411,12 +432,6 @@ function renderGameHeader(pgn, meta = {}) {
     const blackElo = getHeader(pgn, 'BlackElo');
     const result = getHeader(pgn, 'Result');
     const ecoCode = getHeader(pgn, 'ECO');
-
-    // Format names: "LastName, FirstName" → "FirstName LastName"
-    const formatName = (name) => {
-        const parts = name.split(',').map(s => s.trim());
-        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
-    };
 
     // Round/Board info — from meta or parsed from PGN [Round "4.18"]
     const round = meta.round || extractRoundFromPgn(pgn);
@@ -463,17 +478,12 @@ function renderGameHeader(pgn, meta = {}) {
         roundBoardHtml = `<div class="viewer-round-info">${parts.join(' \u00B7 ')}</div>`;
     }
 
-    // ECO opening name — prefer pre-computed from worker, fall back to client-side lookup
+    // ECO opening name — from server-provided metadata, or just the ECO code from the PGN header
     let openingHtml = '';
     if (meta.eco && meta.openingName) {
         openingHtml = `<div class="viewer-opening"><span class="viewer-eco-code">${meta.eco}</span>${meta.openingName}</div>`;
-    } else {
-        const movesStart = pgn.lastIndexOf(']\n');
-        const moveText = movesStart >= 0 ? pgn.substring(movesStart + 2) : '';
-        const opening = lookupOpening(ecoCode || null, moveText);
-        if (opening) {
-            openingHtml = `<div class="viewer-opening"><span class="viewer-eco-code">${opening.eco}</span>${opening.name}</div>`;
-        }
+    } else if (ecoCode) {
+        openingHtml = `<div class="viewer-opening"><span class="viewer-eco-code">${ecoCode}</span></div>`;
     }
 
     const whiteClass = resultClass(result, 'white');
@@ -541,8 +551,16 @@ function syncDesktopLayout() {
         const layoutEl = document.querySelector('.viewer-layout');
         if (!modalEl || !boardEl || !movesEl || !layoutEl) return;
 
+        // Read layout constants from CSS custom properties
+        const rootStyle = getComputedStyle(document.documentElement);
+        const cssNum = (prop) => parseFloat(rootStyle.getPropertyValue(prop)) || 0;
+        const layoutGap = cssNum('--viewer-layout-gap');
+        const minMovesWidth = cssNum('--viewer-min-moves-w');
+        const minMovesHeight = cssNum('--viewer-min-moves-h');
+        const minBoard = cssNum('--viewer-min-board');
+        const stackedThreshold = cssNum('--viewer-stacked-threshold');
+
         const hasBrowser = modalEl.classList.contains('has-browser');
-        // When browser panel is embedded, measure from .viewer-main
         const containerEl = hasBrowser
             ? modalEl.querySelector('.viewer-main')
             : modalEl;
@@ -551,20 +569,14 @@ function syncDesktopLayout() {
         const headerEl = document.getElementById('viewer-header');
         const toolbarEl = containerEl.querySelector('.viewer-toolbar');
 
-        // Measure non-layout content heights
         const headerH = headerEl ? headerEl.offsetHeight : 0;
         const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
         const containerPadding = parseFloat(getComputedStyle(containerEl).paddingTop)
                                + parseFloat(getComputedStyle(containerEl).paddingBottom);
-        const layoutGap = 12; // .viewer-layout gap (0.75rem)
-        const modalGap = headerH > 0 ? 12 : 0;
+        const modalGap = headerH > 0 ? layoutGap : 0;
 
-        // Available height for the board+moves area
         const availableHeight = containerEl.clientHeight - headerH - toolbarH - containerPadding - modalGap;
-        const minMovesWidth = 160;
-        const minMovesHeight = 120; // min height for moves when stacked below board
 
-        // Available width for the board+moves area
         let availableWidth;
         if (hasBrowser) {
             const mainPadding = parseFloat(getComputedStyle(containerEl).paddingLeft)
@@ -576,35 +588,29 @@ function syncDesktopLayout() {
             availableWidth = window.innerWidth * 0.95 - hPadding;
         }
 
-        // Side-by-side board size: capped so moves panel has at least minMovesWidth
         const sideBySideBoardSize = Math.min(availableHeight, availableWidth - minMovesWidth - layoutGap);
-        // Stacked board size: capped by width and by height minus space for moves
         const stackedBoardSize = Math.min(availableWidth, availableHeight - minMovesHeight - layoutGap);
-
-        // Use stacked layout if it gives a significantly larger board (>15% bigger)
-        const useStacked = hasBrowser && stackedBoardSize > sideBySideBoardSize * 1.15;
+        const useStacked = hasBrowser && stackedBoardSize > sideBySideBoardSize * stackedThreshold;
 
         let boardSize;
         if (useStacked) {
             layoutEl.classList.add('viewer-layout-stacked');
-            boardSize = Math.floor(Math.max(stackedBoardSize, 200));
+            boardSize = Math.floor(Math.max(stackedBoardSize, minBoard));
             boardEl.style.width = boardSize + 'px';
             movesEl.style.maxHeight = (availableHeight - boardSize - layoutGap) + 'px';
         } else {
             layoutEl.classList.remove('viewer-layout-stacked');
-            boardSize = Math.floor(Math.max(sideBySideBoardSize, 200));
+            boardSize = Math.floor(Math.max(sideBySideBoardSize, minBoard));
             boardEl.style.width = boardSize + 'px';
             movesEl.style.maxHeight = boardSize + 'px';
         }
 
-        // Only set modal width when browser panel is NOT embedded (CSS handles it otherwise)
         if (!hasBrowser) {
             const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
                            + parseFloat(getComputedStyle(modalEl).paddingRight);
             modalEl.style.width = (boardSize + minMovesWidth + layoutGap + hPadding) + 'px';
         }
 
-        // Chessboard2 needs a resize nudge after width change
         if (board && board.resize) board.resize();
     });
 }
@@ -619,7 +625,7 @@ function renderMoveList() {
     if (isDesktop() && !hasVariations) {
         // Desktop: two-column table (move number | white | black)
         container.innerHTML = renderMoveTable();
-    } else if (hasAnnotations && annotatedMoves.length > 0) {
+    } else if (hasAnnotations) {
         // Annotated games with variations use inline format
         container.innerHTML = renderAnnotatedMoves(annotatedMoves, 0, false);
     } else {
@@ -627,39 +633,51 @@ function renderMoveList() {
         container.innerHTML = renderMoveListInline();
     }
 
-    // Event delegation for clicking moves
+    // Event delegation for clicking moves (main line and variations)
     container.onclick = (e) => {
-        const moveEl = e.target.closest('[data-move-index]');
+        const moveEl = e.target.closest('[data-node-id]');
         if (moveEl) {
             stopAutoPlay();
             updatePlayButton();
-            goToMove(parseInt(moveEl.dataset.moveIndex, 10));
+            goToMove(parseInt(moveEl.dataset.nodeId, 10));
         }
     };
 }
 
 function renderMoveListInline() {
     let html = '';
-    for (let i = 0; i < moveHistory.length; i++) {
-        const moveNum = Math.floor(i / 2) + 1;
-        if (i % 2 === 0) html += `<span class="move-number">${moveNum}.</span>`;
-        html += `<span class="move${i === currentMoveIndex ? ' move-current' : ''}" data-move-index="${i}">${moveHistory[i].san}</span> `;
+    let id = nodes[0].mainChild;
+    while (id !== null) {
+        const node = nodes[id];
+        const ply = node.ply;
+        const moveNum = Math.floor((ply - 1) / 2) + 1;
+        if (ply % 2 === 1) html += `<span class="move-number">${moveNum}.</span>`;
+        html += `<span class="move${id === currentNodeId ? ' move-current' : ''}" data-node-id="${id}">${node.san}</span> `;
+        id = node.mainChild;
     }
     return html;
 }
 
 function renderMoveTable() {
+    // Collect main line nodes
+    const mainLine = [];
+    let id = nodes[0].mainChild;
+    while (id !== null) {
+        mainLine.push(nodes[id]);
+        id = nodes[id].mainChild;
+    }
+
     let html = '<div class="move-table">';
-    for (let i = 0; i < moveHistory.length; i += 2) {
+    for (let i = 0; i < mainLine.length; i += 2) {
+        const white = mainLine[i];
+        const black = mainLine[i + 1];
         const moveNum = Math.floor(i / 2) + 1;
-        const whiteIdx = i;
-        const blackIdx = i + 1;
 
         html += `<span class="move-num">${moveNum}.</span>`;
-        html += `<span class="move${whiteIdx === currentMoveIndex ? ' move-current' : ''}" data-move-index="${whiteIdx}">${moveHistory[whiteIdx].san}</span>`;
+        html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}" data-node-id="${white.id}">${white.san}</span>`;
 
-        if (blackIdx < moveHistory.length) {
-            html += `<span class="move${blackIdx === currentMoveIndex ? ' move-current' : ''}" data-move-index="${blackIdx}">${moveHistory[blackIdx].san}</span>`;
+        if (black) {
+            html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}" data-node-id="${black.id}">${black.san}</span>`;
         } else {
             html += `<span class="move-empty"></span>`;
         }
@@ -668,18 +686,25 @@ function renderMoveTable() {
     return html;
 }
 
-function renderAnnotatedMoves(moves, startIndex, isVariation) {
+/**
+ * Render annotated moves with variations. parentNodeId is the tree node whose
+ * children correspond to the first move in `moves`.
+ */
+function renderAnnotatedMoves(moves, parentNodeId, isVariation) {
     let html = '';
-    let idx = startIndex;
+    let prevNodeId = parentNodeId;
     for (let i = 0; i < moves.length; i++) {
         const m = moves[i];
-        const moveNum = Math.floor(idx / 2) + 1;
-        const isBlack = (idx % 2 === 1);
 
-        // Pre-move comment (before any move in the line, or between moves)
-        if (m.comment && !isVariation && i === 0 && startIndex === 0) {
-            // Leading comment before game starts — rare, skip for now
-        }
+        // Find the matching child node (by SAN) under prevNodeId
+        const parent = nodes[prevNodeId];
+        const nodeId = parent.children.find(cid => nodes[cid].san === m.san);
+        if (nodeId === undefined) break; // shouldn't happen if tree is consistent
+
+        const node = nodes[nodeId];
+        const ply = node.ply;
+        const moveNum = Math.floor((ply - 1) / 2) + 1;
+        const isBlack = (ply % 2 === 0);
 
         // Move number
         if (!isBlack) {
@@ -688,34 +713,30 @@ function renderAnnotatedMoves(moves, startIndex, isVariation) {
             html += `<span class="move-number">${moveNum}...</span>`;
         }
 
-        // The move itself (only main line moves are clickable)
-        if (!isVariation) {
-            const nags = m.nags ? m.nags.map(nagToSymbol).join('') : '';
-            html += `<span class="move${idx === currentMoveIndex ? ' move-current' : ''}" data-move-index="${idx}">${m.san}${nags}</span> `;
-        } else {
-            const nags = m.nags ? m.nags.map(nagToSymbol).join('') : '';
-            html += `<span class="move-variation">${m.san}${nags}</span> `;
-        }
+        // The move itself — all moves are now clickable (main line and variations)
+        const nags = m.nags ? m.nags.map(nagToSymbol).join('') : '';
+        const cls = isVariation ? 'move-variation' : 'move';
+        const current = nodeId === currentNodeId ? ' move-current' : '';
+        html += `<span class="${cls}${current}" data-node-id="${nodeId}">${m.san}${nags}</span> `;
 
         // Post-move comment
         if (m.comment) {
-            // Clean up diagram markers [#] and evaluation markers
             const cleaned = m.comment.replace(/\[#\]/g, '').replace(/\[%[^\]]*\]/g, '').trim();
             if (cleaned) {
                 html += `<span class="move-comment">${cleaned}</span> `;
             }
         }
 
-        // Variations (alternative to this move — start at same ply index)
+        // Variations (alternative lines branching from the same parent position)
         if (m.variations) {
             for (const variation of m.variations) {
                 html += `<span class="move-variation-block">(`;
-                html += renderAnnotatedMoves(variation, idx, true);
+                html += renderAnnotatedMoves(variation, prevNodeId, true);
                 html += `)</span> `;
             }
         }
 
-        idx++;
+        prevNodeId = nodeId;
     }
     return html;
 }
@@ -745,8 +766,8 @@ function highlightCurrentMove() {
     const container = document.getElementById('viewer-moves');
     if (!container) return;
 
-    container.querySelectorAll('.move').forEach(el => {
-        el.classList.toggle('move-current', parseInt(el.dataset.moveIndex) === currentMoveIndex);
+    container.querySelectorAll('[data-node-id]').forEach(el => {
+        el.classList.toggle('move-current', parseInt(el.dataset.nodeId) === currentNodeId);
     });
 
     // Auto-scroll to current move
@@ -762,8 +783,9 @@ function updateNavigationButtons() {
     const nextBtn = document.getElementById('viewer-next');
     const endBtn = document.getElementById('viewer-end');
 
-    const atStart = currentMoveIndex <= -1;
-    const atEnd = currentMoveIndex >= moveHistory.length - 1;
+    const node = nodes[currentNodeId];
+    const atStart = node && node.parentId < 0;
+    const atEnd = node && node.mainChild === null;
 
     if (startBtn) startBtn.disabled = atStart;
     if (prevBtn) prevBtn.disabled = atStart;

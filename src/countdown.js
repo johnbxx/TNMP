@@ -1,16 +1,10 @@
 import { STATE } from './config.js';
+import { getCurrentState } from './state.js';
 
-// Countdown timer state
-export let countdownSeconds = 60;
-export let countdownInterval = null;
-export let offSeasonInterval = null;
-export let currentState = null;
-export let currentPairing = null;
-export let lastRoundNumber = 1;
-
-export function setCurrentState(state) { currentState = state; }
-export function setCurrentPairing(pairing) { currentPairing = pairing; }
-export function setLastRoundNumber(n) { lastRoundNumber = n; }
+// Countdown timer internals
+let countdownSeconds = 60;
+let countdownInterval = null;
+let offSeasonInterval = null;
 
 export function resetCountdown() {
     countdownSeconds = 60;
@@ -24,7 +18,7 @@ export function updateCountdownDisplay() {
         el.textContent = countdownSeconds;
     }
     if (countdownContainer) {
-        const shouldShow = currentState === STATE.NO;
+        const shouldShow = getCurrentState() === STATE.NO;
         countdownContainer.style.display = shouldShow ? 'block' : 'none';
     }
 }
@@ -78,13 +72,20 @@ export function startOffSeasonCountdown(targetDate) {
     offSeasonInterval = setInterval(render, 1000);
 }
 
+export function stopOffSeasonCountdown() {
+    if (offSeasonInterval) {
+        clearInterval(offSeasonInterval);
+        offSeasonInterval = null;
+    }
+}
+
 export function startCountdown(checkPairings) {
     if (countdownInterval) {
         clearInterval(countdownInterval);
     }
     resetCountdown();
     countdownInterval = setInterval(() => {
-        if (currentState !== STATE.NO) {
+        if (getCurrentState() !== STATE.NO) {
             stopCountdown();
             return;
         }

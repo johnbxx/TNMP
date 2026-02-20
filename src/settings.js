@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { showToast } from './share.js';
+import { showToast } from './toast.js';
 import { clearRoundHistory } from './history.js';
 import { openModal, closeModal } from './modal.js';
 import { checkPushStatus, syncPushName } from './push.js';

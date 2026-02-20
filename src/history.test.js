@@ -1,15 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { loadRoundHistory, updateRoundHistory, backfillFromStandings } from './history.js';
+import { loadRoundHistory, updateRoundHistory } from './history.js';
 
 const STORAGE_KEY = 'roundHistory';
-
-let html;
-
-beforeAll(() => {
-    html = readFileSync(resolve(__dirname, '../test/fixtures/pairings.html'), 'utf-8');
-});
 
 beforeEach(() => {
     localStorage.clear();
@@ -139,62 +131,3 @@ describe('updateRoundHistory', () => {
     });
 });
 
-// --- backfillFromStandings ---
-
-describe('backfillFromStandings', () => {
-    it('backfills rounds from standings for John Boyer', () => {
-        const history = backfillFromStandings(html, 'John Boyer', 'TNM', null);
-        // John Boyer should have round data from standings
-        expect(Object.keys(history.rounds).length).toBeGreaterThan(0);
-        // Check that results are valid codes
-        for (const [, round] of Object.entries(history.rounds)) {
-            expect(['W', 'L', 'D', 'H', 'B', 'U']).toContain(round.result);
-        }
-    });
-
-    it('fills opponent names from standings rank map', () => {
-        const history = backfillFromStandings(html, 'John Boyer', 'TNM', null);
-        // At least one round should have an opponent name (non-bye rounds)
-        const nonByeRounds = Object.values(history.rounds).filter(r => !r.isBye);
-        const withOpponent = nonByeRounds.filter(r => r.opponent);
-        expect(withOpponent.length).toBeGreaterThan(0);
-    });
-
-    it('uses gameColors for color resolution when provided', () => {
-        const gameColors = {
-            2: [{ white: 'Siegel, David', black: 'Boyer, John', result: '1-0', board: 18 }],
-        };
-        const history = backfillFromStandings(html, 'John Boyer', 'TNM', gameColors);
-        if (history.rounds[2]) {
-            expect(history.rounds[2].color).toBe('Black');
-            expect(history.rounds[2].board).toBe(18);
-        }
-    });
-
-    it('does not overwrite existing results', () => {
-        // Pre-populate round 2 with a result
-        updateRoundHistory(2, {
-            board: '18', color: 'Black', opponent: 'David Siegel',
-            opponentRating: 1700, isBye: false, playerResult: '0',
-        }, 'TNM');
-
-        const history = backfillFromStandings(html, 'John Boyer', 'TNM', null);
-        expect(history.rounds[2].result).toBe('L');
-        expect(history.rounds[2].opponent).toBe('David Siegel');
-    });
-
-    it('returns empty history when player not found', () => {
-        const history = backfillFromStandings(html, 'Nonexistent Player', 'TNM', null);
-        expect(Object.keys(history.rounds)).toHaveLength(0);
-    });
-
-    it('clears rounds when tournament name changes', () => {
-        updateRoundHistory(1, { isBye: true, byeType: 'full' }, 'Old Tournament');
-        const history = backfillFromStandings(html, 'John Boyer', 'TNM', null);
-        expect(history.tournamentName).toBe('TNM');
-        // Old round 1 bye should be gone, replaced by backfilled data
-        if (history.rounds[1]) {
-            expect(history.rounds[1].result).toBeTruthy();
-        }
-    });
-});

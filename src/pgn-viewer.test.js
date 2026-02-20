@@ -3,7 +3,7 @@ import { Chess } from 'chess.js';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { _parseMoveText, _extractMoveText, _buildCleanPgn } from './pgn-viewer.js';
+import { parseMoveText, extractMoveText, buildCleanPgn } from './pgn-parser.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let samplePgn;
@@ -105,8 +105,8 @@ describe('Move navigation logic', () => {
 
 describe('Annotated PGN parsing', () => {
     it('extracts main line moves from heavily annotated PGN', () => {
-        const moveText = _extractMoveText(annotatedPgn);
-        const parsed = _parseMoveText(moveText);
+        const moveText = extractMoveText(annotatedPgn);
+        const parsed = parseMoveText(moveText);
         // Main line should have 83 half-moves (PlyCount header says 83)
         expect(parsed.length).toBe(83);
         expect(parsed[0].san).toBe('e4');
@@ -114,9 +114,9 @@ describe('Annotated PGN parsing', () => {
     });
 
     it('builds clean PGN that chess.js can load', () => {
-        const moveText = _extractMoveText(annotatedPgn);
-        const parsed = _parseMoveText(moveText);
-        const cleanPgn = _buildCleanPgn(annotatedPgn, parsed);
+        const moveText = extractMoveText(annotatedPgn);
+        const parsed = parseMoveText(moveText);
+        const cleanPgn = buildCleanPgn(annotatedPgn, parsed);
 
         const chess = new Chess();
         chess.loadPgn(cleanPgn);
@@ -126,8 +126,8 @@ describe('Annotated PGN parsing', () => {
     });
 
     it('preserves comments from annotations', () => {
-        const moveText = _extractMoveText(annotatedPgn);
-        const parsed = _parseMoveText(moveText);
+        const moveText = extractMoveText(annotatedPgn);
+        const parsed = parseMoveText(moveText);
         // Move 5...Bg4 has a $2 NAG (blunder)
         const bg4 = parsed[9]; // 5...Bg4 is the 10th half-move (index 9)
         expect(bg4.san).toBe('Bg4');
@@ -135,8 +135,8 @@ describe('Annotated PGN parsing', () => {
     });
 
     it('preserves variations', () => {
-        const moveText = _extractMoveText(annotatedPgn);
-        const parsed = _parseMoveText(moveText);
+        const moveText = extractMoveText(annotatedPgn);
+        const parsed = parseMoveText(moveText);
         // 15. Nxf7 has a variation (15. O-O ...)
         const nxf7 = parsed[28]; // 15. Nxf7 is the 29th half-move (index 28)
         expect(nxf7.san).toBe('Nxf7');
@@ -146,15 +146,15 @@ describe('Annotated PGN parsing', () => {
     });
 
     it('handles deeply nested variations without error', () => {
-        const moveText = _extractMoveText(annotatedPgn);
-        const parsed = _parseMoveText(moveText);
+        const moveText = extractMoveText(annotatedPgn);
+        const parsed = parseMoveText(moveText);
         // The game has variations nested 3+ levels deep — should not throw
         expect(parsed.length).toBe(83);
     });
 
     it('works with unannotated PGN too', () => {
-        const moveText = _extractMoveText(samplePgn);
-        const parsed = _parseMoveText(moveText);
+        const moveText = extractMoveText(samplePgn);
+        const parsed = parseMoveText(moveText);
         expect(parsed.length).toBe(92);
         expect(parsed[0].san).toBe('e4');
         // No annotations

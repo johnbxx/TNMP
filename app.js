@@ -1,6 +1,7 @@
-import { WORKER_URL, CONFIG, STATE, tournamentMeta, setTournamentMeta } from './src/config.js';
-import { showLoading, showState, showError, updateTournamentLink, showOfflineBanner, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml, setCheckHandler } from './src/ui.js';
-import { resetCountdown, stopCountdown, startCountdown, setLastRoundNumber } from './src/countdown.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta } from './src/config.js';
+import { showLoading, showState, showError, updateTournamentLink, showOfflineBanner, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
+import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
+import { setLastRoundNumber, setCurrentState, setCurrentPairing, setRoundInfo } from './src/state.js';
 import { shareStatus } from './src/share.js';
 import { openSettings, closeSettings, saveSettings } from './src/settings.js';
 import { previewState } from './src/debug.js';
@@ -8,10 +9,35 @@ import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
 import { registerModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, updatePushPrefs, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGameViewer, openGameViewerWithPgn, viewerNavigateGame } from './src/game-viewer.js';
-import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, getGamePgn } from './src/pgn-viewer.js';
-import { showToast } from './src/share.js';
-import { openGameBrowser, closeGameBrowser, prefetchGames, openGameWithPlayerNav, clearFilter, openBrowserWithCurrentFilter } from './src/game-browser.js';
+import { openGameViewer, closeGameViewer, openGameViewerWithPgn, viewerNavigateGame, updateNavArrows } from './src/game-viewer.js';
+import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
+import { showToast } from './src/toast.js';
+import { openGameBrowser, closeGameBrowser, prefetchGames, openGameWithPlayerNav, clearFilter, openBrowserWithCurrentFilter, getFilteredGames, getCachedPgn, getActiveFilter } from './src/game-browser.js';
+import { formatName, getHeader } from './src/utils.js';
+
+function downloadPgn(pgnText, filename) {
+    const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+const SECTION_SLUGS = {
+    '2000+': '2000',
+    '1600-1999': 'u2000',
+    'U1600': 'u1600',
+    'Extra Games': 'extra',
+};
+
+function sectionForFilename(s) {
+    if (!s) return null;
+    return SECTION_SLUGS[s] || s.replace(/[^a-zA-Z0-9]/g, '');
+}
 
 // --- Deep link handler ---
 
@@ -56,12 +82,14 @@ const STATE_MAP = {
 function renderState(stateData, roundHistory) {
     // Update tournament metadata
     if (stateData.tournamentName || stateData.roundDates) {
+        const prev = getTournamentMeta();
         setTournamentMeta({
-            name: stateData.tournamentName || tournamentMeta.name,
-            url: stateData.tournamentUrl || tournamentMeta.url,
-            roundDates: stateData.roundDates || tournamentMeta.roundDates,
-            totalRounds: stateData.totalRounds || tournamentMeta.totalRounds,
-            nextTournament: stateData.nextTournament || tournamentMeta.nextTournament,
+            name: stateData.tournamentName || prev.name,
+            slug: stateData.tournamentSlug || prev.slug,
+            url: stateData.tournamentUrl || prev.url,
+            roundDates: stateData.roundDates || prev.roundDates,
+            totalRounds: stateData.totalRounds || prev.totalRounds,
+            nextTournament: stateData.nextTournament || prev.nextTournament,
         });
         if (stateData.tournamentUrl) {
             CONFIG.tournamentUrl = stateData.tournamentUrl;
@@ -74,13 +102,19 @@ function renderState(stateData, roundHistory) {
     const roundNumber = stateData.round || 0;
     const displayedState = STATE_MAP[state] || STATE.NO;
 
+    // Set Model state before rendering View
+    setCurrentState(displayedState);
+    setRoundInfo(info || '');
+
     if (state === 'off_season') {
         const offSeasonOpts = stateData.offSeason?.targetDate
             ? { targetDate: stateData.offSeason.targetDate }
             : null;
+        setCurrentPairing(null);
         showState(STATE.OFF_SEASON, info, offSeasonOpts);
         stopCountdown();
     } else if (state === 'too_early' || state === 'no') {
+        setCurrentPairing(null);
         showState(displayedState, info);
         if (state === 'too_early') stopCountdown();
     } else {
@@ -88,18 +122,23 @@ function renderState(stateData, roundHistory) {
         setLastRoundNumber(roundNumber || 1);
         const pairingInfo = stateData.pairing || null;
         if (pairingInfo) {
-            roundHistory = updateRoundHistory(roundNumber, pairingInfo, tournamentMeta.name);
+            roundHistory = updateRoundHistory(roundNumber, pairingInfo, getTournamentMeta().name);
         }
+        setCurrentPairing(pairingInfo);
         showState(displayedState, info, pairingInfo);
         if (state === 'results' || state === 'yes') stopCountdown();
         if (pairingInfo) saveLivePairingHtml();
     }
 
+    // Wire "Check Again" button handler (showState sets onclick=null for check-again states)
+    const btn = document.getElementById('check-btn');
+    if (!btn.onclick) btn.onclick = wrappedCheckPairings;
+
     // Render round tracker
     if (CONFIG.playerName && Object.keys(roundHistory.rounds).length > 0) {
         const rounds = Object.keys(roundHistory.rounds);
         const lastRound = Math.max(...rounds.map(Number));
-        renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState, lastRound);
+        renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, displayedState, lastRound);
     }
 }
 
@@ -171,7 +210,7 @@ async function checkPairings() {
             // Fetch fresh player history from server
             let roundHistory = loadRoundHistory();
             if (CONFIG.playerName) {
-                roundHistory = await fetchPlayerHistory(CONFIG.playerName, tournamentMeta.name);
+                roundHistory = await fetchPlayerHistory(CONFIG.playerName, getTournamentMeta().name);
             }
 
             // Only re-render if state changed (avoid meme flicker)
@@ -185,7 +224,7 @@ async function checkPairings() {
                     const lastRound = Math.max(...rounds.map(Number));
                     const roundNumber = serverState.round || 0;
                     const displayedState = STATE_MAP[serverState.state] || STATE.NO;
-                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState, lastRound);
+                    renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, displayedState, lastRound);
                 }
             }
             return;
@@ -209,9 +248,6 @@ const wrappedCheckPairings = async function() {
     await checkPairings();
 };
 
-// Register the check handler so showState can assign it to the button's onclick
-setCheckHandler(wrappedCheckPairings);
-
 // --- Register modal close handlers for backdrop clicks ---
 registerModalClose('settings-modal', closeSettings);
 registerModalClose('about-modal', closeAbout);
@@ -228,6 +264,14 @@ document.addEventListener('keydown', (e) => {
     const browserModal = document.getElementById('browser-modal');
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
+        // Branch popover intercepts arrow keys when open
+        if (isBranchPopoverOpen()) {
+            if (e.key === 'ArrowUp') { branchPopoverNavigate('up'); e.preventDefault(); }
+            else if (e.key === 'ArrowDown') { branchPopoverNavigate('down'); e.preventDefault(); }
+            else if (e.key === 'ArrowRight' || e.key === 'Enter') { branchPopoverNavigate('select'); e.preventDefault(); }
+            else if (e.key === 'ArrowLeft' || e.key === 'Escape') { goToPrev(); e.preventDefault(); }
+            return;
+        }
         if (e.key === 'ArrowLeft') { goToPrev(); e.preventDefault(); }
         else if (e.key === 'ArrowRight') { goToNext(); e.preventDefault(); }
         else if (e.key === 'Home') { goToStart(); e.preventDefault(); }
@@ -237,6 +281,10 @@ document.addEventListener('keydown', (e) => {
         else if (e.key === 'c' || e.key === 'C') {
             const hidden = toggleComments();
             document.getElementById('viewer-comments').classList.toggle('active', !hidden);
+        }
+        else if (e.key === 'b' || e.key === 'B') {
+            const active = toggleBranchMode();
+            document.getElementById('viewer-branch').classList.toggle('active', active);
         }
         else if (e.key === 'Escape') { closeGameViewer(); }
     } else if (!browserModal.classList.contains('hidden')) {
@@ -264,6 +312,28 @@ document.addEventListener('keydown', (e) => {
 
 // --- Wire up event handlers (CSP-compliant, no inline handlers) ---
 document.getElementById('games-btn').addEventListener('click', openGameBrowser);
+document.getElementById('browser-modal').addEventListener('click', (e) => {
+    if (!e.target.closest('#browser-export')) return;
+    const games = getFilteredGames();
+    if (games.length === 0) { showToast('No games to export'); return; }
+    const pgns = games.map(g => getCachedPgn(g.round, g.board)).filter(Boolean);
+    if (pgns.length === 0) { showToast('No PGN data available'); return; }
+    const pgnText = pgns.join('\n\n');
+    const slug = getTournamentMeta().slug;
+    const filter = getActiveFilter();
+    const prefix = slug || 'games';
+    let filename;
+    if (filter?.type === 'player') {
+        filename = `${prefix}-${filter.label.replace(/\s+/g, '-')}.pgn`;
+    } else if (filter?.type === 'section') {
+        const secs = filter.sections.map(sectionForFilename).join('-');
+        filename = `${prefix}-${secs}-R${games[0].round}.pgn`;
+    } else {
+        filename = `${prefix}-R${games[0].round}.pgn`;
+    }
+    downloadPgn(pgnText, filename);
+    showToast(`${pgns.length} game${pgns.length > 1 ? 's' : ''} exported`);
+});
 document.getElementById('settings-link').addEventListener('click', openSettings);
 document.getElementById('share-link').addEventListener('click', shareStatus);
 document.getElementById('about-link').addEventListener('click', openAbout);
@@ -327,6 +397,11 @@ document.getElementById('viewer-comments').addEventListener('click', () => {
 // Comments are visible by default, so mark the button active initially
 document.getElementById('viewer-comments').classList.add('active');
 
+document.getElementById('viewer-branch').addEventListener('click', () => {
+    const active = toggleBranchMode();
+    document.getElementById('viewer-branch').classList.toggle('active', active);
+});
+
 document.getElementById('viewer-analysis').addEventListener('click', async () => {
     const pgn = getGamePgn();
     if (!pgn) return;
@@ -353,42 +428,77 @@ document.getElementById('viewer-analysis').addEventListener('click', async () =>
     else window.open('https://lichess.org/paste', '_blank');
 });
 
-document.getElementById('viewer-share').addEventListener('click', async () => {
+// Share popover toggle
+const sharePopover = document.getElementById('share-popover');
+
+document.getElementById('viewer-share').addEventListener('click', (e) => {
+    e.stopPropagation();
+    sharePopover.classList.toggle('hidden');
+});
+
+// Dismiss share popover on outside click
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.share-btn-wrapper')) {
+        sharePopover.classList.add('hidden');
+    }
+});
+
+// Hide "Share..." option on platforms without native share
+if (!navigator.share) {
+    const shareOption = sharePopover.querySelector('[data-action="share"]');
+    if (shareOption) shareOption.classList.add('hidden');
+}
+
+// Share popover actions
+sharePopover.addEventListener('click', async (e) => {
+    const action = e.target.dataset.action;
+    if (!action) return;
+    sharePopover.classList.add('hidden');
+
     const pgn = getGamePgn();
     if (!pgn) return;
 
-    // Extract metadata from PGN headers
-    const hdr = (tag) => { const m = pgn.match(new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`)); return m ? m[1] : ''; };
-    const fmt = (name) => { const p = name.split(',').map(s => s.trim()); return p.length === 2 ? `${p[1]} ${p[0]}` : name; };
+    if (action === 'copy-pgn') {
+        const moves = getGameMoves() || pgn;
+        try {
+            await navigator.clipboard.writeText(moves);
+            showToast('Moves copied!');
+        } catch { showToast('Could not copy to clipboard'); }
 
-    const white = fmt(hdr('White'));
-    const black = fmt(hdr('Black'));
-    const result = hdr('Result');
-    const gameId = hdr('GameId');
+    } else if (action === 'copy-link') {
+        const gameId = getHeader(pgn, 'GameId');
+        const gameUrl = gameId
+            ? `https://tnmpairings.com?game=${gameId}`
+            : window.location.href.split('?')[0];
+        try {
+            await navigator.clipboard.writeText(gameUrl);
+            showToast('Link copied!');
+        } catch { showToast('Could not copy to clipboard'); }
 
-    // Build share title
-    const title = `${white} vs ${black} — ${result}`;
-
-    // Build deep link URL
-    const gameUrl = gameId
-        ? `https://tnmpairings.com?game=${gameId}`
-        : window.location.href.split('?')[0];
-
-    // Mobile: Native Share API with rich data
-    if (navigator.share && navigator.canShare) {
-        const shareData = { title, url: gameUrl };
-        if (navigator.canShare(shareData)) {
-            try { await navigator.share(shareData); } catch { /* user cancelled */ }
-            return;
+    } else if (action === 'download') {
+        const slug = getTournamentMeta().slug;
+        const white = getHeader(pgn, 'White')?.split(',')[0] || 'White';
+        const black = getHeader(pgn, 'Black')?.split(',')[0] || 'Black';
+        const round = getHeader(pgn, 'Round')?.split('.')[0];
+        let filename;
+        if (slug && round) {
+            filename = `${slug}-R${round}-${white}-${black}.pgn`;
+        } else {
+            const date = (getHeader(pgn, 'Date') || '').replace(/\./g, '');
+            filename = date ? `${white}-${black}-${date}.pgn` : `${white}-${black}.pgn`;
         }
-    }
+        downloadPgn(pgn, filename);
 
-    // Desktop: Copy raw PGN to clipboard
-    try {
-        await navigator.clipboard.writeText(pgn);
-        showToast('PGN copied!');
-    } catch {
-        showToast('Could not copy to clipboard');
+    } else if (action === 'share') {
+        const white = formatName(getHeader(pgn, 'White'));
+        const black = formatName(getHeader(pgn, 'Black'));
+        const result = getHeader(pgn, 'Result');
+        const gameId = getHeader(pgn, 'GameId');
+        const title = `${white} vs ${black} — ${result}`;
+        const gameUrl = gameId
+            ? `https://tnmpairings.com?game=${gameId}`
+            : window.location.href.split('?')[0];
+        try { await navigator.share({ title, url: gameUrl }); } catch { /* user cancelled */ }
     }
 });
 
@@ -418,47 +528,6 @@ document.getElementById('viewer-header').addEventListener('click', (e) => {
         viewerNavigateGame(arrow.dataset.browseRound, arrow.dataset.browseBoard);
     }
 });
-
-function updateNavArrows(prev, next) {
-    const nav = document.querySelector('.viewer-browser-nav');
-    if (!nav) return;
-    const arrows = nav.querySelectorAll('.viewer-browse-arrow');
-    if (arrows.length < 2) return;
-
-    // Replace prev arrow
-    if (prev) {
-        const el = document.createElement('button');
-        el.className = 'viewer-browse-arrow';
-        el.dataset.browseRound = prev.round;
-        el.dataset.browseBoard = prev.board;
-        el.setAttribute('aria-label', 'Previous game');
-        el.textContent = '\u2039';
-        arrows[0].replaceWith(el);
-    } else {
-        const el = document.createElement('span');
-        el.className = 'viewer-browse-arrow viewer-browse-disabled';
-        el.textContent = '\u2039';
-        arrows[0].replaceWith(el);
-    }
-
-    // Replace next arrow (re-query after prev replacement)
-    const updatedArrows = nav.querySelectorAll('.viewer-browse-arrow');
-    const nextArrow = updatedArrows[updatedArrows.length - 1];
-    if (next) {
-        const el = document.createElement('button');
-        el.className = 'viewer-browse-arrow';
-        el.dataset.browseRound = next.round;
-        el.dataset.browseBoard = next.board;
-        el.setAttribute('aria-label', 'Next game');
-        el.textContent = '\u203A';
-        nextArrow.replaceWith(el);
-    } else {
-        const el = document.createElement('span');
-        el.className = 'viewer-browse-arrow viewer-browse-disabled';
-        el.textContent = '\u203A';
-        nextArrow.replaceWith(el);
-    }
-}
 
 // "View Game" button in round detail (event delegation on pairing-info)
 document.getElementById('pairing-info').addEventListener('click', (e) => {
