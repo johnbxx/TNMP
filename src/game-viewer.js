@@ -2,7 +2,16 @@ import { WORKER_URL } from './config.js';
 import { openModal, closeModal } from './modal.js';
 import { initViewer, destroyViewer } from './pgn-viewer.js';
 import { loadRoundHistory } from './history.js';
-import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navigateToGame, closeGameBrowser, clearNavContext, getCachedPgn, getCachedGameMeta, getActiveFilter } from './game-browser.js';
+import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navigateToGame, closeGameBrowser, clearNavContext, getCachedPgn, getCachedGameMeta, getActiveFilter, isEmbeddedBrowser, renderBrowserInPanel, hideBrowserPanel, highlightActiveGame } from './game-browser.js';
+
+const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
+
+// Collapse embedded browser panel if window shrinks below combined threshold
+window.addEventListener('resize', () => {
+    if (isEmbeddedBrowser() && !isCombinedWidth()) {
+        hideBrowserPanel();
+    }
+});
 
 /**
  * Open the game viewer modal, fetch the PGN, and initialize the board.
@@ -10,7 +19,22 @@ import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navig
  * @param {number|string} board - Board number
  */
 export async function openGameViewer(round, board, orientation) {
-    openModal('viewer-modal');
+    const viewerModal = document.getElementById('viewer-modal');
+    const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
+
+    if (!alreadyOpen) {
+        openModal('viewer-modal');
+    }
+
+    // On desktop, when opened from browser, show embedded browser panel
+    if (isCombinedWidth() && hasBrowserContext() && !isEmbeddedBrowser()) {
+        await renderBrowserInPanel();
+    }
+
+    // If embedded, update the active game highlight
+    if (isEmbeddedBrowser()) {
+        highlightActiveGame();
+    }
 
     // Use explicit orientation, or fall back to round history color (for user's own games)
     let playerColor = orientation;
@@ -27,10 +51,10 @@ export async function openGameViewer(round, board, orientation) {
             prev: getAdjacentGame(-1),
             next: getAdjacentGame(+1),
         };
-        meta.returnToBrowser = hasBrowserContext();
+        meta.returnToBrowser = !isEmbeddedBrowser() && hasBrowserContext();
     }
     const filter = getActiveFilter();
-    if (filter) meta.filterLabel = filter.label;
+    if (filter && !isEmbeddedBrowser()) meta.filterLabel = filter.label;
     const gameMeta = getCachedGameMeta(round, board);
     if (gameMeta) {
         meta.eco = gameMeta.eco;
@@ -76,8 +100,10 @@ export function openGameViewerWithPgn(pgn, playerColor = 'White', meta = {}) {
  * If opened from browser, return to the browser.
  */
 export function closeGameViewer() {
-    const returnToBrowser = hasBrowserContext();
+    const embedded = isEmbeddedBrowser();
+    const returnToBrowser = !embedded && hasBrowserContext();
     destroyViewer();
+    if (embedded) hideBrowserPanel();
     closeModal('viewer-modal');
     if (returnToBrowser) {
         setTimeout(() => reopenBrowser(), 150);
@@ -91,6 +117,7 @@ export function closeGameViewer() {
  */
 export function closeGameViewerFull() {
     destroyViewer();
+    if (isEmbeddedBrowser()) hideBrowserPanel();
     closeModal('viewer-modal');
     closeGameBrowser();
 }

@@ -205,12 +205,14 @@
     <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Viewer" aria-modal="true">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-viewer">
-            <div id="viewer-header" class="viewer-header"></div>
-            <div class="viewer-layout">
-                <div id="viewer-board" class="viewer-board"></div>
-                <div id="viewer-moves" class="viewer-moves"></div>
-            </div>
-            <div class="viewer-toolbar">
+            <div id="viewer-browser-panel" class="viewer-browser-panel hidden"></div>
+            <div class="viewer-main">
+                <div id="viewer-header" class="viewer-header"></div>
+                <div class="viewer-layout">
+                    <div id="viewer-board" class="viewer-board"></div>
+                    <div id="viewer-moves" class="viewer-moves"></div>
+                </div>
+                <div class="viewer-toolbar">
                 <div class="viewer-tool-group">
                     <button id="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg></button>
                     <button id="viewer-flip" class="viewer-tool-btn" aria-label="Flip board"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
@@ -228,6 +230,7 @@
                     <button id="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
                     <button id="viewer-share" class="viewer-tool-btn" aria-label="Share game"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
                 </div>
+            </div>
             </div>
         </div>
     </div>

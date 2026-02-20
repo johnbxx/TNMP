@@ -3,6 +3,8 @@ import { openModal, closeModal } from './modal.js';
 import { openGameViewer } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 
+let embeddedPanel = false; // true when browser is rendered inside the viewer panel
+
 let gamesData = null;
 let selectedRound = null;
 let selectedPlayer = null; // formatted name of the selected player filter
@@ -130,6 +132,90 @@ function hideBrowser() {
 export function reopenBrowser() {
     browsingGame = null;
     openGameBrowser();
+}
+
+/**
+ * Whether the browser is currently embedded in the viewer panel (desktop combined layout).
+ */
+export function isEmbeddedBrowser() {
+    return embeddedPanel;
+}
+
+/**
+ * Render the game browser into the viewer's side panel (desktop combined layout).
+ * Returns true if successful, false if no data.
+ */
+export async function renderBrowserInPanel() {
+    const panelEl = document.getElementById('viewer-browser-panel');
+    if (!panelEl) return false;
+
+    embeddedPanel = true;
+    panelEl.classList.remove('hidden');
+
+    // Show the modal with the has-browser class
+    const modalContent = panelEl.closest('.modal-content-viewer');
+    if (modalContent) modalContent.classList.add('has-browser');
+
+    if (!gamesData) {
+        panelEl.innerHTML = '<p class="viewer-loading" style="padding:1rem">Loading games...</p>';
+        try {
+            const response = await fetch(`${WORKER_URL}/games`);
+            if (!response.ok) throw new Error('Failed to fetch games');
+            gamesData = await response.json();
+            try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(gamesData)); } catch { /* quota */ }
+        } catch {
+            panelEl.innerHTML = '<p class="viewer-error" style="padding:1rem">Could not load games.</p>';
+            return false;
+        }
+    }
+
+    const roundNumbers = Object.keys(gamesData.rounds).map(Number).sort((a, b) => a - b);
+    if (roundNumbers.length === 0) return false;
+
+    if (!selectedRound || !roundNumbers.includes(selectedRound)) {
+        selectedRound = roundNumbers[roundNumbers.length - 1];
+    }
+    if (playerList.length === 0) playerList = buildPlayerList();
+    if (sectionList.length === 0) {
+        sectionList = buildSectionList();
+        visibleSections = new Set(sectionList);
+    }
+
+    // Title + browser content container
+    let titleText = gamesData.tournamentName || 'Tournament Games';
+    panelEl.innerHTML = `<h2>${titleText}</h2><div class="browser-content"></div>`;
+    const containerEl = panelEl.querySelector('.browser-content');
+    renderBrowser(containerEl, roundNumbers);
+    highlightActiveGame();
+    return true;
+}
+
+/**
+ * Highlight the currently active game row in the browser panel.
+ */
+export function highlightActiveGame() {
+    // Work in whichever container is active (panel or modal)
+    const panelEl = embeddedPanel ? document.getElementById('viewer-browser-panel') : document.getElementById('browser-content');
+    if (!panelEl || !browsingGame) return;
+    panelEl.querySelectorAll('.browser-game-row').forEach(row => {
+        const isActive = Number(row.dataset.gameRound) === Number(browsingGame.round)
+                      && Number(row.dataset.gameBoard) === Number(browsingGame.board);
+        row.classList.toggle('active', isActive);
+    });
+}
+
+/**
+ * Hide the browser panel (on viewer close).
+ */
+export function hideBrowserPanel() {
+    embeddedPanel = false;
+    const panelEl = document.getElementById('viewer-browser-panel');
+    if (panelEl) {
+        panelEl.classList.add('hidden');
+        panelEl.innerHTML = '';
+    }
+    const modalContent = document.querySelector('.modal-content-viewer');
+    if (modalContent) modalContent.classList.remove('has-browser');
 }
 
 /**
@@ -350,7 +436,8 @@ function renderBrowser(containerEl, roundNumbers) {
     let tabsHtml = '<div class="browser-rounds" id="browser-rounds">';
     for (const r of roundNumbers) {
         const active = r === selectedRound ? ' browser-round-active' : '';
-        tabsHtml += `<button class="browser-round-btn${active}" data-round="${r}">Round ${r}</button>`;
+        const label = embeddedPanel ? `R${r}` : `Round ${r}`;
+        tabsHtml += `<button class="browser-round-btn${active}" data-round="${r}">${label}</button>`;
     }
     tabsHtml += '</div>';
 
@@ -509,8 +596,27 @@ function renderBrowser(containerEl, roundNumbers) {
         browsingGame = { round: Number(round), board: Number(board) };
         openedFromBrowser = true;
         navList = buildNavList();
-        hideBrowser();
-        setTimeout(() => openGameViewer(round, board, 'White'), 150);
+
+        if (embeddedPanel) {
+            // Desktop combined: swap game in-place, no modal transitions
+            highlightActiveGame();
+            // Detect orientation for player filter
+            let orientation = 'White';
+            if (selectedPlayer && gamesData) {
+                const games = gamesData.rounds[round];
+                if (games) {
+                    const match = games.find(g => String(g.board) === String(board));
+                    if (match && formatName(match.black).toLowerCase() === selectedPlayer.toLowerCase()) {
+                        orientation = 'Black';
+                    }
+                }
+            }
+            openGameViewer(round, board, orientation);
+        } else {
+            // Mobile: close browser, then open viewer after transition
+            hideBrowser();
+            setTimeout(() => openGameViewer(round, board, 'White'), 150);
+        }
     });
 }
 

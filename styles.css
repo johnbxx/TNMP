@@ -1524,6 +1524,157 @@ html.off-season .meme {
     }
 }
 
+/* Desktop wide viewer — side-by-side board + moves */
+@media (min-width: 768px) {
+    .modal-content-viewer {
+        max-width: 95vw;
+        height: 90vh;
+        width: auto;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    /* Combined browser + viewer layout */
+    .modal-content-viewer.has-browser {
+        flex-direction: row;
+        width: 95vw;
+        padding: 0;
+    }
+    .modal-content-viewer.has-browser .viewer-main {
+        padding: 2rem;
+    }
+    .viewer-browser-panel {
+        flex: 0 0 500px;
+        overflow: hidden;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        flex-direction: column;
+        padding: 2rem;
+    }
+    .viewer-browser-panel.hidden { display: none; }
+    .viewer-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+    }
+    .viewer-layout {
+        flex: 1 1 0;
+        min-height: 0;
+        flex-direction: row;
+        align-items: stretch;
+    }
+    .viewer-board {
+        /* JS sets width = height to make it a square */
+        flex: 0 0 auto;
+        max-width: none;
+    }
+    .viewer-moves {
+        flex: 1;
+        min-width: 160px;
+        height: auto;
+        overflow-y: auto;
+    }
+    /* Stacked layout: board on top, moves below (narrow viewer area) */
+    .viewer-layout-stacked {
+        flex-direction: column;
+        align-items: center;
+    }
+    .viewer-layout-stacked .viewer-moves {
+        min-width: 0;
+        width: 100%;
+    }
+}
+
+/* Browser panel inside viewer (desktop combined layout) */
+.viewer-browser-panel .browser-content {
+    margin-top: 0;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.viewer-browser-panel .browser-search {
+    padding: 0 0.75rem;
+}
+.viewer-browser-panel .browser-rounds {
+    padding: 0 0.75rem;
+    flex-wrap: nowrap;
+}
+.viewer-browser-panel .browser-sections {
+    padding: 0 0.75rem;
+}
+.viewer-browser-panel .browser-games {
+    flex: 1;
+    overflow-y: auto;
+}
+.viewer-browser-panel .browser-game-row {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.82rem;
+}
+.viewer-browser-panel .browser-game-row.active {
+    background: rgba(255, 255, 255, 0.15);
+}
+.viewer-browser-panel h2 {
+    font-size: 1rem;
+    margin: 0;
+    padding: 1rem 0.75rem 0.5rem;
+    text-align: center;
+}
+
+/* Move table (desktop two-column format) */
+.move-table {
+    display: grid;
+    grid-template-columns: 2rem 1fr 1fr;
+    gap: 0;
+    width: 100%;
+}
+
+.move-table .move-num {
+    color: var(--text-faint);
+    font-size: 0.8em;
+    text-align: right;
+    padding: 0.2rem 0.4rem 0.2rem 0;
+    user-select: none;
+}
+
+.move-table .move {
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background var(--transition-fast);
+    white-space: nowrap;
+}
+
+.move-table .move:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.move-table .move-current {
+    background: rgba(255, 255, 255, 0.25);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.move-table .move-empty {
+    padding: 0.2rem 0.4rem;
+}
+
+.move-table .move-num,
+.move-table .move,
+.move-table .move-empty {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.move-table .move-num:nth-child(6n+1),
+.move-table .move:nth-child(6n+2),
+.move-table .move:nth-child(6n+3),
+.move-table .move-empty:nth-child(6n+2),
+.move-table .move-empty:nth-child(6n+3) {
+    background: rgba(255, 255, 255, 0.03);
+}
+
 /* Game Browser Modal */
 .modal-content-browser {
     max-width: 560px;

@@ -253,6 +253,7 @@ export function initViewer(pgn, playerColor, meta = {}) {
 
     renderMoveList();
     updateNavigationButtons();
+    syncDesktopLayout();
 }
 
 /**
@@ -327,7 +328,13 @@ export function destroyViewer() {
     const headerEl = document.getElementById('viewer-header');
     if (headerEl) headerEl.innerHTML = '';
     const movesEl = document.getElementById('viewer-moves');
-    if (movesEl) movesEl.innerHTML = '';
+    if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
+    const boardEl = document.getElementById('viewer-board');
+    if (boardEl) boardEl.style.width = '';
+    const modalEl = document.querySelector('.modal-content-viewer');
+    if (modalEl) modalEl.style.width = '';
+    const layoutEl = document.querySelector('.viewer-layout');
+    if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
 }
 
 // --- Auto-Play ---
@@ -504,23 +511,120 @@ function extractBoardFromPgn(pgn) {
     return m ? parseInt(m[1], 10) : null;
 }
 
+const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
+
+let resizeTimer = null;
+let wasDesktop = isDesktop();
+window.addEventListener('resize', () => {
+    if (!board) return; // no viewer open
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        const nowDesktop = isDesktop();
+        if (nowDesktop !== wasDesktop) {
+            wasDesktop = nowDesktop;
+            renderMoveList();
+        }
+        syncDesktopLayout();
+    }, 100);
+});
+
+/**
+ * On desktop, size the board as a square that fits the available layout height,
+ * and constrain the moves panel to the same height.
+ */
+function syncDesktopLayout() {
+    if (!isDesktop()) return;
+    requestAnimationFrame(() => {
+        const modalEl = document.querySelector('.modal-content-viewer');
+        const boardEl = document.getElementById('viewer-board');
+        const movesEl = document.getElementById('viewer-moves');
+        const layoutEl = document.querySelector('.viewer-layout');
+        if (!modalEl || !boardEl || !movesEl || !layoutEl) return;
+
+        const hasBrowser = modalEl.classList.contains('has-browser');
+        // When browser panel is embedded, measure from .viewer-main
+        const containerEl = hasBrowser
+            ? modalEl.querySelector('.viewer-main')
+            : modalEl;
+        if (!containerEl) return;
+
+        const headerEl = document.getElementById('viewer-header');
+        const toolbarEl = containerEl.querySelector('.viewer-toolbar');
+
+        // Measure non-layout content heights
+        const headerH = headerEl ? headerEl.offsetHeight : 0;
+        const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
+        const containerPadding = parseFloat(getComputedStyle(containerEl).paddingTop)
+                               + parseFloat(getComputedStyle(containerEl).paddingBottom);
+        const layoutGap = 12; // .viewer-layout gap (0.75rem)
+        const modalGap = headerH > 0 ? 12 : 0;
+
+        // Available height for the board+moves area
+        const availableHeight = containerEl.clientHeight - headerH - toolbarH - containerPadding - modalGap;
+        const minMovesWidth = 160;
+        const minMovesHeight = 120; // min height for moves when stacked below board
+
+        // Available width for the board+moves area
+        let availableWidth;
+        if (hasBrowser) {
+            const mainPadding = parseFloat(getComputedStyle(containerEl).paddingLeft)
+                              + parseFloat(getComputedStyle(containerEl).paddingRight);
+            availableWidth = containerEl.clientWidth - mainPadding;
+        } else {
+            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
+                           + parseFloat(getComputedStyle(modalEl).paddingRight);
+            availableWidth = window.innerWidth * 0.95 - hPadding;
+        }
+
+        // Side-by-side board size: capped so moves panel has at least minMovesWidth
+        const sideBySideBoardSize = Math.min(availableHeight, availableWidth - minMovesWidth - layoutGap);
+        // Stacked board size: capped by width and by height minus space for moves
+        const stackedBoardSize = Math.min(availableWidth, availableHeight - minMovesHeight - layoutGap);
+
+        // Use stacked layout if it gives a significantly larger board (>15% bigger)
+        const useStacked = hasBrowser && stackedBoardSize > sideBySideBoardSize * 1.15;
+
+        let boardSize;
+        if (useStacked) {
+            layoutEl.classList.add('viewer-layout-stacked');
+            boardSize = Math.floor(Math.max(stackedBoardSize, 200));
+            boardEl.style.width = boardSize + 'px';
+            movesEl.style.maxHeight = (availableHeight - boardSize - layoutGap) + 'px';
+        } else {
+            layoutEl.classList.remove('viewer-layout-stacked');
+            boardSize = Math.floor(Math.max(sideBySideBoardSize, 200));
+            boardEl.style.width = boardSize + 'px';
+            movesEl.style.maxHeight = boardSize + 'px';
+        }
+
+        // Only set modal width when browser panel is NOT embedded (CSS handles it otherwise)
+        if (!hasBrowser) {
+            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
+                           + parseFloat(getComputedStyle(modalEl).paddingRight);
+            modalEl.style.width = (boardSize + minMovesWidth + layoutGap + hPadding) + 'px';
+        }
+
+        // Chessboard2 needs a resize nudge after width change
+        if (board && board.resize) board.resize();
+    });
+}
+
 function renderMoveList() {
     const container = document.getElementById('viewer-moves');
     if (!container) return;
 
     const hasAnnotations = annotatedMoves.some(m => m.comment || m.nags || m.variations);
+    const hasVariations = annotatedMoves.some(m => m.variations);
 
-    if (hasAnnotations && annotatedMoves.length > 0) {
+    if (isDesktop() && !hasVariations) {
+        // Desktop: two-column table (move number | white | black)
+        container.innerHTML = renderMoveTable();
+    } else if (hasAnnotations && annotatedMoves.length > 0) {
+        // Annotated games with variations use inline format
         container.innerHTML = renderAnnotatedMoves(annotatedMoves, 0, false);
     } else {
-        // Simple rendering for unannotated games
-        let html = '';
-        for (let i = 0; i < moveHistory.length; i++) {
-            const moveNum = Math.floor(i / 2) + 1;
-            if (i % 2 === 0) html += `<span class="move-number">${moveNum}.</span>`;
-            html += `<span class="move${i === currentMoveIndex ? ' move-current' : ''}" data-move-index="${i}">${moveHistory[i].san}</span> `;
-        }
-        container.innerHTML = html;
+        // Mobile: inline span format
+        container.innerHTML = renderMoveListInline();
     }
 
     // Event delegation for clicking moves
@@ -532,6 +636,36 @@ function renderMoveList() {
             goToMove(parseInt(moveEl.dataset.moveIndex, 10));
         }
     };
+}
+
+function renderMoveListInline() {
+    let html = '';
+    for (let i = 0; i < moveHistory.length; i++) {
+        const moveNum = Math.floor(i / 2) + 1;
+        if (i % 2 === 0) html += `<span class="move-number">${moveNum}.</span>`;
+        html += `<span class="move${i === currentMoveIndex ? ' move-current' : ''}" data-move-index="${i}">${moveHistory[i].san}</span> `;
+    }
+    return html;
+}
+
+function renderMoveTable() {
+    let html = '<div class="move-table">';
+    for (let i = 0; i < moveHistory.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const whiteIdx = i;
+        const blackIdx = i + 1;
+
+        html += `<span class="move-num">${moveNum}.</span>`;
+        html += `<span class="move${whiteIdx === currentMoveIndex ? ' move-current' : ''}" data-move-index="${whiteIdx}">${moveHistory[whiteIdx].san}</span>`;
+
+        if (blackIdx < moveHistory.length) {
+            html += `<span class="move${blackIdx === currentMoveIndex ? ' move-current' : ''}" data-move-index="${blackIdx}">${moveHistory[blackIdx].san}</span>`;
+        } else {
+            html += `<span class="move-empty"></span>`;
+        }
+    }
+    html += '</div>';
+    return html;
 }
 
 function renderAnnotatedMoves(moves, startIndex, isVariation) {
