@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { loadRoundHistory, updateRoundHistory } from './history.js';
 
 const STORAGE_KEY = 'roundHistory';

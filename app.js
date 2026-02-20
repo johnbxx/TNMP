@@ -158,7 +158,7 @@ async function checkPairings() {
     try {
         const raw = localStorage.getItem('lastTournamentState');
         if (raw) cachedState = JSON.parse(raw);
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
 
     if (cachedState) {
         console.log(`Instant render from cache (state: ${cachedState.state})`);

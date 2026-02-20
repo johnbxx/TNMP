@@ -23,6 +23,7 @@ export default [
                 AbortSignal: 'readonly',
                 DOMParser: 'readonly',
                 HTMLElement: 'readonly',
+                Blob: 'readonly',
                 URL: 'readonly',
                 URLSearchParams: 'readonly',
                 Response: 'readonly',

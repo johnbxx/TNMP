@@ -13,11 +13,11 @@ import {
     getSelectedPlayer, setSelectedPlayer,
     getNavList, setNavList,
     isEmbeddedBrowser, setEmbeddedPanel,
-    clearNavContext, hasBrowserContext, hasNavContext,
-    getActiveFilter, clearFilter, getAdjacentGame,
+    clearNavContext, hasBrowserContext,
+    getActiveFilter, getAdjacentGame,
     setOpenedFromBrowser,
-    getSectionList, setSectionList,
-    getVisibleSections, setVisibleSections,
+    setSectionList,
+    setVisibleSections,
 } from './state.js';
 
 beforeEach(() => {
