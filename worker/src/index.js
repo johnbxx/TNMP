@@ -414,11 +414,13 @@ async function handleHealth(env, request) {
  * @returns {{ state, round, info, offSeason }}
  */
 export async function computeAppState(cached, meta) {
-    const roundNumber = cached?.round || null;
+    const rawRound = cached?.round || null;
     const tournamentName = meta?.name || 'Tuesday Night Marathon';
     const roundDates = meta?.roundDates || [];
     const nextTournament = meta?.nextTournament || null;
     const totalRounds = meta?.totalRounds || 0;
+    // When pairings are cleared (end of tournament), infer round from totalRounds
+    const roundNumber = rawRound || totalRounds || null;
 
     const timeState = getTimeState(roundDates, nextTournament);
 
@@ -483,7 +485,9 @@ export async function computeAppState(cached, meta) {
         const isFinal = totalRounds > 0 && roundNumber >= totalRounds;
         info = isFinal
             ? `${tournamentName} is complete! Final standings are posted.`
-            : `Round ${roundNumber} is complete. Check back Monday for next week's pairings!`;
+            : roundNumber
+                ? `Round ${roundNumber} is complete. Check back Monday for next week's pairings!`
+                : 'The round is complete. Check back Monday for next week\'s pairings!';
     } else {
         // check_pairings window
         const pairingsUp = cached?.html ? await hasPairings(cached.html) : false;

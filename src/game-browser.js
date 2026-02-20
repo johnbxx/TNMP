@@ -637,6 +637,9 @@ function resultSymbol(result, side) {
     return '';
 }
 
+// Test-only exports (underscore-prefixed convention)
+export { formatName as _formatName, resultClass as _resultClass, resultSymbol as _resultSymbol, highlightMatch as _highlightMatch };
+
 function renderGameRow(game, round = selectedRound, boardLabel = null) {
     const whiteClass = resultClass(game.result, 'white');
     const blackClass = resultClass(game.result, 'black');
