@@ -38,14 +38,99 @@ async function handleGameDeepLink(gameId) {
 
 // --- Main check logic ---
 
+// Map server state strings to STATE enum
+const STATE_MAP = {
+    'off_season': STATE.OFF_SEASON,
+    'too_early': STATE.TOO_EARLY,
+    'no': STATE.NO,
+    'yes': STATE.YES,
+    'in_progress': STATE.IN_PROGRESS,
+    'results': STATE.RESULTS,
+};
+
+/**
+ * Render UI from a tournament state object.
+ * @param {object} stateData - Server or cached tournament state
+ * @param {object} roundHistory - Round history object (from localStorage or server)
+ */
+function renderState(stateData, roundHistory) {
+    // Update tournament metadata
+    if (stateData.tournamentName || stateData.roundDates) {
+        setTournamentMeta({
+            name: stateData.tournamentName || tournamentMeta.name,
+            url: stateData.tournamentUrl || tournamentMeta.url,
+            roundDates: stateData.roundDates || tournamentMeta.roundDates,
+            totalRounds: stateData.totalRounds || tournamentMeta.totalRounds,
+            nextTournament: stateData.nextTournament || tournamentMeta.nextTournament,
+        });
+        if (stateData.tournamentUrl) {
+            CONFIG.tournamentUrl = stateData.tournamentUrl;
+        }
+        updateTournamentLink();
+    }
+
+    const state = stateData.state;
+    const info = stateData.info;
+    const roundNumber = stateData.round || 0;
+    const displayedState = STATE_MAP[state] || STATE.NO;
+
+    if (state === 'off_season') {
+        const offSeasonOpts = stateData.offSeason?.targetDate
+            ? { targetDate: stateData.offSeason.targetDate }
+            : null;
+        showState(STATE.OFF_SEASON, info, offSeasonOpts);
+        stopCountdown();
+    } else if (state === 'too_early' || state === 'no') {
+        showState(displayedState, info);
+        if (state === 'too_early') stopCountdown();
+    } else {
+        // yes, in_progress, results
+        setLastRoundNumber(roundNumber || 1);
+        const pairingInfo = stateData.pairing || null;
+        if (pairingInfo) {
+            roundHistory = updateRoundHistory(roundNumber, pairingInfo, tournamentMeta.name);
+        }
+        showState(displayedState, info, pairingInfo);
+        if (state === 'results' || state === 'yes') stopCountdown();
+        if (pairingInfo) saveLivePairingHtml();
+    }
+
+    // Render round tracker
+    if (CONFIG.playerName && Object.keys(roundHistory.rounds).length > 0) {
+        const rounds = Object.keys(roundHistory.rounds);
+        const lastRound = Math.max(...rounds.map(Number));
+        renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState, lastRound);
+    }
+}
+
+/**
+ * Check whether two state objects represent the same visual state.
+ */
+function stateChanged(a, b) {
+    if (!a || !b) return true;
+    return a.state !== b.state || a.round !== b.round || a.info !== b.info;
+}
+
 async function checkPairings() {
-    showLoading();
     hideOfflineBanner();
 
+    // --- Instant render from cache ---
+    let cachedState = null;
     try {
-        // --- Step 1: Get server-authoritative state ---
+        const raw = localStorage.getItem('lastTournamentState');
+        if (raw) cachedState = JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+
+    if (cachedState) {
+        console.log(`Instant render from cache (state: ${cachedState.state})`);
+        renderState(cachedState, loadRoundHistory());
+    } else {
+        showLoading();
+    }
+
+    // --- Fetch fresh state from server ---
+    try {
         let serverState = null;
-        let isOffline = false;
 
         try {
             console.log('Fetching tournament state...');
@@ -57,7 +142,6 @@ async function checkPairings() {
             const data = await response.json();
             const endTime = performance.now();
 
-            // Validate response has expected shape (guards against 404/error responses)
             if (data.state) {
                 serverState = data;
                 console.log(`Server state: ${serverState.state} (${Math.round(endTime - startTime)}ms)`);
@@ -67,119 +151,55 @@ async function checkPairings() {
             }
         } catch (e) {
             console.log('Server state unavailable:', e.message);
-            // Try offline fallback
-            const cached = localStorage.getItem('lastTournamentState');
-            if (cached) {
-                try {
-                    serverState = JSON.parse(cached);
-                    isOffline = true;
-                    console.log(`Using offline state cache (state: ${serverState.state})`);
-                    showOfflineBanner(serverState.fetchedAt);
-                } catch (parseErr) {
-                    console.log('Failed to parse offline state cache:', parseErr.message);
-                }
-            }
-        }
-
-        // --- Step 2: Update tournament metadata ---
-        if (serverState) {
-            if (serverState.tournamentName || serverState.roundDates) {
-                setTournamentMeta({
-                    name: serverState.tournamentName || tournamentMeta.name,
-                    url: serverState.tournamentUrl || tournamentMeta.url,
-                    roundDates: serverState.roundDates || tournamentMeta.roundDates,
-                    totalRounds: serverState.totalRounds || tournamentMeta.totalRounds,
-                    nextTournament: serverState.nextTournament || tournamentMeta.nextTournament,
-                });
-                if (serverState.tournamentUrl) {
-                    CONFIG.tournamentUrl = serverState.tournamentUrl;
-                }
-                updateTournamentLink();
-            }
-        }
-
-        // --- Step 3: If we have server state, render based on it ---
-        if (serverState) {
-            const state = serverState.state;
-            const info = serverState.info;
-            const roundNumber = serverState.round || 0;
-
-            // Map server state strings to STATE enum
-            const STATE_MAP = {
-                'off_season': STATE.OFF_SEASON,
-                'too_early': STATE.TOO_EARLY,
-                'no': STATE.NO,
-                'yes': STATE.YES,
-                'in_progress': STATE.IN_PROGRESS,
-                'results': STATE.RESULTS,
-            };
-            const displayedState = STATE_MAP[state] || STATE.NO;
-
-            // States that don't need HTML at all
-            if (state === 'off_season') {
-                const offSeasonOpts = serverState.offSeason?.targetDate
-                    ? { targetDate: serverState.offSeason.targetDate }
-                    : null;
-                showState(STATE.OFF_SEASON, info, offSeasonOpts);
-
-                if (CONFIG.playerName) {
-                    const roundHistory = await fetchPlayerHistory(CONFIG.playerName, tournamentMeta.name);
-                    const rounds = Object.keys(roundHistory.rounds);
-                    if (rounds.length > 0) {
-                        const lastRound = Math.max(...rounds.map(Number));
-                        renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, 0, STATE.OFF_SEASON, lastRound);
+            if (!cachedState) {
+                // No cache and no server — try offline fallback from localStorage
+                const cached = localStorage.getItem('lastTournamentState');
+                if (cached) {
+                    try {
+                        serverState = JSON.parse(cached);
+                        showOfflineBanner(serverState.fetchedAt);
+                    } catch (parseErr) {
+                        console.log('Failed to parse offline state cache:', parseErr.message);
                     }
                 }
-                stopCountdown();
-                return;
             }
+            // If we already rendered from cache, nothing more to do
+            if (cachedState && !serverState) return;
+        }
 
-            if (state === 'too_early' || state === 'no') {
-                showState(displayedState, info);
-                if (state === 'too_early') stopCountdown();
-
-                if (CONFIG.playerName) {
-                    const roundHistory = await fetchPlayerHistory(CONFIG.playerName, tournamentMeta.name);
-                    const rounds = Object.keys(roundHistory.rounds);
-                    if (rounds.length > 0) {
-                        const lastRound = Math.max(...rounds.map(Number));
-                        renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState, lastRound);
-                    }
-                }
-                return;
-            }
-
-            // yes, in_progress, results — use server-provided pairing
-            setLastRoundNumber(roundNumber || 1);
-
-            const pairingInfo = serverState.pairing || null;
+        if (serverState) {
+            // Fetch fresh player history from server
             let roundHistory = loadRoundHistory();
-
             if (CONFIG.playerName) {
                 roundHistory = await fetchPlayerHistory(CONFIG.playerName, tournamentMeta.name);
-                if (pairingInfo) {
-                    console.log('Using server pairing:', pairingInfo);
-                    roundHistory = updateRoundHistory(roundNumber, pairingInfo, tournamentMeta.name);
-                }
             }
 
-            showState(displayedState, info, pairingInfo);
-            if (state === 'results' || state === 'yes') stopCountdown();
-
-            if (CONFIG.playerName && Object.keys(roundHistory.rounds).length > 0) {
-                saveLivePairingHtml();
-                renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState);
+            // Only re-render if state changed (avoid meme flicker)
+            if (stateChanged(cachedState, serverState)) {
+                console.log('State changed, re-rendering');
+                renderState(serverState, roundHistory);
+            } else {
+                // State unchanged — still update round tracker with fresh history
+                if (CONFIG.playerName && Object.keys(roundHistory.rounds).length > 0) {
+                    const rounds = Object.keys(roundHistory.rounds);
+                    const lastRound = Math.max(...rounds.map(Number));
+                    const roundNumber = serverState.round || 0;
+                    const displayedState = STATE_MAP[serverState.state] || STATE.NO;
+                    renderRoundTracker(roundHistory, tournamentMeta.totalRounds || 7, roundNumber, displayedState, lastRound);
+                }
             }
             return;
         }
 
-        // --- Step 4: No server state available ---
-        console.log('No server state available');
-        showError('Could not reach the server. Please try again later.');
+        // No server state and no cache
+        if (!cachedState) {
+            console.log('No server state available');
+            showError('Could not reach the server. Please try again later.');
+        }
 
     } catch (error) {
         console.error('Error checking pairings:', error);
-        showError(error.message);
+        if (!cachedState) showError(error.message);
     }
 }
 

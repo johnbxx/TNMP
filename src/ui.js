@@ -316,14 +316,10 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
     // Clicking the already-selected round does nothing
     if (selectedHistoryRound === roundNum) return;
 
-    // Clicking the current round restores live pairing
-    if (roundNum === currentRound) {
+    // Clicking the current round restores live pairing (only if there is one)
+    if (roundNum === currentRound && livePairingHtml !== null) {
         selectedHistoryRound = null;
-        if (livePairingHtml !== null) {
-            pairingInfoEl.innerHTML = livePairingHtml;
-        } else {
-            pairingInfoEl.innerHTML = '';
-        }
+        pairingInfoEl.innerHTML = livePairingHtml;
         updateTrackerSelection();
         return;
     }
