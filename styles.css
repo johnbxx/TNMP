@@ -1128,6 +1128,54 @@ html.off-season .meme {
     pointer-events: none;
 }
 
+.viewer-filter-chip {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 0.4rem;
+}
+
+.viewer-filter-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-subtle);
+    background: var(--overlay-light);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-right: none;
+    border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+    padding: 0.2rem 0.4rem 0.2rem 0.6rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.viewer-filter-label:hover {
+    color: var(--text-primary);
+    background: var(--overlay-light-hover);
+}
+
+.viewer-filter-clear {
+    display: flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-family: inherit;
+    color: var(--text-faint);
+    background: var(--overlay-light);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-left: none;
+    border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+    padding: 0 0.5rem 0 0.35rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.viewer-filter-clear:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.35);
+}
+
 .viewer-opening {
     text-align: center;
     font-size: 0.78rem;
@@ -1468,6 +1516,12 @@ html.off-season .meme {
     .viewer-opening {
         font-size: 0.7rem;
     }
+    .viewer-filter-chip {
+        margin-bottom: 0.25rem;
+    }
+    .viewer-filter-label {
+        font-size: 0.65rem;
+    }
 }
 
 /* Game Browser Modal */
@@ -1496,7 +1550,7 @@ html.off-season .meme {
 .browser-search-input {
     width: 100%;
     padding: 0.5rem 2rem 0.5rem 0.75rem;
-    font-size: 0.85rem;
+    font-size: 1rem;
     font-family: inherit;
     color: var(--text-primary);
     background: var(--overlay-light);

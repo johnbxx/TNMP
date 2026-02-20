@@ -2,7 +2,7 @@ import { WORKER_URL } from './config.js';
 import { openModal, closeModal } from './modal.js';
 import { initViewer, destroyViewer } from './pgn-viewer.js';
 import { loadRoundHistory } from './history.js';
-import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navigateToGame, closeGameBrowser, clearNavContext, getCachedPgn, getCachedGameMeta } from './game-browser.js';
+import { hasBrowserContext, hasNavContext, reopenBrowser, getAdjacentGame, navigateToGame, closeGameBrowser, clearNavContext, getCachedPgn, getCachedGameMeta, getActiveFilter } from './game-browser.js';
 
 /**
  * Open the game viewer modal, fetch the PGN, and initialize the board.
@@ -29,6 +29,8 @@ export async function openGameViewer(round, board, orientation) {
         };
         meta.returnToBrowser = hasBrowserContext();
     }
+    const filter = getActiveFilter();
+    if (filter) meta.filterLabel = filter.label;
     const gameMeta = getCachedGameMeta(round, board);
     if (gameMeta) {
         meta.eco = gameMeta.eco;

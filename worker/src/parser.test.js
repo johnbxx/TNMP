@@ -8,7 +8,7 @@ import {
     composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
 } from './parser.js';
-import { extractPgnColors, extractPairingsColors, extractFullPgnGames } from './parser2.js';
+import { extractPgnColors, extractPairingsColors, extractFullPgnGames, parseStandings } from './parser2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fullHtml;
@@ -471,5 +471,82 @@ describe('extractPairingsColors', () => {
         ];
         const colors = extractPairingsColors(multiSection);
         expect(colors[3]).toHaveLength(2);
+    });
+});
+
+// --- parseStandings ---
+
+describe('parseStandings', () => {
+    it('finds all standings sections from stripped HTML', () => {
+        const sections = parseStandings(html);
+        expect(sections.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('extracts correct section names', () => {
+        const sections = parseStandings(html);
+        const names = sections.map(s => s.section);
+        expect(names.some(n => /2000/.test(n))).toBe(true);
+        expect(names.some(n => /1600/.test(n))).toBe(true);
+    });
+
+    it('extracts correct player data for John Boyer', () => {
+        const sections = parseStandings(html);
+        const section = sections.find(s => /1600/.test(s.section));
+        expect(section).toBeTruthy();
+        const boyer = section.players.find(p => /Boyer/i.test(p.name));
+        expect(boyer).toBeTruthy();
+        expect(boyer.name).toBe('John Boyer');
+        expect(boyer.rating).toBe(1740);
+        expect(boyer.total).toBe(2.5);
+    });
+
+    it('extracts round results correctly', () => {
+        const sections = parseStandings(html);
+        const section = sections.find(s => /1600/.test(s.section));
+        const boyer = section.players.find(p => /Boyer/i.test(p.name));
+        // Round 1: H (half-point bye), Round 2: L, Round 3: W, Round 4: W
+        expect(boyer.rounds[0]).toEqual({ result: 'H', opponentRank: null });
+        expect(boyer.rounds[1].result).toBe('L');
+        expect(boyer.rounds[2].result).toBe('W');
+        expect(boyer.rounds[3].result).toBe('W');
+        // Rounds 5-7 should be null (future)
+        expect(boyer.rounds[4]).toBeNull();
+    });
+
+    it('extracts player URLs', () => {
+        const sections = parseStandings(html);
+        const section = sections.find(s => /1600/.test(s.section));
+        const boyer = section.players.find(p => /Boyer/i.test(p.name));
+        expect(boyer.url).toBeTruthy();
+        expect(boyer.url).toContain('uschess.org');
+    });
+
+    it('extracts USCF IDs', () => {
+        const sections = parseStandings(html);
+        const section = sections.find(s => /1600/.test(s.section));
+        const boyer = section.players.find(p => /Boyer/i.test(p.name));
+        expect(boyer.id).toBeTruthy();
+        expect(boyer.id.length).toBeGreaterThan(0);
+    });
+
+    it('handles inline standings HTML without Place column', () => {
+        const noPlaceHtml = `<h3>Standings. TNM: Open (Standings)</h3><table>
+            <thead><tr><td>#</td><td>Name</td><td>ID</td><td>Rating</td><td>Rd 1</td><td>Rd 2</td><td>Total</td></tr></thead>
+            <tbody>
+                <tr><td>1</td><td class="name"><a href="https://ratings.uschess.org/player/123">Alice Smith</a></td><td>123</td><td>1800</td><td>W2</td><td>L2</td><td>1.0</td></tr>
+                <tr><td>2</td><td class="name"><a href="https://ratings.uschess.org/player/456">Bob Jones</a></td><td>456</td><td>1750</td><td>L1</td><td>W1</td><td>1.0</td></tr>
+            </tbody></table>`;
+        const sections = parseStandings(noPlaceHtml);
+        expect(sections).toHaveLength(1);
+        expect(sections[0].players).toHaveLength(2);
+        expect(sections[0].players[0].name).toBe('Alice Smith');
+        expect(sections[0].players[0].rating).toBe(1800);
+        expect(sections[0].players[0].url).toBe('https://ratings.uschess.org/player/123');
+        expect(sections[0].players[0].rounds[0]).toEqual({ result: 'W', opponentRank: 2 });
+        expect(sections[0].players[0].rounds[1]).toEqual({ result: 'L', opponentRank: 2 });
+    });
+
+    it('returns empty array for HTML with no standings', () => {
+        expect(parseStandings('<html><body>No standings</body></html>')).toEqual([]);
     });
 });

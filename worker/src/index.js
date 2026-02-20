@@ -1,5 +1,5 @@
 import { sendPushNotification } from './webpush.js';
-import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, extractPairingsColors, extractFullPgnGames, parsePairingsSections, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
+import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, extractPairingsColors, extractFullPgnGames, parsePairingsSections, parseStandings, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
 import { classifyOpening, replayToFen } from './eco.js';
 import { generateBoardSvg } from './og-board.js';
 
@@ -60,6 +60,8 @@ const RATE_LIMITS = {
     '/game': 60,
     '/game-by-id': 60,
     '/games': 30,
+    '/tournament-state': 60,
+    '/player-history': 30,
     '/og-state': 60,
     '/og-game': 60,
     '/og-game-image': 30,
@@ -406,10 +408,12 @@ async function handleHealth(env, request) {
     }, 200, env, request);
 }
 
-async function handleOgState(request, env) {
-    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
-    let meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-
+/**
+ * Compute the combined app state from time window + HTML content analysis.
+ * Used by both /tournament-state and /og-state.
+ * @returns {{ state, round, info, offSeason }}
+ */
+export async function computeAppState(cached, meta) {
     const roundNumber = cached?.round || null;
     const tournamentName = meta?.name || 'Tuesday Night Marathon';
     const roundDates = meta?.roundDates || [];
@@ -419,20 +423,57 @@ async function handleOgState(request, env) {
     const timeState = getTimeState(roundDates, nextTournament);
 
     let state, info;
+    let offSeason = null;
 
     if (timeState === 'off_season' || timeState === 'off_season_r1') {
         state = 'off_season';
-        info = nextTournament?.startDate
-            ? `Check back for the next ${tournamentName}.`
-            : 'Check back for the next TNM schedule.';
+
+        // Compute countdown target for off-season display
+        if (timeState === 'off_season_r1') {
+            const now = new Date();
+            const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+            offSeason = { targetDate: today + 'T18:30:00' };
+            info = 'Round 1 pairings will be posted onsite at 6:30PM.';
+        } else {
+            const r1 = roundDates?.[0];
+            const r1Date = r1 ? new Date(r1) : null;
+            const currentNotStarted = r1Date && r1Date.getTime() > Date.now();
+
+            if (currentNotStarted) {
+                const dateStr = r1Date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+                const name = tournamentName || 'The next TNM';
+                info = `${name} starts ${dateStr}. Round 1 pairings will be posted onsite.`;
+                offSeason = { targetDate: r1 };
+            } else if (nextTournament?.startDate) {
+                const nextDate = new Date(nextTournament.startDate + 'T00:00:00');
+                const dateStr = nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+                info = `The next TNM starts ${dateStr}. Round 1 pairings will be posted onsite.`;
+                offSeason = { targetDate: nextTournament.startDate + 'T18:30:00' };
+            } else {
+                info = 'Check back for the next TNM schedule.';
+            }
+        }
     } else if (timeState === 'too_early') {
-        state = 'too_early';
-        info = 'Pairings are posted Monday at 8PM Pacific. Check back then!';
+        // Check if pairings were posted early
+        const pairingsUp = cached?.html ? await hasPairings(cached.html) : false;
+        if (pairingsUp) {
+            const resultsIn = await hasResults(cached.html);
+            if (!resultsIn) {
+                state = 'yes';
+                info = `Round ${roundNumber} pairings are up!`;
+            } else {
+                state = 'too_early';
+                info = 'Pairings are posted Monday at 8PM Pacific. Check back then!';
+            }
+        } else {
+            state = 'too_early';
+            info = 'Pairings are posted Monday at 8PM Pacific. Check back then!';
+        }
     } else if (timeState === 'round_in_progress') {
         const resultsIn = cached?.html ? await hasResults(cached.html) : false;
         if (resultsIn) {
             state = 'results';
-            info = `Round ${roundNumber} results are in!`;
+            info = `Round ${roundNumber} is complete. Results are in!`;
         } else {
             state = 'in_progress';
             info = `Round ${roundNumber} is being played right now!`;
@@ -442,30 +483,231 @@ async function handleOgState(request, env) {
         const isFinal = totalRounds > 0 && roundNumber >= totalRounds;
         info = isFinal
             ? `${tournamentName} is complete! Final standings are posted.`
-            : `Round ${roundNumber} is complete.`;
+            : `Round ${roundNumber} is complete. Check back Monday for next week's pairings!`;
     } else {
         // check_pairings window
-        const resultsIn = cached?.html ? await hasResults(cached.html) : false;
-        if (!resultsIn) {
-            state = 'yes';
-            info = `Round ${roundNumber} pairings are posted for the ${tournamentName}.`;
-        } else {
+        const pairingsUp = cached?.html ? await hasPairings(cached.html) : false;
+        if (!pairingsUp) {
             state = 'no';
-            info = `Round ${roundNumber} is complete. Waiting for Round ${roundNumber + 1}...`;
+            info = 'Waiting for pairings to be posted...';
+        } else {
+            const resultsIn = await hasResults(cached.html);
+            if (!resultsIn) {
+                state = 'yes';
+                info = `Round ${roundNumber} pairings are up!`;
+            } else {
+                state = 'no';
+                info = `Round ${roundNumber} is complete. Waiting for Round ${roundNumber + 1}...`;
+            }
         }
     }
 
-    const ogConfig = OG_STATE_CONFIG[state] || OG_STATE_CONFIG.no;
-    const title = state === 'in_progress' && roundNumber
-        ? `ROUND ${roundNumber} — In Progress`
+    return { state, round: roundNumber, info, tournamentName, totalRounds, offSeason };
+}
+
+// --- Tournament State Endpoint (v2) ---
+
+async function handleTournamentState(request, env) {
+    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
+    let meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    if (!meta) {
+        meta = await resolveTournament(env);
+    }
+
+    const slug = meta?.name ? slugifyTournament(meta.name) : null;
+    const appState = await computeAppState(cached, meta);
+
+    const response = {
+        state: appState.state,
+        round: appState.round,
+        info: appState.info,
+        tournamentName: appState.tournamentName,
+        tournamentUrl: meta?.url || null,
+        tournamentSlug: slug,
+        roundDates: meta?.roundDates || [],
+        totalRounds: appState.totalRounds,
+        nextTournament: meta?.nextTournament || null,
+        fetchedAt: cached?.fetchedAt || null,
+        offSeason: appState.offSeason,
+    };
+
+    // Optional: include player pairing when ?player= is provided
+    const url = new URL(request.url);
+    const playerName = url.searchParams.get('player');
+    if (playerName && cached?.html) {
+        const pairing = await findPlayerPairing(cached.html, playerName);
+        if (pairing) {
+            pairing.round = appState.round;
+        }
+        response.pairing = pairing;
+    }
+
+    return corsResponse(response, 200, env, request);
+}
+
+// --- Player History Endpoint (v2) ---
+
+/**
+ * Build regex patterns that match a player name in "First Last" and "Last, First" formats.
+ */
+function buildPlayerNamePatterns(playerName) {
+    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [new RegExp(esc(playerName), 'i')];
+    const parts = playerName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        const last = parts[parts.length - 1];
+        const first = parts.slice(0, -1).join(' ');
+        patterns.push(new RegExp(esc(last) + ',\\s*' + esc(first), 'i'));
+    }
+    return patterns;
+}
+
+async function handlePlayerHistory(request, env) {
+    const url = new URL(request.url);
+    const playerName = url.searchParams.get('name');
+    if (!playerName) {
+        return corsResponse({ error: 'name parameter is required' }, 400, env, request);
+    }
+
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    const slug = meta?.name ? slugifyTournament(meta.name) : null;
+    if (!slug) {
+        return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+    }
+
+    // Find the player in standings across all sections
+    const patterns = buildPlayerNamePatterns(playerName);
+    const totalRounds = meta?.totalRounds || 0;
+
+    // List standings keys for this tournament
+    const standingsPrefix = `standings:${slug}:`;
+    const { keys } = await env.SUBSCRIBERS.list({ prefix: standingsPrefix });
+
+    let foundPlayer = null;
+    let foundSection = null;
+
+    for (const key of keys) {
+        const section = await env.SUBSCRIBERS.get(key.name, 'json');
+        if (!section?.players) continue;
+
+        for (const p of section.players) {
+            for (const regex of patterns) {
+                if (regex.test(p.name)) {
+                    foundPlayer = p;
+                    foundSection = section.section;
+                    break;
+                }
+            }
+            if (foundPlayer) break;
+        }
+        if (foundPlayer) break;
+    }
+
+    if (!foundPlayer) {
+        return corsResponse({ error: 'Player not found in standings' }, 404, env, request);
+    }
+
+    // Build round-by-round history from standings
+    const rankMap = {};
+    // Re-read the section to build rank map
+    const sectionData = await env.SUBSCRIBERS.get(`${standingsPrefix}${foundSection}`, 'json');
+    if (sectionData?.players) {
+        for (const p of sectionData.players) {
+            rankMap[p.rank] = { name: p.name, rating: p.rating, url: p.url };
+        }
+    }
+
+    // Load pairings colors and game indexes for color/board enrichment
+    const pairingsColors = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json') || {};
+
+    const rounds = {};
+    for (let i = 0; i < foundPlayer.rounds.length; i++) {
+        const roundData = foundPlayer.rounds[i];
+        if (!roundData) continue; // Future round
+
+        const roundNum = i + 1;
+        const code = roundData.result;
+
+        if (code === 'H') {
+            rounds[roundNum] = { result: 'H', isBye: true, byeType: 'half', color: null, opponent: null, opponentRating: null, board: null };
+        } else if (code === 'B') {
+            rounds[roundNum] = { result: 'B', isBye: true, byeType: 'full', color: null, opponent: null, opponentRating: null, board: null };
+        } else if (code === 'U') {
+            rounds[roundNum] = { result: 'U', isBye: true, byeType: 'zero', color: null, opponent: null, opponentRating: null, board: null };
+        } else {
+            // W/L/D with opponent
+            const opponent = rankMap[roundData.opponentRank];
+
+            // Try to resolve color from pairings colors, then game index
+            let color = null;
+            let board = null;
+
+            // Check pairings colors
+            if (pairingsColors[roundNum]) {
+                for (const game of pairingsColors[roundNum]) {
+                    for (const regex of patterns) {
+                        if (regex.test(game.white)) { color = 'White'; board = game.board || null; break; }
+                        if (regex.test(game.black)) { color = 'Black'; board = game.board || null; break; }
+                    }
+                    if (color) break;
+                }
+            }
+
+            // Fallback: check game index from GAMES KV
+            if (!color) {
+                try {
+                    const indexData = await env.GAMES.get(`index:${slug}:${roundNum}`, 'json');
+                    if (indexData) {
+                        for (const game of indexData) {
+                            for (const regex of patterns) {
+                                if (regex.test(game.white)) { color = 'White'; board = game.board || null; break; }
+                                if (regex.test(game.black)) { color = 'Black'; board = game.board || null; break; }
+                            }
+                            if (color) break;
+                        }
+                    }
+                } catch { /* GAMES KV may not exist */ }
+            }
+
+            rounds[roundNum] = {
+                result: code, isBye: false,
+                color, board,
+                opponent: opponent?.name || null,
+                opponentRating: opponent?.rating || null,
+                opponentUrl: opponent?.url || null,
+            };
+        }
+    }
+
+    return corsResponse({
+        tournamentName: meta.name,
+        tournamentSlug: slug,
+        totalRounds,
+        section: foundSection,
+        uscfId: foundPlayer.id || null,
+        rounds,
+    }, 200, env, request);
+}
+
+// --- OG State ---
+
+async function handleOgState(request, env) {
+    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
+    let meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+
+    const appState = await computeAppState(cached, meta);
+
+    const ogConfig = OG_STATE_CONFIG[appState.state] || OG_STATE_CONFIG.no;
+    const title = appState.state === 'in_progress' && appState.round
+        ? `ROUND ${appState.round} — In Progress`
         : ogConfig.title;
 
     return corsResponse({
-        state,
-        roundNumber,
-        tournamentName,
+        state: appState.state,
+        roundNumber: appState.round,
+        tournamentName: appState.tournamentName,
         title,
-        description: info,
+        description: appState.info,
         color: ogConfig.color,
         image: ogConfig.image,
     }, 200, env, request);
@@ -1028,6 +1270,20 @@ async function handleScheduled(env) {
     }));
     console.log(`Cached tournament HTML in KV (${strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(gameColors).length} rounds of PGN colors).`);
 
+    // Parse and persist standings per section
+    try {
+        const standings = parseStandings(strippedHtml);
+        for (const section of standings) {
+            const key = `standings:${slug}:${section.section}`;
+            await env.SUBSCRIBERS.put(key, JSON.stringify(section));
+        }
+        if (standings.length > 0) {
+            console.log(`Persisted standings for ${standings.length} section(s): ${standings.map(s => s.section).join(', ')}`);
+        }
+    } catch (err) {
+        console.error('Failed to persist standings:', err.message);
+    }
+
     // Store full PGN games in GAMES KV
     const fullGames = extractFullPgnGames(html);
     const slug = slugifyTournament(tournament.name);
@@ -1233,6 +1489,12 @@ export default {
             }
             if (path === '/games' && request.method === 'GET') {
                 return await handleGetGames(request, env);
+            }
+            if (path === '/tournament-state' && request.method === 'GET') {
+                return await handleTournamentState(request, env);
+            }
+            if (path === '/player-history' && request.method === 'GET') {
+                return await handlePlayerHistory(request, env);
             }
             if (path === '/og-state' && request.method === 'GET') {
                 return await handleOgState(request, env);

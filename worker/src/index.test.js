@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getTimeState } from './index.js';
+import { getTimeState, computeAppState } from './index.js';
+import * as parser2 from './parser2.js';
 
 /**
  * Helper: mock Date so getTimeState() sees a specific Pacific time.
@@ -126,5 +127,157 @@ describe('getTimeState — boundary conditions', () => {
     it('Tuesday 6:30PM is round_in_progress', () => {
         mockPacificTime(2025, 1, 7, 18, 30);
         expect(getTimeState([], null)).toBe('round_in_progress');
+    });
+});
+
+// --- computeAppState ---
+// We mock hasPairings/hasResults since they use HTMLRewriter (not available in Node test env).
+// This tests the state logic, not HTML parsing (which is tested in parser.test.js).
+
+// Round dates that cover the entire January 2025 — places our mock times mid-tournament
+const midTournamentMeta = {
+    name: '2025 Test TNM',
+    url: 'https://example.com',
+    roundDates: ['2024-12-31T18:30:00', '2025-01-07T18:30:00', '2025-01-14T18:30:00'],
+    totalRounds: 3,
+    nextTournament: null,
+};
+
+function mockParserResults({ pairings = false, results = false } = {}) {
+    vi.spyOn(parser2, 'hasPairings').mockResolvedValue(pairings);
+    vi.spyOn(parser2, 'hasResults').mockResolvedValue(results);
+}
+
+describe('computeAppState', () => {
+    it('returns "yes" during check_pairings when pairings exist without results', async () => {
+        mockPacificTime(2025, 1, 6, 20, 30); // Mon 8:30PM = check_pairings
+        mockParserResults({ pairings: true, results: false });
+        const result = await computeAppState(
+            { html: 'html', round: 4, fetchedAt: '2025-01-06T20:30:00' },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('yes');
+        expect(result.round).toBe(4);
+    });
+
+    it('returns "no" during check_pairings when results are filled in', async () => {
+        mockPacificTime(2025, 1, 6, 20, 30); // Mon 8:30PM
+        mockParserResults({ pairings: true, results: true });
+        const result = await computeAppState(
+            { html: 'html', round: 4 },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('no');
+    });
+
+    it('returns "no" during check_pairings when no pairings exist', async () => {
+        mockPacificTime(2025, 1, 6, 20, 30); // Mon 8:30PM
+        mockParserResults({ pairings: false, results: false });
+        const result = await computeAppState(
+            { html: 'html', round: null },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('no');
+    });
+
+    it('returns "too_early" on Monday afternoon with no pairings', async () => {
+        mockPacificTime(2025, 1, 6, 15, 0); // Mon 3PM = too_early
+        mockParserResults({ pairings: false, results: false });
+        const result = await computeAppState(
+            { html: 'html', round: null },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('too_early');
+    });
+
+    it('returns "yes" on Monday afternoon when pairings are posted early', async () => {
+        mockPacificTime(2025, 1, 6, 15, 0); // Mon 3PM = too_early, but pairings exist
+        mockParserResults({ pairings: true, results: false });
+        const result = await computeAppState(
+            { html: 'html', round: 4 },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('yes');
+    });
+
+    it('returns "in_progress" on Tuesday evening without results', async () => {
+        mockPacificTime(2025, 1, 7, 19, 0); // Tue 7PM = round_in_progress
+        mockParserResults({ pairings: true, results: false });
+        const result = await computeAppState(
+            { html: 'html', round: 4 },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('in_progress');
+    });
+
+    it('returns "results" on Tuesday evening with results', async () => {
+        mockPacificTime(2025, 1, 7, 19, 0); // Tue 7PM
+        mockParserResults({ pairings: true, results: true });
+        const result = await computeAppState(
+            { html: 'html', round: 4 },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('results');
+    });
+
+    it('returns "results" during results_window', async () => {
+        mockPacificTime(2025, 1, 8, 10, 0); // Wed 10AM = results_window
+        const result = await computeAppState(
+            { html: 'html', round: 3 },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('results');
+    });
+
+    it('returns "results" with final round info when round equals totalRounds', async () => {
+        mockPacificTime(2025, 1, 8, 10, 0); // Wed = results_window
+        const result = await computeAppState(
+            { html: 'html', round: 3 },
+            { ...midTournamentMeta, totalRounds: 3 }
+        );
+        expect(result.state).toBe('results');
+        expect(result.info).toContain('complete');
+    });
+
+    it('returns "off_season" with countdown target before R1', async () => {
+        mockPacificTime(2024, 12, 28, 12, 0); // Sun before R1
+        const result = await computeAppState(
+            { html: 'html', round: null },
+            midTournamentMeta
+        );
+        expect(result.state).toBe('off_season');
+        expect(result.offSeason).toBeTruthy();
+        expect(result.offSeason.targetDate).toBe('2024-12-31T18:30:00');
+    });
+
+    it('returns "off_season" within 7 days of next tournament', async () => {
+        mockPacificTime(2025, 3, 20, 12, 0); // 5 days before next R1 on Mar 25
+        const meta = {
+            ...midTournamentMeta,
+            nextTournament: { name: 'Next TNM', url: 'https://example.com/next', startDate: '2025-03-25' },
+        };
+        const result = await computeAppState(
+            { html: 'html', round: null },
+            meta
+        );
+        expect(result.state).toBe('off_season');
+    });
+
+    it('handles null cached data (no html)', async () => {
+        mockPacificTime(2025, 1, 6, 20, 0); // Mon 8PM = check_pairings
+        // No html → hasPairings never called, pairingsUp path returns false
+        const result = await computeAppState(null, midTournamentMeta);
+        expect(result.state).toBe('no');
+    });
+
+    it('handles null meta', async () => {
+        mockPacificTime(2025, 1, 6, 20, 0); // Mon 8PM — no round dates → falls to day-of-week
+        mockParserResults({ pairings: true, results: false });
+        const result = await computeAppState(
+            { html: 'html', round: 4 },
+            null
+        );
+        expect(result.state).toBe('yes');
+        expect(result.tournamentName).toBe('Tuesday Night Marathon');
     });
 });

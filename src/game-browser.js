@@ -125,11 +125,11 @@ function hideBrowser() {
 }
 
 /**
- * Re-open the browser modal with its preserved state.
+ * Re-open the browser modal with current state (re-renders to reflect any filter changes).
  */
 export function reopenBrowser() {
     browsingGame = null;
-    openModal('browser-modal');
+    openGameBrowser();
 }
 
 /**
@@ -144,6 +144,42 @@ export function hasBrowserContext() {
  */
 export function hasNavContext() {
     return gamesData !== null && browsingGame !== null && navList.length > 0;
+}
+
+/**
+ * Get the currently active filter (player or section), if any.
+ * @returns {{ type: string, label: string } | null}
+ */
+export function getActiveFilter() {
+    if (selectedPlayer) {
+        return { type: 'player', label: selectedPlayer };
+    }
+    if (sectionList.length > 1 && visibleSections.size < sectionList.length) {
+        return { type: 'section', label: [...visibleSections][0] };
+    }
+    return null;
+}
+
+/**
+ * Clear the active filter, rebuild navList, and return updated prev/next.
+ * @returns {{ prev: {round,board}|null, next: {round,board}|null }}
+ */
+export function clearFilter() {
+    selectedPlayer = null;
+    visibleSections = new Set(sectionList);
+    navList = buildNavList();
+    return {
+        prev: getAdjacentGame(-1),
+        next: getAdjacentGame(+1),
+    };
+}
+
+/**
+ * Open the game browser modal with the current filter pre-applied.
+ * Does NOT change openedFromBrowser — the browser's game-row click sets it.
+ */
+export function openBrowserWithCurrentFilter() {
+    openGameBrowser();
 }
 
 /**
@@ -322,7 +358,8 @@ function renderBrowser(containerEl, roundNumbers) {
     if (sectionList.length > 1) {
         sectionsHtml = '<div class="browser-sections" id="browser-sections">';
         for (const s of sectionList) {
-            sectionsHtml += `<button type="button" class="browser-section-btn browser-section-active" data-section="${s}">${s}</button>`;
+            const active = visibleSections.has(s) ? ' browser-section-active' : '';
+            sectionsHtml += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
         }
         sectionsHtml += '</div>';
     }
@@ -334,6 +371,15 @@ function renderBrowser(containerEl, roundNumbers) {
     const searchInput = document.getElementById('browser-search-input');
     const autocomplete = document.getElementById('browser-autocomplete');
     const clearBtn = document.getElementById('browser-search-clear');
+
+    // Pre-populate search if a player filter is already active (e.g. opened from viewer chip)
+    if (selectedPlayer) {
+        searchInput.value = selectedPlayer;
+        clearBtn.classList.remove('hidden');
+        document.getElementById('browser-rounds').classList.add('hidden');
+        const sectionsEl = document.getElementById('browser-sections');
+        if (sectionsEl) sectionsEl.classList.add('hidden');
+    }
 
     searchInput.addEventListener('input', () => {
         const query = searchInput.value.trim().toLowerCase();

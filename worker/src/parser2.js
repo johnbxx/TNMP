@@ -137,6 +137,106 @@ export async function parsePairingsSections(html) {
     return sections;
 }
 
+// --- Standings parsing ---
+
+/**
+ * Parse all standings sections from the tournament HTML (regex-based, no HTMLRewriter).
+ * Returns an array of section objects:
+ *   { section, players: [{ rank, name, url, id, rating, rounds: [{result, opponentRank}|null], total }] }
+ *
+ * Round result codes: W=win, L=loss, D=draw, H=half-point bye, B=full-point bye, U=unplayed/zero-point bye
+ * The number after W/L/D is the opponent's rank in standings.
+ */
+export function parseStandings(html) {
+    const sections = [];
+
+    // Find each standings H3 + table pair
+    const sectionRegex = /<h3>([^<]*Standings[^<]*)<\/h3>[\s\S]*?(<table>[\s\S]*?<\/table>)/gi;
+    let sectionMatch;
+
+    while ((sectionMatch = sectionRegex.exec(html)) !== null) {
+        const h3Text = sectionMatch[1];
+        const nameMatch = h3Text.match(/Standings.*?:\s*(.+?)(?:\s*\(|$)/);
+        if (!nameMatch) continue;
+
+        const sectionName = nameMatch[1].trim();
+        const tableHtml = sectionMatch[2];
+        const players = [];
+
+        // Detect name column: look for class="name" in any td
+        const hasNameClass = /class="name"/.test(tableHtml);
+
+        // Extract rows from tbody
+        const tbodyMatch = tableHtml.match(/<tbody>([\s\S]*?)<\/tbody>/i);
+        if (!tbodyMatch) continue;
+
+        const rowRegex = /<tr>([\s\S]*?)<\/tr>/gi;
+        let rowMatch;
+
+        while ((rowMatch = rowRegex.exec(tbodyMatch[1])) !== null) {
+            const rowHtml = rowMatch[1];
+            const cells = [];
+            const cellRegex = /<td([^>]*)>([\s\S]*?)<\/td>/gi;
+            let cellMatch;
+
+            while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+                const attrs = cellMatch[1] || '';
+                const cellContent = cellMatch[2];
+                const isNameCell = /class="[^"]*name[^"]*"/.test(attrs);
+                // Extract link if present
+                const linkMatch = cellContent.match(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
+                const text = cellContent.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+                cells.push({ text, link: linkMatch ? linkMatch[1] : null, isName: isNameCell });
+            }
+
+            if (cells.length < 6) continue;
+
+            const rank = parseInt(cells[0].text, 10);
+            if (isNaN(rank)) continue;
+
+            // Find name column index
+            let nameIdx = -1;
+            if (hasNameClass) {
+                for (let c = 1; c < cells.length; c++) {
+                    if (cells[c].isName) { nameIdx = c; break; }
+                }
+            }
+            if (nameIdx === -1) nameIdx = 2; // fallback
+
+            const name = cells[nameIdx].text;
+            const url = cells[nameIdx].link || null;
+            const id = cells[nameIdx + 1].text;
+            const rating = parseInt(cells[nameIdx + 2].text, 10) || null;
+
+            const rounds = [];
+            const roundStart = nameIdx + 3;
+            for (let i = roundStart; i < cells.length - 1; i++) {
+                const cellText = cells[i].text;
+                if (!cellText || cellText === '\u00A0' || cellText === ' ') {
+                    rounds.push(null);
+                    continue;
+                }
+                const code = cellText.charAt(0).toUpperCase();
+                const rest = cellText.substring(1).trim();
+                if (code === 'W' || code === 'L' || code === 'D') {
+                    rounds.push({ result: code, opponentRank: parseInt(rest, 10) });
+                } else if (code === 'H' || code === 'B' || code === 'U') {
+                    rounds.push({ result: code, opponentRank: null });
+                } else {
+                    rounds.push(null);
+                }
+            }
+
+            const total = parseFloat(cells[cells.length - 1].text) || 0;
+            players.push({ rank, name, url, id, rating, rounds, total });
+        }
+
+        sections.push({ section: sectionName, players });
+    }
+
+    return sections;
+}
+
 // --- High-level functions matching the old parser API ---
 
 /**

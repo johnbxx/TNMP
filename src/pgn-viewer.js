@@ -415,6 +415,15 @@ function renderGameHeader(pgn, meta = {}) {
     const round = meta.round || extractRoundFromPgn(pgn);
     const boardNum = meta.board || extractBoardFromPgn(pgn);
 
+    // Filter chip (shown when a player or section filter is active)
+    let filterChipHtml = '';
+    if (meta.filterLabel) {
+        filterChipHtml = `<div class="viewer-filter-chip">
+            <span class="viewer-filter-label" id="viewer-filter-link">${meta.filterLabel}</span>
+            <button class="viewer-filter-clear" id="viewer-filter-clear" aria-label="Clear filter">&times;</button>
+        </div>`;
+    }
+
     // Browser navigation bar (when opened from game browser)
     let browserNavHtml = '';
     if (meta.browserNav) {
@@ -432,13 +441,9 @@ function renderGameHeader(pgn, meta = {}) {
         if (boardNum) parts.push(`Board ${boardNum}`);
         const label = parts.join(' \u00B7 ');
 
-        const centerEl = meta.returnToBrowser
-            ? `<button class="viewer-browse-back" id="viewer-back-to-browser">${label}</button>`
-            : `<span class="viewer-browse-label">${label}</span>`;
-
         browserNavHtml = `<div class="viewer-browser-nav">
             ${prevBtn}
-            ${centerEl}
+            <button class="viewer-browse-back" id="viewer-back-to-browser">${label}</button>
             ${nextBtn}
         </div>`;
     }
@@ -470,6 +475,7 @@ function renderGameHeader(pgn, meta = {}) {
     const blackSymbol = resultSymbol(result, 'black');
 
     headerEl.innerHTML = `
+        ${filterChipHtml}
         ${browserNavHtml}
         ${roundBoardHtml}
         <div class="viewer-players">

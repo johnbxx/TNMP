@@ -1,4 +1,5 @@
 import { parseStandings } from './parser2.js';
+import { WORKER_URL } from './config.js';
 
 const STORAGE_KEY = 'roundHistory';
 
@@ -32,6 +33,34 @@ function saveRoundHistory(history) {
  */
 export function clearRoundHistory() {
     localStorage.removeItem(STORAGE_KEY);
+}
+
+/**
+ * Fetch player history from server (/player-history endpoint).
+ * Merges server data into localStorage and returns the history object.
+ * Falls back to localStorage on network failure.
+ */
+export async function fetchPlayerHistory(playerName, tournamentName) {
+    try {
+        const response = await fetch(`${WORKER_URL}/player-history?name=${encodeURIComponent(playerName)}`);
+        if (!response.ok) {
+            console.log(`Player history fetch returned ${response.status}`);
+            return loadRoundHistory();
+        }
+        const data = await response.json();
+        if (!data.rounds) return loadRoundHistory();
+
+        // Convert server format to localStorage format
+        const history = {
+            tournamentName: data.tournamentName || tournamentName || null,
+            rounds: data.rounds,
+        };
+        saveRoundHistory(history);
+        return history;
+    } catch (e) {
+        console.log('Player history fetch failed:', e.message);
+        return loadRoundHistory();
+    }
 }
 
 /**
