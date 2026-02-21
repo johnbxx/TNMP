@@ -4,3 +4,7 @@ dist/
 .DS_Store
 .dev.vars
 backups/
+pgn-export/
+pgn-export-bare/
+*.pgn
+*.png
