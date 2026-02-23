@@ -548,12 +548,10 @@ function extractBoardFromPgn(pgn) {
 const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
 
 let resizeTimer = null;
-let wasDesktop = isDesktop();
 window.addEventListener('resize', () => {
     if (!board) return; // no viewer open
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-        wasDesktop = isDesktop();
         renderMoveList();
         syncDesktopLayout();
     }, 100);

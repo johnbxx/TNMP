@@ -36,6 +36,8 @@ export default [
                 requestAnimationFrame: 'readonly',
                 cancelAnimationFrame: 'readonly',
                 getComputedStyle: 'readonly',
+                CSS: 'readonly',
+                structuredClone: 'readonly',
             },
         },
         rules: {
