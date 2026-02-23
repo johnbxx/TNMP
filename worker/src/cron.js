@@ -203,6 +203,10 @@ export async function handleScheduled(env) {
     // Fetch subscribers once — used by both pairings and results dispatch
     const pushSubs = await listPushSubscriptions(env);
 
+    // Skip subscribers whose player name isn't in this tournament's pairings
+    const isInTournament = (record) =>
+        !record.playerName || findPlayerPairingFromSections(parsed.pairingsSections, record.playerName) !== null;
+
     // --- Pairings notifications ---
     const pairingsState = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
     if (pairingsState && pairingsState.round === round) {
@@ -215,6 +219,7 @@ export async function handleScheduled(env) {
                 prefKey: 'notifyPairings',
                 trackKey: 'lastNotifiedRound',
                 round,
+                shouldNotify: isInTournament,
                 buildPayload: (record) => {
                     const pairing = record.playerName
                         ? findPlayerPairingFromSections(parsed.pairingsSections, record.playerName)
@@ -264,6 +269,7 @@ export async function handleScheduled(env) {
             prefKey: 'notifyResults',
             trackKey: 'lastNotifiedResultsRound',
             round,
+            shouldNotify: isInTournament,
             buildPayload: (record) => {
                 const pairing = record.playerName
                     ? findPlayerPairingFromSections(parsed.pairingsSections, record.playerName)

@@ -82,12 +82,26 @@ describe('getTimeState — with round dates', () => {
         expect(getTimeState(['2025-01-14T18:30'], next)).toBe('off_season');
     });
 
-    it('ignores next tournament more than 7 days out', () => {
-        mockPacificTime(2025, 3, 10, 12, 0); // 15 days before next R1 — Mon noon
+    it('returns results_window when tournament is over and next is >7 days out', () => {
+        mockPacificTime(2025, 3, 10, 12, 0); // Mon noon, 15 days before next R1
         const next = { startDate: '2025-03-25' };
-        // Past all round dates, not in 7-day window → falls through to day-of-week
-        // Mon 12PM = too_early? No, Mon < 8PM = too_early
-        expect(getTimeState(['2025-01-14T18:30'], next)).toBe('too_early');
+        // Past all round dates but not in 7-day window → results_window
+        expect(getTimeState(['2025-01-14T18:30'], next)).toBe('results_window');
+    });
+
+    it('returns results_window when all rounds are past and no next tournament', () => {
+        mockPacificTime(2025, 3, 10, 12, 0); // Mon noon, well past last round
+        expect(getTimeState(['2025-01-14T18:30', '2025-01-21T18:30', '2025-01-28T18:30'], null)).toBe('results_window');
+    });
+
+    it('uses day-of-week logic during active tournament between rounds', () => {
+        mockPacificTime(2025, 1, 8, 10, 0); // Wed between R1 and R2
+        expect(getTimeState(['2025-01-07T18:30', '2025-01-14T18:30'], null)).toBe('results_window');
+    });
+
+    it('uses day-of-week logic on Monday during active tournament', () => {
+        mockPacificTime(2025, 1, 13, 15, 0); // Mon 3PM between R1 and R2
+        expect(getTimeState(['2025-01-07T18:30', '2025-01-14T18:30'], null)).toBe('too_early');
     });
 
     it('handles invalid round date strings gracefully', () => {

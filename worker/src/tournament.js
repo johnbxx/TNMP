@@ -147,6 +147,10 @@ export function getTimeState(roundDates, nextTournament) {
             }
             if (nowMs < r1DayStart.getTime()) return 'off_season';
             if (nowMs < r1Date.getTime()) return 'off_season_r1';
+
+            // Tournament is over — all round dates are in the past
+            const lastRound = rounds[rounds.length - 1];
+            if (nowMs >= lastRound.getTime()) return 'results_window';
         }
     }
 

@@ -200,14 +200,16 @@ export async function listPushSubscriptions(env) {
  * @param {string} opts.trackKey - Field tracking last notified round
  * @param {number} opts.round - Current round number
  * @param {Function} opts.buildPayload - (record) => payload object
+ * @param {Function} [opts.shouldNotify] - (record) => boolean, skip subscriber if returns false
  * @param {object} opts.env - Worker env
  * @param {string} opts.label - Log label for this dispatch
  */
-export async function dispatchPushNotifications({ subscribers, prefKey, trackKey, round, buildPayload, env, label }) {
-    let count = 0;
+export async function dispatchPushNotifications({ subscribers, prefKey, trackKey, round, buildPayload, shouldNotify, env, label }) {
+    let count = 0, skipped = 0;
     for (const { key, record } of subscribers) {
         if (!record || record[prefKey] === false) continue;
         if (record[trackKey] === round) continue;
+        if (shouldNotify && !shouldNotify(record)) { skipped++; continue; }
 
         const payload = JSON.stringify(await buildPayload(record));
         const result = await sendPushNotification(
@@ -227,5 +229,6 @@ export async function dispatchPushNotifications({ subscribers, prefKey, trackKey
             console.error(`Push ${label} failed for ${key}: ${result.error}`);
         }
     }
+    if (skipped > 0) console.log(`Push ${label}: skipped ${skipped} subscriber(s) not in tournament`);
     return count;
 }
