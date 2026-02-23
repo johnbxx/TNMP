@@ -6,7 +6,7 @@
 
 // --- Base64url helpers ---
 
-export function base64urlEncode(buffer) {
+function base64urlEncode(buffer) {
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
@@ -15,7 +15,7 @@ export function base64urlEncode(buffer) {
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export function base64urlDecode(str) {
+function base64urlDecode(str) {
     const padded = str.replace(/-/g, '+').replace(/_/g, '/');
     const padding = (4 - (padded.length % 4)) % 4;
     const binary = atob(padded + '='.repeat(padding));
@@ -63,7 +63,7 @@ async function hkdf(salt, ikm, info, length) {
 
 // --- Info construction for RFC 8291 (aes128gcm) ---
 
-export function buildInfo(type) {
+function buildInfo(type) {
     const encoder = new TextEncoder();
     // For aes128gcm (RFC 8291), info is simply "Content-Encoding: <type>\0"
     const str = `Content-Encoding: ${type}\0`;
@@ -132,7 +132,7 @@ async function importPrivateKeyRaw(privateKeyBytes) {
  * Convert DER-encoded ECDSA signature to raw 64-byte r||s format.
  * crypto.subtle may return either format depending on the platform.
  */
-export function derToRaw(der) {
+function derToRaw(der) {
     // If it's already 64 bytes, it's raw format
     if (der.length === 64) return der;
 

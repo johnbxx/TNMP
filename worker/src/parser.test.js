@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    parsePlayerInfo, extractSwissSysContent, extractRoundNumber, hasPairings, hasResults,
-    findPlayerPairing, findPlayerResult,
+    parsePlayerInfo, hasPairings, hasResults, findPlayerPairing,
     composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
+    extractPairingsColors, parseStandings,
+    parseTournamentPage, findPlayerPairingFromSections, findPlayerResultFromSections,
 } from './parser.js';
-import { extractPgnColors, extractPairingsColors, extractFullPgnGames, parseStandings } from './parser2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fullHtml;
@@ -18,7 +18,7 @@ let tournamentDetailHtml;
 
 beforeAll(() => {
     fullHtml = readFileSync(resolve(__dirname, '../../test/fixtures/tournament_page.html'), 'utf-8');
-    html = extractSwissSysContent(fullHtml);
+    html = parseTournamentPage(fullHtml).strippedHtml;
     tournamentListHtml = readFileSync(resolve(__dirname, '../../test/fixtures/tournament-list-snippet.html'), 'utf-8');
     tournamentDetailHtml = readFileSync(resolve(__dirname, '../../test/fixtures/tournament-detail-snippet.html'), 'utf-8');
 });
@@ -30,10 +30,12 @@ describe('parsePlayerInfo', () => {
         expect(parsePlayerInfo('Phil Ploquin (1660 w 1.5 D)')).toEqual({ name: 'Phil Ploquin', rating: 1660 });
     });
 
-    it('parses player with leading space in rating (v1 regex limitation: returns null)', () => {
-        // The v1 regex parser can't handle leading spaces before rating digits
-        // The v2 parser (parser2.js) handles this correctly
-        expect(parsePlayerInfo('Paul Blum ( 983 w 1.5 d)')).toEqual({ name: 'Paul Blum', rating: null });
+    it('parses player with leading space before rating', () => {
+        expect(parsePlayerInfo('Paul Blum ( 983 w 1.5 d)')).toEqual({ name: 'Paul Blum', rating: 983 });
+    });
+
+    it('parses unrated player', () => {
+        expect(parsePlayerInfo('New Player (unr. w 0.0 )')).toEqual({ name: 'New Player', rating: null });
     });
 
     it('parses name with no parenthetical', () => {
@@ -42,18 +44,6 @@ describe('parsePlayerInfo', () => {
 
     it('parses player with title', () => {
         expect(parsePlayerInfo('IM Elliott Winslow (2200 W 3.0 )')).toEqual({ name: 'IM Elliott Winslow', rating: 2200 });
-    });
-});
-
-// --- extractRoundNumber ---
-
-describe('extractRoundNumber', () => {
-    it('returns highest round from real HTML', () => {
-        expect(extractRoundNumber(html)).toBe(4);
-    });
-
-    it('returns null for HTML with no pairings', () => {
-        expect(extractRoundNumber('<html><body>No pairings here</body></html>')).toBeNull();
     });
 });
 
@@ -101,22 +91,6 @@ describe('findPlayerPairing', () => {
 
     it('returns null for player not found', () => {
         expect(findPlayerPairing(html, 'Magnus Carlsen')).toBeNull();
-    });
-});
-
-// --- findPlayerResult ---
-
-describe('findPlayerResult', () => {
-    it('returns result for a player who won', () => {
-        expect(findPlayerResult(html, 'John Boyer')).toBe('1');
-    });
-
-    it('returns result for a player who lost', () => {
-        expect(findPlayerResult(html, 'Phil Ploquin')).toBe('0');
-    });
-
-    it('returns null for unknown player', () => {
-        expect(findPlayerResult(html, 'Magnus Carlsen')).toBeNull();
     });
 });
 
@@ -250,167 +224,7 @@ describe('extractTournamentName', () => {
     });
 });
 
-// --- extractSwissSysContent ---
-
-describe('extractSwissSysContent', () => {
-    it('includes standings sections', () => {
-        const result = extractSwissSysContent(fullHtml);
-        expect(result).toContain('<h2>Standings</h2>');
-    });
-
-    it('includes pairings sections', () => {
-        const result = extractSwissSysContent(fullHtml);
-        expect(result).toContain('<h2>Pairings</h2>');
-    });
-
-    it('preserves multiple standings sections', () => {
-        const result = extractSwissSysContent(fullHtml);
-        const standingsCount = (result.match(/Standings\./g) || []).length;
-        expect(standingsCount).toBeGreaterThanOrEqual(3);
-    });
-
-    it('strips non-SwissSys content (result is smaller than input)', () => {
-        const result = extractSwissSysContent(fullHtml);
-        expect(result.length).toBeLessThan(fullHtml.length / 2);
-    });
-
-    it('returns original HTML when no SwissSys sections found', () => {
-        const noSwiss = '<html><body>No tournament data</body></html>';
-        expect(extractSwissSysContent(noSwiss)).toBe(noSwiss);
-    });
-});
-
-// --- extractPgnColors ---
-
-describe('extractPgnColors', () => {
-    it('extracts game colors from PGN textareas', () => {
-        const gameColors = extractPgnColors(fullHtml);
-        expect(Object.keys(gameColors).length).toBeGreaterThan(0);
-    });
-
-    it('extracts white and black player names', () => {
-        const gameColors = extractPgnColors(fullHtml);
-        const rounds = Object.values(gameColors);
-        const firstGame = rounds[0][0];
-        expect(firstGame.white).toBeTruthy();
-        expect(firstGame.black).toBeTruthy();
-    });
-
-    it('extracts results from PGN', () => {
-        const gameColors = extractPgnColors(fullHtml);
-        for (const games of Object.values(gameColors)) {
-            for (const game of games) {
-                if (game.result) {
-                    expect(['1-0', '0-1', '1/2-1/2', '*']).toContain(game.result);
-                }
-            }
-        }
-    });
-
-    it('extracts board numbers from Round field', () => {
-        const gameColors = extractPgnColors(fullHtml);
-        // At least some games should have board numbers
-        const allGames = Object.values(gameColors).flat();
-        const withBoard = allGames.filter(g => g.board !== null);
-        expect(withBoard.length).toBeGreaterThan(0);
-    });
-
-    it('finds John Boyer games with LastName, FirstName format', () => {
-        const gameColors = extractPgnColors(fullHtml);
-        const allGames = Object.values(gameColors).flat();
-        const boyerGames = allGames.filter(g => g.white.includes('Boyer') || g.black.includes('Boyer'));
-        expect(boyerGames.length).toBeGreaterThan(0);
-    });
-
-    it('returns empty object for HTML without PGN textareas', () => {
-        const noPgn = '<html><body>No PGN</body></html>';
-        expect(extractPgnColors(noPgn)).toEqual({});
-    });
-});
-
-// --- extractFullPgnGames ---
-
-describe('extractFullPgnGames', () => {
-    it('extracts full PGN text for each game', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        expect(Object.keys(rounds).length).toBeGreaterThan(0);
-        const allGames = Object.values(rounds).flat();
-        expect(allGames.length).toBeGreaterThan(0);
-        for (const game of allGames) {
-            expect(game.pgn).toContain('[Event');
-            expect(game.pgn).toContain('1.');
-        }
-    });
-
-    it('deduplicates games by board number', () => {
-        const colors = extractPgnColors(fullHtml);
-        const full = extractFullPgnGames(fullHtml);
-        // Same round numbers
-        expect(Object.keys(full).sort()).toEqual(Object.keys(colors).sort());
-        // Deduplicated count should be <= raw count
-        for (const roundNum of Object.keys(colors)) {
-            expect(full[roundNum].length).toBeLessThanOrEqual(colors[roundNum].length);
-        }
-        // No duplicate boards within any round
-        for (const games of Object.values(full)) {
-            const boards = games.map(g => g.board).filter(b => b !== null);
-            expect(new Set(boards).size).toBe(boards.length);
-        }
-    });
-
-    it('extracts Elo ratings from PGN headers', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        const allGames = Object.values(rounds).flat();
-        const withElo = allGames.filter(g => g.whiteElo && g.blackElo);
-        expect(withElo.length).toBeGreaterThan(0);
-    });
-
-    it('extracts ECO codes', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        const allGames = Object.values(rounds).flat();
-        const withEco = allGames.filter(g => g.eco);
-        expect(withEco.length).toBeGreaterThan(0);
-    });
-
-    it('extracts board numbers', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        const allGames = Object.values(rounds).flat();
-        const withBoard = allGames.filter(g => g.board !== null);
-        expect(withBoard.length).toBeGreaterThan(0);
-    });
-
-    it('full PGN contains move text, not just headers', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        const game = Object.values(rounds).flat()[0];
-        // Should have moves after the headers
-        const moveText = game.pgn.split(/\n\n/).pop();
-        expect(moveText).toMatch(/\d+\./);
-    });
-
-    it('returns empty object for HTML without PGN textareas', () => {
-        expect(extractFullPgnGames('<html><body>No PGN</body></html>')).toEqual({});
-    });
-
-    it('extracts GameId from PGN headers', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        const allGames = Object.values(rounds).flat();
-        const withGameId = allGames.filter(g => g.gameId);
-        expect(withGameId.length).toBeGreaterThan(0);
-        for (const g of withGameId) {
-            expect(g.gameId).toMatch(/^\d+$/);
-        }
-    });
-
-    it('extracts date from PGN headers', () => {
-        const rounds = extractFullPgnGames(fullHtml);
-        const allGames = Object.values(rounds).flat();
-        const withDate = allGames.filter(g => g.date);
-        expect(withDate.length).toBeGreaterThan(0);
-        for (const g of withDate) {
-            expect(g.date).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
-        }
-    });
-});
+// --- extractPairingsColors ---
 
 // --- extractPairingsColors ---
 
@@ -446,9 +260,9 @@ describe('extractPairingsColors', () => {
 
     it('derives PGN-style results', () => {
         const colors = extractPairingsColors(mockSections);
-        expect(colors[7][0].result).toBe('*'); // no results yet
-        expect(colors[7][1].result).toBe('1-0'); // white wins
-        expect(colors[7][2].result).toBe('1/2-1/2'); // draw
+        expect(colors[7][0].result).toBe('*');
+        expect(colors[7][1].result).toBe('1-0');
+        expect(colors[7][2].result).toBe('1/2-1/2');
     });
 
     it('skips bye rows', () => {
@@ -514,12 +328,10 @@ describe('parseStandings', () => {
         const sections = parseStandings(html);
         const section = sections.find(s => /1600/.test(s.section));
         const boyer = section.players.find(p => /Boyer/i.test(p.name));
-        // Round 1: H (half-point bye), Round 2: L, Round 3: W, Round 4: W
         expect(boyer.rounds[0]).toEqual({ result: 'H', opponentRank: null });
         expect(boyer.rounds[1].result).toBe('L');
         expect(boyer.rounds[2].result).toBe('W');
         expect(boyer.rounds[3].result).toBe('W');
-        // Rounds 5-7 should be null (future)
         expect(boyer.rounds[4]).toBeNull();
     });
 
@@ -560,3 +372,80 @@ describe('parseStandings', () => {
         expect(parseStandings('<html><body>No standings</body></html>')).toEqual([]);
     });
 });
+
+// --- parseTournamentPage (single-pass) ---
+
+describe('parseTournamentPage', () => {
+    it('extracts all data in one pass from full HTML', () => {
+        const result = parseTournamentPage(fullHtml);
+        expect(result.roundNumber).toBe(4);
+        expect(result.hasPairings).toBe(true);
+        expect(result.hasResults).toBe(true);
+        expect(result.pairingsSections.length).toBeGreaterThan(0);
+        expect(Object.keys(result.pgnColors).length).toBeGreaterThan(0);
+        expect(Object.keys(result.fullGames).length).toBeGreaterThan(0);
+        expect(result.strippedHtml).toContain('<h2>Standings</h2>');
+        expect(result.strippedHtml).toContain('<h2>Pairings</h2>');
+    });
+
+    it('handles HTML with no pairings or PGN', () => {
+        const empty = '<html><body>No tournament data</body></html>';
+        const result = parseTournamentPage(empty);
+        expect(result.roundNumber).toBeNull();
+        expect(result.hasPairings).toBe(false);
+        expect(result.hasResults).toBe(false);
+        expect(result.pairingsSections).toEqual([]);
+        expect(result.pgnColors).toEqual({});
+        expect(result.fullGames).toEqual({});
+        expect(result.strippedHtml).toBe(empty);
+    });
+});
+
+// --- findPlayerPairingFromSections ---
+
+describe('findPlayerPairingFromSections', () => {
+    it('finds player from pre-parsed sections', () => {
+        const parsed = parseTournamentPage(fullHtml);
+        const pairing = findPlayerPairingFromSections(parsed.pairingsSections, 'John Boyer');
+        expect(pairing).toBeTruthy();
+        expect(pairing.color).toBe('Black');
+        expect(pairing.board).toBe('18');
+        expect(pairing.opponent).toBe('Phil Ploquin');
+        expect(pairing.opponentRating).toBe(1660);
+    });
+
+    it('matches findPlayerPairing on stripped HTML', () => {
+        const parsed = parseTournamentPage(fullHtml);
+        const fromSections = findPlayerPairingFromSections(parsed.pairingsSections, 'John Boyer');
+        const fromHtml = findPlayerPairing(html, 'John Boyer');
+        expect(fromSections.board).toBe(fromHtml.board);
+        expect(fromSections.color).toBe(fromHtml.color);
+        expect(fromSections.opponent).toBe(fromHtml.opponent);
+        expect(fromSections.opponentRating).toBe(fromHtml.opponentRating);
+    });
+
+    it('returns null for unknown player', () => {
+        const parsed = parseTournamentPage(fullHtml);
+        expect(findPlayerPairingFromSections(parsed.pairingsSections, 'Magnus Carlsen')).toBeNull();
+    });
+
+    it('returns null for empty sections', () => {
+        expect(findPlayerPairingFromSections([], 'John Boyer')).toBeNull();
+    });
+});
+
+// --- findPlayerResultFromSections ---
+
+describe('findPlayerResultFromSections', () => {
+    it('finds result from pre-parsed sections', () => {
+        const parsed = parseTournamentPage(fullHtml);
+        expect(findPlayerResultFromSections(parsed.pairingsSections, 'John Boyer')).toBe('1');
+        expect(findPlayerResultFromSections(parsed.pairingsSections, 'Phil Ploquin')).toBe('0');
+    });
+
+    it('returns null for unknown player', () => {
+        const parsed = parseTournamentPage(fullHtml);
+        expect(findPlayerResultFromSections(parsed.pairingsSections, 'Magnus Carlsen')).toBeNull();
+    });
+});
+

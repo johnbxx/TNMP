@@ -32,7 +32,7 @@ export function classifyFen(fen) {
  * Extract and clean main-line move tokens from PGN move text.
  * Strips variations, comments, NAGs, move numbers, and result tokens.
  */
-export function extractMoveTokens(pgn) {
+function extractMoveTokens(pgn) {
     // Find move text after the last header
     const lastHeader = pgn.lastIndexOf(']\n');
     const moveText = lastHeader >= 0 ? pgn.substring(lastHeader + 2).trim() : pgn.trim();
@@ -57,12 +57,6 @@ export function extractMoveTokens(pgn) {
         .filter(t => t && !['1-0', '0-1', '1/2-1/2', '*'].includes(t));
 }
 
-/**
- * Classify a PGN game's opening by position.
- *
- * @param {string} pgn - Full PGN text
- * @returns {{ eco: string, name: string } | null}
- */
 /**
  * Replay a PGN's moves and return the final FEN position.
  *
