@@ -86,6 +86,8 @@
             <button data-debug="off_season" data-variant="r1Day">OFF SEASON (R1 Day)</button>
             <p>Debug: Game Viewer</p>
             <button id="debug-game-viewer">Open Game Viewer</button>
+            <p>Debug: PGN Editor</p>
+            <button id="debug-pgn-editor">Open PGN Editor</button>
         </div>
     </div>
 
@@ -199,18 +201,22 @@
         </div>
     </div>
 
-    <!-- Game Viewer Modal -->
-    <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Viewer" aria-modal="true">
+    <!-- Unified Game Panel (viewer + editor modes) -->
+    <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-viewer">
+            <button class="viewer-close" id="viewer-close" aria-label="Close">&times;</button>
             <div id="viewer-browser-panel" class="viewer-browser-panel hidden"></div>
             <div class="viewer-main">
                 <div id="viewer-header" class="viewer-header"></div>
                 <div class="viewer-layout">
                     <div id="viewer-board" class="viewer-board"></div>
+                    <div id="editor-eco" class="editor-eco hidden"></div>
+                    <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
                     <div id="viewer-moves" class="viewer-moves"></div>
                 </div>
-                <div class="viewer-toolbar">
+                <!-- Viewer toolbar (visible in viewer mode) -->
+                <div id="viewer-toolbar" class="viewer-toolbar">
                 <div class="viewer-tool-group">
                     <button id="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg></button>
                     <button id="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg></button>
@@ -237,8 +243,101 @@
                         </div>
                     </div>
                 </div>
+                </div>
+                <!-- Editor toolbar (hidden by default, visible in editor mode) -->
+                <div id="editor-toolbar" class="viewer-toolbar hidden">
+                    <div class="viewer-nav-group">
+                        <button id="editor-start" class="viewer-nav-btn" aria-label="Go to start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
+                        <button id="editor-prev" class="viewer-nav-btn" aria-label="Previous move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
+                        <button id="editor-next" class="viewer-nav-btn" aria-label="Next move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></svg></button>
+                        <button id="editor-end" class="viewer-nav-btn" aria-label="Go to end"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></svg></button>
+                    </div>
+                    <div class="viewer-toolbar-sep"></div>
+                    <div class="viewer-tool-group">
+                        <button id="editor-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
+                        <button id="editor-import" class="viewer-tool-btn" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>
+                        <button id="editor-copy" class="viewer-tool-btn" aria-label="Copy PGN" data-tooltip="Copy PGN"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
+                        <button id="editor-submit" class="viewer-tool-btn editor-submit-btn hidden" aria-label="Submit game" data-tooltip="Submit"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+                    </div>
+                </div>
             </div>
+            <!-- Editor overlays (always in DOM, hidden unless editor mode) -->
+            <div id="editor-promotion" class="editor-promotion hidden">
+                <button class="promo-btn" data-piece="q"><img alt="Queen"></button>
+                <button class="promo-btn" data-piece="r"><img alt="Rook"></button>
+                <button class="promo-btn" data-piece="b"><img alt="Bishop"></button>
+                <button class="promo-btn" data-piece="n"><img alt="Knight"></button>
             </div>
+            <div id="editor-import-dialog" class="editor-import-dialog hidden">
+                <div class="editor-import-content">
+                    <h3>Import PGN</h3>
+                    <textarea id="editor-import-text" class="editor-import-text" placeholder="Paste PGN text here..." rows="10"></textarea>
+                    <div class="editor-import-actions">
+                        <button id="editor-import-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                        <button id="editor-import-ok" class="editor-h-btn">Import</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- NAG picker popup (outside modal-content to avoid overflow clipping) -->
+        <div id="editor-nag-picker" class="editor-nag-picker hidden">
+            <div class="nag-section">
+                <div class="nag-section-title">Move</div>
+                <button class="nag-btn" data-nag="1"><span class="nag-symbol">!</span><span class="nag-label">Good move</span></button>
+                <button class="nag-btn" data-nag="2"><span class="nag-symbol">?</span><span class="nag-label">Poor move</span></button>
+                <button class="nag-btn" data-nag="3"><span class="nag-symbol">‼</span><span class="nag-label">Brilliant</span></button>
+                <button class="nag-btn" data-nag="4"><span class="nag-symbol">⁇</span><span class="nag-label">Blunder</span></button>
+                <button class="nag-btn" data-nag="5"><span class="nag-symbol">⁉</span><span class="nag-label">Interesting</span></button>
+                <button class="nag-btn" data-nag="6"><span class="nag-symbol">⁈</span><span class="nag-label">Dubious</span></button>
+                <button class="nag-btn" data-nag="7"><span class="nag-symbol">□</span><span class="nag-label">Forced</span></button>
+                <button class="nag-btn" data-nag="9"><span class="nag-symbol">☒</span><span class="nag-label">Worst move</span></button>
+            </div>
+            <div class="nag-section">
+                <div class="nag-section-title">Position</div>
+                <button class="nag-btn" data-nag="10"><span class="nag-symbol">=</span><span class="nag-label">Equal</span></button>
+                <button class="nag-btn" data-nag="13"><span class="nag-symbol">∞</span><span class="nag-label">Unclear</span></button>
+                <button class="nag-btn" data-nag="14"><span class="nag-symbol">⩲</span><span class="nag-label">White slightly better</span></button>
+                <button class="nag-btn" data-nag="15"><span class="nag-symbol">⩱</span><span class="nag-label">Black slightly better</span></button>
+                <button class="nag-btn" data-nag="16"><span class="nag-symbol">±</span><span class="nag-label">White moderately better</span></button>
+                <button class="nag-btn" data-nag="17"><span class="nag-symbol">∓</span><span class="nag-label">Black moderately better</span></button>
+                <button class="nag-btn" data-nag="18"><span class="nag-symbol">+-</span><span class="nag-label">White winning</span></button>
+                <button class="nag-btn" data-nag="19"><span class="nag-symbol">-+</span><span class="nag-label">Black winning</span></button>
+                <button class="nag-btn" data-nag="20"><span class="nag-symbol">+−−</span><span class="nag-label">White crushing</span></button>
+                <button class="nag-btn" data-nag="21"><span class="nag-symbol">−−+</span><span class="nag-label">Black crushing</span></button>
+            </div>
+            <div class="nag-section">
+                <div class="nag-section-title">Situation</div>
+                <button class="nag-btn" data-nag="22"><span class="nag-symbol">⨀</span><span class="nag-label">Zugzwang</span></button>
+                <button class="nag-btn" data-nag="32"><span class="nag-symbol">⟳</span><span class="nag-label">Development advantage</span></button>
+                <button class="nag-btn" data-nag="36"><span class="nag-symbol">↑</span><span class="nag-label">Has the initiative</span></button>
+                <button class="nag-btn" data-nag="40"><span class="nag-symbol">→</span><span class="nag-label">Has the attack</span></button>
+                <button class="nag-btn" data-nag="44"><span class="nag-symbol">⯹</span><span class="nag-label">Compensation</span></button>
+                <button class="nag-btn" data-nag="132"><span class="nag-symbol">⇆</span><span class="nag-label">Counterplay</span></button>
+                <button class="nag-btn" data-nag="138"><span class="nag-symbol">⨁</span><span class="nag-label">Time pressure</span></button>
+            </div>
+            <div class="nag-section">
+                <div class="nag-section-title">Other</div>
+                <button class="nag-btn" data-nag="140"><span class="nag-symbol">∆</span><span class="nag-label">With the idea</span></button>
+                <button class="nag-btn" data-nag="141"><span class="nag-symbol">∇</span><span class="nag-label">Aimed against</span></button>
+                <button class="nag-btn" data-nag="142"><span class="nag-symbol">⌓</span><span class="nag-label">Better is</span></button>
+                <button class="nag-btn" data-nag="143"><span class="nag-symbol">≤</span><span class="nag-label">Worse is</span></button>
+                <button class="nag-btn" data-nag="145"><span class="nag-symbol">RR</span><span class="nag-label">Editorial comment</span></button>
+                <button class="nag-btn" data-nag="146"><span class="nag-symbol">N</span><span class="nag-label">Novelty</span></button>
+            </div>
+        </div>
+        <!-- Move context menu (right-click / long-press on a move in editor) -->
+        <div id="editor-context-menu" class="editor-context-menu hidden">
+            <div class="ctx-nag-row">
+                <button class="ctx-nag" data-nag="1">!</button>
+                <button class="ctx-nag" data-nag="2">?</button>
+                <button class="ctx-nag" data-nag="3">‼</button>
+                <button class="ctx-nag" data-nag="4">⁇</button>
+                <button class="ctx-nag" data-nag="5">⁉</button>
+                <button class="ctx-nag" data-nag="6">⁈</button>
+            </div>
+            <button class="ctx-item" data-action="annotate">More annotations...</button>
+            <button class="ctx-item" data-action="delete">Delete from here</button>
+            <button class="ctx-item ctx-mainline" data-action="mainline">Make mainline</button>
         </div>
     </div>
 

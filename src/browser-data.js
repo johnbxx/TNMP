@@ -8,6 +8,19 @@ const GAMES_CACHE_KEY = 'gamesData';
 let gamesData = null;
 
 export function getGamesData() { return gamesData; }
+export function getSubmissions() { return gamesData?.submissions || {}; }
+
+/**
+ * Refetch games data from the network (e.g., after submitting a game).
+ */
+export async function refreshGamesData() {
+    try {
+        const response = await fetch(`${WORKER_URL}/games`);
+        if (!response.ok) return;
+        gamesData = await response.json();
+        try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(gamesData)); } catch { /* quota */ }
+    } catch { /* ignore */ }
+}
 
 /**
  * Prefetch game data in the background so the browser opens instantly.

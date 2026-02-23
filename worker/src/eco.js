@@ -19,6 +19,16 @@ function fenToEpd(fen) {
 }
 
 /**
+ * Classify a single FEN position by looking up its EPD in the database.
+ * Used by the /eco-classify endpoint for live ECO display in the editor.
+ */
+export function classifyFen(fen) {
+    const epd = fenToEpd(fen);
+    const match = ecoEpd[epd];
+    return match ? { eco: match.eco, name: match.name } : null;
+}
+
+/**
  * Extract and clean main-line move tokens from PGN move text.
  * Strips variations, comments, NAGs, move numbers, and result tokens.
  */

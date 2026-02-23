@@ -9,10 +9,11 @@ import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/
 import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
 import { registerModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, updatePushPrefs, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGameViewer, openGameViewerWithPgn, viewerNavigateGame, updateNavArrows } from './src/game-viewer.js';
+import { openGameViewer, closeGamePanel, openGameEditor, viewerNavigateGame, updateNavArrows, getCurrentMode, switchToEditor } from './src/game-viewer.js';
+import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, onCommentInput, onCommentFocus, onCommentBlur, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, submitGame } from './src/pgn-editor.js';
 import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
 import { showToast } from './src/toast.js';
-import { openGameBrowser, closeGameBrowser, prefetchGames, openGameWithPlayerNav, clearFilter, openBrowserWithCurrentFilter, getFilteredGames, getCachedPgn, getActiveFilter } from './src/game-browser.js';
+import { openGameBrowser, closeGameBrowser, prefetchGames, openGameWithPlayerNav, clearFilter, openBrowserWithCurrentFilter, openBrowserWithFirstGame, getFilteredGames, getCachedPgn, getActiveFilter } from './src/game-browser.js';
 import { formatName, getHeader } from './src/utils.js';
 
 function downloadPgn(pgnText, filename) {
@@ -60,11 +61,11 @@ async function handleGameDeepLink(gameId) {
             return;
         }
         const data = await response.json();
-        openGameViewerWithPgn(data.pgn, 'White', {
+        openGameViewer({
+            pgn: data.pgn,
             round: data.round,
             board: data.board,
-            eco: data.eco,
-            openingName: data.openingName,
+            meta: { eco: data.eco, openingName: data.openingName },
         });
         // Clean URL so refreshing doesn't re-open the game
         window.history.replaceState({}, '', window.location.pathname);
@@ -263,7 +264,14 @@ const wrappedCheckPairings = async function() {
 registerModalClose('settings-modal', closeSettings);
 registerModalClose('about-modal', closeAbout);
 registerModalClose('privacy-modal', closePrivacy);
-registerModalClose('viewer-modal', closeGameViewer);
+registerModalClose('viewer-modal', () => {
+    if (getCurrentMode() === 'editor') closeEditor();
+    closeGamePanel();
+});
+document.getElementById('viewer-close').addEventListener('click', () => {
+    if (getCurrentMode() === 'editor') closeEditor();
+    closeGamePanel();
+});
 registerModalClose('browser-modal', closeGameBrowser);
 
 // --- Keyboard shortcuts in modals ---
@@ -275,29 +283,46 @@ document.addEventListener('keydown', (e) => {
     const browserModal = document.getElementById('browser-modal');
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
-        // Branch popover intercepts arrow keys when open
-        if (isBranchPopoverOpen()) {
-            if (e.key === 'ArrowUp') { branchPopoverNavigate('up'); e.preventDefault(); }
-            else if (e.key === 'ArrowDown') { branchPopoverNavigate('down'); e.preventDefault(); }
-            else if (e.key === 'ArrowRight' || e.key === 'Enter') { branchPopoverNavigate('select'); e.preventDefault(); }
-            else if (e.key === 'ArrowLeft' || e.key === 'Escape') { goToPrev(); e.preventDefault(); }
-            return;
+        const mode = getCurrentMode();
+
+        if (mode === 'editor') {
+            // Don't intercept keys when typing in inputs/textareas
+            const tag = document.activeElement.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (e.key === 'ArrowLeft') { editorGoToPrev(); e.preventDefault(); }
+            else if (e.key === 'ArrowRight') { editorGoToNext(); e.preventDefault(); }
+            else if (e.key === 'Home') { editorGoToStart(); e.preventDefault(); }
+            else if (e.key === 'End') { editorGoToEnd(); e.preventDefault(); }
+            else if (e.key === 'f' || e.key === 'F') { editorFlipBoard(); }
+            else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) { editorUndo(); e.preventDefault(); }
+            else if (e.key === 'Delete' || e.key === 'Backspace') { deleteFromHere(); e.preventDefault(); }
+            else if (e.key === 'Escape') { closeEditor(); closeGamePanel(); }
+        } else {
+            // Viewer mode
+            // Branch popover intercepts arrow keys when open
+            if (isBranchPopoverOpen()) {
+                if (e.key === 'ArrowUp') { branchPopoverNavigate('up'); e.preventDefault(); }
+                else if (e.key === 'ArrowDown') { branchPopoverNavigate('down'); e.preventDefault(); }
+                else if (e.key === 'ArrowRight' || e.key === 'Enter') { branchPopoverNavigate('select'); e.preventDefault(); }
+                else if (e.key === 'ArrowLeft' || e.key === 'Escape') { goToPrev(); e.preventDefault(); }
+                return;
+            }
+            if (e.key === 'ArrowLeft') { goToPrev(); e.preventDefault(); }
+            else if (e.key === 'ArrowRight') { goToNext(); e.preventDefault(); }
+            else if (e.key === 'Home') { goToStart(); e.preventDefault(); }
+            else if (e.key === 'End') { goToEnd(); e.preventDefault(); }
+            else if (e.key === ' ') { toggleAutoPlay(); e.preventDefault(); }
+            else if (e.key === 'f' || e.key === 'F') { flipBoard(); }
+            else if (e.key === 'c' || e.key === 'C') {
+                const hidden = toggleComments();
+                document.getElementById('viewer-comments').classList.toggle('active', !hidden);
+            }
+            else if (e.key === 'b' || e.key === 'B') {
+                const active = toggleBranchMode();
+                document.getElementById('viewer-branch').classList.toggle('active', active);
+            }
+            else if (e.key === 'Escape') { closeGamePanel(); }
         }
-        if (e.key === 'ArrowLeft') { goToPrev(); e.preventDefault(); }
-        else if (e.key === 'ArrowRight') { goToNext(); e.preventDefault(); }
-        else if (e.key === 'Home') { goToStart(); e.preventDefault(); }
-        else if (e.key === 'End') { goToEnd(); e.preventDefault(); }
-        else if (e.key === ' ') { toggleAutoPlay(); e.preventDefault(); }
-        else if (e.key === 'f' || e.key === 'F') { flipBoard(); }
-        else if (e.key === 'c' || e.key === 'C') {
-            const hidden = toggleComments();
-            document.getElementById('viewer-comments').classList.toggle('active', !hidden);
-        }
-        else if (e.key === 'b' || e.key === 'B') {
-            const active = toggleBranchMode();
-            document.getElementById('viewer-branch').classList.toggle('active', active);
-        }
-        else if (e.key === 'Escape') { closeGameViewer(); }
     } else if (!browserModal.classList.contains('hidden')) {
         trapFocus(e, 'browser-modal');
         if (e.key === 'Escape') { closeGameBrowser(); }
@@ -322,8 +347,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- Wire up event handlers (CSP-compliant, no inline handlers) ---
-document.getElementById('games-btn').addEventListener('click', openGameBrowser);
-document.getElementById('browser-modal').addEventListener('click', (e) => {
+document.getElementById('games-btn').addEventListener('click', () => {
+    if (window.matchMedia('(min-width: 1000px)').matches) {
+        openBrowserWithFirstGame();
+    } else {
+        openGameBrowser();
+    }
+});
+document.addEventListener('click', (e) => {
     if (!e.target.closest('#browser-export')) return;
     const games = getFilteredGames();
     if (games.length === 0) { showToast('No games to export'); return; }
@@ -533,6 +564,18 @@ document.getElementById('viewer-header').addEventListener('click', (e) => {
         openBrowserWithCurrentFilter();
         return;
     }
+    // Edit submission button — switch from viewer to editor in-place
+    const editBtn = e.target.closest('#viewer-edit-submission');
+    if (editBtn) {
+        switchToEditor(openEditor, {
+            pgn: getGamePgn(),
+            orientation: 'white',
+            submitMode: true,
+            round: Number(editBtn.dataset.round),
+            board: Number(editBtn.dataset.board),
+        });
+        return;
+    }
     // Prev/Next game arrows
     const arrow = e.target.closest('[data-browse-round]');
     if (arrow) {
@@ -547,7 +590,7 @@ document.getElementById('pairing-info').addEventListener('click', (e) => {
     if (CONFIG.playerName) {
         openGameWithPlayerNav(CONFIG.playerName, btn.dataset.round, btn.dataset.board);
     } else {
-        openGameViewer(btn.dataset.round, btn.dataset.board);
+        openGameViewer({ round: btn.dataset.round, board: btn.dataset.board });
     }
 });
 
@@ -577,7 +620,34 @@ document.getElementById('debug-game-viewer').addEventListener('click', () => {
 [EventDate "2026.01.27"]
 
 1. e4 c5 2. Nf3 Nc6 3. Nc3 e5 4. Bc4 g6 5. d3 h6 6. Be3 d6 7. h3 Bg7 8. Nd5 Nge7 9. c3 Nxd5 10. Bxd5 O-O 11. Qd2 Kh7 12. Nh2 f5 13. f3 f4 14. Bf2 Qg5 15. O-O-O Qxg2 16. Rdg1 Qxh3 17. Qd1 Qd7 18. Ng4 Qe8 19. Qf1 Bxg4 20. Rxg4 Ne7 21. Bb3 a5 22. Rgh4 Rh8 23. Qh3 Qf8 24. Rg4 a4 25. Bc2 b5 26. d4 cxd4 27. cxd4 b4 28. d5 Qc8 29. Kd2 b3 30. axb3 axb3 31. Bd3 Ra2 32. Rb1 h5 33. Ke2 Bh6 34. Rh4 Qxh3 35. Rxh3 Rc8 36. Be1 Ng8 37. Bb4 Bf8 38. Ba3 Ra8 39. Kd1 Rc8 40. Rc1 Rxc1+ 41. Kxc1 Ra1+ 42. Bb1 Nh6 43. Rh1 Nf7 44. Kd2 Ng5 45. Kc3 Nxf3 46. Kxb3 Rxb1 0-1`;
-    openGameViewerWithPgn(samplePgn, 'Black');
+    openGameViewer({ pgn: samplePgn, orientation: 'Black' });
+});
+
+// Debug: PGN Editor
+document.getElementById('debug-pgn-editor').addEventListener('click', () => {
+    openGameEditor(openEditor, {});
+});
+
+// --- Editor toolbar event handlers ---
+document.getElementById('editor-start').addEventListener('click', editorGoToStart);
+document.getElementById('editor-prev').addEventListener('click', editorGoToPrev);
+document.getElementById('editor-next').addEventListener('click', editorGoToNext);
+document.getElementById('editor-end').addEventListener('click', editorGoToEnd);
+document.getElementById('editor-flip').addEventListener('click', editorFlipBoard);
+document.getElementById('editor-import').addEventListener('click', showImportDialog);
+document.getElementById('editor-copy').addEventListener('click', copyPgn);
+document.getElementById('editor-submit').addEventListener('click', submitGame);
+document.getElementById('editor-comment-input').addEventListener('input', onCommentInput);
+document.getElementById('editor-comment-input').addEventListener('focus', onCommentFocus);
+document.getElementById('editor-comment-input').addEventListener('blur', onCommentBlur);
+document.getElementById('editor-import-ok').addEventListener('click', doImport);
+document.getElementById('editor-import-cancel').addEventListener('click', hideImportDialog);
+
+// NAG picker button delegation — stays open for multiple selections
+document.getElementById('editor-nag-picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('.nag-btn');
+    if (!btn) return;
+    toggleNag(parseInt(btn.dataset.nag, 10));
 });
 
 // --- Register service worker ---

@@ -1,6 +1,6 @@
 import { sendPushNotification } from './webpush.js';
-import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, extractPairingsColors, extractFullPgnGames, parsePairingsSections, parseStandings, parseTournamentList, parseRoundDates, extractTournamentName } from './parser2.js';
-import { classifyOpening, replayToFen } from './eco.js';
+import { hasPairings, hasResults, extractRoundNumber, findPlayerPairing, findPlayerResult, composeMessage, composeResultsMessage, extractSwissSysContent, extractPgnColors, extractPairingsColors, extractFullPgnGames, parsePairingsSections, parseStandings, parseTournamentList, parseRoundDates, extractTournamentName, parsePlayerInfo } from './parser2.js';
+import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import { generateBoardSvg } from './og-board.js';
 
 const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
@@ -990,13 +990,28 @@ async function handleGetGames(request, env) {
             openingName: row.opening_name,
             gameId: row.game_id,
             section: row.section,
+            hasPgn: !!row.pgn,
         });
         if (!roundParam && row.pgn) {
             pgns[`${row.round}:${row.board}`] = row.pgn;
         }
     }
 
-    const response = { rounds, tournamentName: meta.name };
+    // Fetch pending submissions for this tournament
+    const submissionResult = await env.DB.prepare(
+        `SELECT round, board, status, submitted_by, updated_at
+         FROM game_submissions WHERE tournament_slug = ? AND status = 'pending'`
+    ).bind(slug).all();
+    const submissions = {};
+    for (const sub of submissionResult.results) {
+        submissions[`${sub.round}:${sub.board}`] = {
+            status: sub.status,
+            submittedBy: sub.submitted_by,
+            updatedAt: sub.updated_at,
+        };
+    }
+
+    const response = { rounds, tournamentName: meta.name, submissions };
     if (!roundParam) response.pgns = pgns;
     return corsResponse(response, 200, env, request);
 }
@@ -1215,6 +1230,109 @@ async function sha256Hex(input) {
 async function pushKey(endpoint) {
     const hash = await sha256Hex(endpoint);
     return `push:${hash}`;
+}
+
+// --- ECO Classification Endpoint ---
+
+async function handleEcoClassify(request, env) {
+    const url = new URL(request.url);
+    const fen = url.searchParams.get('fen');
+    if (!fen) {
+        return corsResponse({ error: 'fen parameter is required' }, 400, env, request);
+    }
+    const result = classifyFen(fen);
+    return corsResponse(result || {}, 200, env, request);
+}
+
+// --- Game Submission Endpoints ---
+
+async function handleSubmitGame(request, env) {
+    const { pgn, round, board, submittedBy } = await request.json();
+
+    if (!pgn || !round || !board) {
+        return corsResponse({ error: 'pgn, round, and board are required' }, 400, env, request);
+    }
+
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    const slug = meta?.name ? slugifyTournament(meta.name) : null;
+    if (!slug) {
+        return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+    }
+
+    // Verify the game exists as a shell record (no official PGN)
+    const game = await env.DB.prepare(
+        'SELECT white, black, result, section, pgn FROM games WHERE tournament_slug = ? AND round = ? AND board = ?'
+    ).bind(slug, parseInt(round), parseInt(board)).first();
+
+    if (!game) {
+        return corsResponse({ error: 'Game not found in tournament' }, 404, env, request);
+    }
+    if (game.pgn) {
+        return corsResponse({ error: 'Game already has an official PGN' }, 409, env, request);
+    }
+
+    const opening = classifyOpening(pgn);
+    const now = new Date().toISOString();
+
+    await env.DB.prepare(
+        `INSERT OR REPLACE INTO game_submissions
+         (tournament_slug, round, board, white, black, white_norm, black_norm,
+          result, eco, opening_name, section, pgn, status, submitted_by, submitted_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`
+    ).bind(
+        slug, parseInt(round), parseInt(board),
+        game.white, game.black,
+        normalizePlayerName(game.white), normalizePlayerName(game.black),
+        game.result,
+        opening ? opening.eco : null,
+        opening ? opening.name : null,
+        game.section,
+        pgn,
+        submittedBy || null,
+        now, now
+    ).run();
+
+    return corsResponse({
+        success: true,
+        eco: opening?.eco || null,
+        openingName: opening?.name || null,
+    }, 200, env, request);
+}
+
+async function handleGetSubmission(request, env) {
+    const url = new URL(request.url);
+    const round = url.searchParams.get('round');
+    const board = url.searchParams.get('board');
+
+    if (!round || !board) {
+        return corsResponse({ error: 'round and board parameters are required' }, 400, env, request);
+    }
+
+    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    const slug = meta?.name ? slugifyTournament(meta.name) : null;
+    if (!slug) {
+        return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+    }
+
+    const row = await env.DB.prepare(
+        `SELECT pgn, eco, opening_name, submitted_by, submitted_at, updated_at
+         FROM game_submissions
+         WHERE tournament_slug = ? AND round = ? AND board = ? AND status = 'pending'
+         ORDER BY updated_at DESC LIMIT 1`
+    ).bind(slug, parseInt(round), parseInt(board)).first();
+
+    if (!row) {
+        return corsResponse({ error: 'No pending submission found' }, 404, env, request);
+    }
+
+    return corsResponse({
+        pgn: row.pgn,
+        eco: row.eco,
+        openingName: row.opening_name,
+        submittedBy: row.submitted_by,
+        submittedAt: row.submitted_at,
+        updatedAt: row.updated_at,
+    }, 200, env, request);
 }
 
 async function handlePushSubscribe(request, env) {
@@ -1573,6 +1691,39 @@ async function handleScheduled(env) {
                 await env.SUBSCRIBERS.put('cache:pairingsColors', JSON.stringify(existing));
                 console.log(`Persisted pairings colors for rounds: ${Object.keys(newColors).join(', ')}`);
             }
+
+            // Insert shell records for games without PGN textareas (INSERT OR IGNORE
+            // preserves existing records that may already have PGNs from textarea ingestion)
+            const shellStmts = [];
+            for (const section of sections) {
+                const rnd = section.round;
+                for (const row of section.rows) {
+                    if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
+                    const board = row.board ? parseInt(row.board, 10) || null : null;
+                    if (!board) continue;
+                    const white = parsePlayerInfo(row.whiteName).name;
+                    const black = parsePlayerInfo(row.blackName).name;
+                    let result = '*';
+                    const wr = row.whiteResult.trim();
+                    const br = row.blackResult.trim();
+                    if (wr === '1' && br === '0') result = '1-0';
+                    else if (wr === '0' && br === '1') result = '0-1';
+                    else if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) result = '1/2-1/2';
+                    shellStmts.push(
+                        env.DB.prepare(
+                            `INSERT OR IGNORE INTO games
+                             (tournament_slug, round, board, white, black, white_norm, black_norm, result, section, pgn)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
+                        ).bind(slug, rnd, board, white, black, normalizePlayerName(white), normalizePlayerName(black), result, section.section)
+                    );
+                }
+            }
+            for (let i = 0; i < shellStmts.length; i += 100) {
+                await env.DB.batch(shellStmts.slice(i, i + 100));
+            }
+            if (shellStmts.length > 0) {
+                console.log(`Inserted up to ${shellStmts.length} shell records (INSERT OR IGNORE).`);
+            }
         } catch (err) {
             console.error('Failed to capture pairings colors:', err.message);
         }
@@ -1748,6 +1899,15 @@ export default {
                 return await handleTournaments(request, env);
             }
 
+            if (path === '/eco-classify' && request.method === 'GET') {
+                return await handleEcoClassify(request, env);
+            }
+            if (path === '/submit-game' && request.method === 'POST') {
+                return await handleSubmitGame(request, env);
+            }
+            if (path === '/submission' && request.method === 'GET') {
+                return await handleGetSubmission(request, env);
+            }
             if (path === '/health' && request.method === 'GET') {
                 return await handleHealth(env, request);
             }

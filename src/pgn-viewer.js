@@ -2,7 +2,7 @@ import { Chess } from 'chess.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import '@chrisoakman/chessboard2/dist/chessboard2.min.css';
 import { formatName, resultClass, resultSymbol, getHeader } from './utils.js';
-import { parseMoveText, extractMoveText, nagToSymbol } from './pgn-parser.js';
+import { parseMoveText, extractMoveText, nagToHtml } from './pgn-parser.js';
 
 // --- State ---
 
@@ -33,7 +33,8 @@ function buildMoveTree(moves, fen) {
         for (const m of moves) {
             const prev = result[prevId];
             const engine = new Chess(prev.fen);
-            const move = engine.move(m.san);
+            let move;
+            try { move = engine.move(m.san); } catch { /* illegal move */ }
             if (!move) break; // invalid move — stop this line
 
             const node = {
@@ -106,6 +107,15 @@ export function initViewer(pgn, playerColor, meta = {}) {
 
     if (board) {
         board.destroy();
+        board = null;
+        // Replace element to strip Chessboard2's orphaned event listeners
+        const oldEl = document.getElementById('viewer-board');
+        if (oldEl) {
+            const fresh = document.createElement('div');
+            fresh.id = 'viewer-board';
+            fresh.className = 'viewer-board';
+            oldEl.replaceWith(fresh);
+        }
     }
 
     renderGameHeader(pgn, meta);
@@ -115,6 +125,7 @@ export function initViewer(pgn, playerColor, meta = {}) {
         orientation: orientation,
     });
 
+    highlightSquares(null);
     renderMoveList();
     updateNavigationButtons();
     syncDesktopLayout();
@@ -195,10 +206,8 @@ let commentsHidden = false;
 
 export function toggleComments() {
     commentsHidden = !commentsHidden;
-    const container = document.getElementById('viewer-moves');
-    if (container) {
-        container.classList.toggle('hide-comments', commentsHidden);
-    }
+    renderMoveList();
+    highlightCurrentMove();
     return commentsHidden;
 }
 
@@ -344,6 +353,16 @@ export function destroyViewer() {
         board.destroy();
         board = null;
     }
+    // Replace the board element to strip Chessboard2's orphaned event listeners
+    // (destroy() clears innerHTML but doesn't remove mousemove/mousedown/etc listeners)
+    const oldBoardEl = document.getElementById('viewer-board');
+    if (oldBoardEl) {
+        const fresh = document.createElement('div');
+        fresh.id = 'viewer-board';
+        fresh.className = 'viewer-board';
+        oldBoardEl.replaceWith(fresh);
+    }
+
     nodes = [];
     mainLineEnd = 0;
     currentNodeId = 0;
@@ -363,8 +382,6 @@ export function destroyViewer() {
     if (headerEl) headerEl.innerHTML = '';
     const movesEl = document.getElementById('viewer-moves');
     if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
-    const boardEl = document.getElementById('viewer-board');
-    if (boardEl) boardEl.style.width = '';
     const modalEl = document.querySelector('.modal-content-viewer');
     if (modalEl) modalEl.style.width = '';
     const layoutEl = document.querySelector('.viewer-layout');
@@ -491,6 +508,12 @@ function renderGameHeader(pgn, meta = {}) {
     const whiteSymbol = resultSymbol(result, 'white');
     const blackSymbol = resultSymbol(result, 'black');
 
+    // Edit button for community-submitted games
+    let editBtnHtml = '';
+    if (meta.isSubmission) {
+        editBtnHtml = `<button class="viewer-edit-submission" id="viewer-edit-submission" data-round="${round || ''}" data-board="${boardNum || ''}">Edit Submission</button>`;
+    }
+
     headerEl.innerHTML = `
         ${filterChipHtml}
         ${browserNavHtml}
@@ -508,6 +531,7 @@ function renderGameHeader(pgn, meta = {}) {
             </div>
         </div>
         ${openingHtml}
+        ${editBtnHtml}
     `;
 }
 
@@ -529,11 +553,8 @@ window.addEventListener('resize', () => {
     if (!board) return; // no viewer open
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-        const nowDesktop = isDesktop();
-        if (nowDesktop !== wasDesktop) {
-            wasDesktop = nowDesktop;
-            renderMoveList();
-        }
+        wasDesktop = isDesktop();
+        renderMoveList();
         syncDesktopLayout();
     }, 100);
 });
@@ -542,8 +563,20 @@ window.addEventListener('resize', () => {
  * On desktop, size the board as a square that fits the available layout height,
  * and constrain the moves panel to the same height.
  */
-function syncDesktopLayout() {
-    if (!isDesktop()) return;
+export function syncDesktopLayout() {
+    if (!isDesktop()) {
+        // Clean up desktop inline styles so mobile layout works
+        const boardEl = document.getElementById('viewer-board');
+        const movesEl = document.getElementById('viewer-moves');
+        const modalEl = document.querySelector('.modal-content-viewer');
+        const layoutEl = document.querySelector('.viewer-layout');
+        if (boardEl) boardEl.style.width = '';
+        if (movesEl) movesEl.style.maxHeight = '';
+        if (modalEl) modalEl.style.width = '';
+        if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
+        if (board && board.resize) board.resize();
+        return;
+    }
     requestAnimationFrame(() => {
         const modalEl = document.querySelector('.modal-content-viewer');
         const boardEl = document.getElementById('viewer-board');
@@ -567,15 +600,16 @@ function syncDesktopLayout() {
         if (!containerEl) return;
 
         const headerEl = document.getElementById('viewer-header');
-        const toolbarEl = containerEl.querySelector('.viewer-toolbar');
+        const toolbarEl = containerEl.querySelector('.viewer-toolbar:not(.hidden)');
 
         const headerH = headerEl ? headerEl.offsetHeight : 0;
         const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
+        const toolbarMargin = toolbarEl ? parseFloat(getComputedStyle(toolbarEl).marginTop) || 0 : 0;
         const containerPadding = parseFloat(getComputedStyle(containerEl).paddingTop)
                                + parseFloat(getComputedStyle(containerEl).paddingBottom);
-        const modalGap = headerH > 0 ? layoutGap : 0;
+        const headerMargin = headerH > 0 ? parseFloat(getComputedStyle(headerEl).marginBottom) || 0 : 0;
 
-        const availableHeight = containerEl.clientHeight - headerH - toolbarH - containerPadding - modalGap;
+        const availableHeight = containerEl.clientHeight - headerH - headerMargin - toolbarH - toolbarMargin - containerPadding;
 
         let availableWidth;
         if (hasBrowser) {
@@ -619,18 +653,12 @@ function renderMoveList() {
     const container = document.getElementById('viewer-moves');
     if (!container) return;
 
-    const hasAnnotations = annotatedMoves.some(m => m.comment || m.nags || m.variations);
-    const hasVariations = annotatedMoves.some(m => m.variations);
-
-    if (isDesktop() && !hasVariations) {
-        // Desktop: two-column table (move number | white | black)
+    if (isDesktop()) {
+        // Grid table handles comments, NAGs, and variations
         container.innerHTML = renderMoveTable();
-    } else if (hasAnnotations) {
-        // Annotated games with variations use inline format
-        container.innerHTML = renderAnnotatedMoves(annotatedMoves, 0, false);
     } else {
-        // Mobile: inline span format
-        container.innerHTML = renderMoveListInline();
+        // Mobile: inline format with variations
+        container.innerHTML = renderAnnotatedMoves(annotatedMoves, 0, false);
     }
 
     // Event delegation for clicking moves (main line and variations)
@@ -644,42 +672,123 @@ function renderMoveList() {
     };
 }
 
-function renderMoveListInline() {
-    let html = '';
-    let id = nodes[0].mainChild;
-    while (id !== null) {
-        const node = nodes[id];
-        const ply = node.ply;
-        const moveNum = Math.floor((ply - 1) / 2) + 1;
-        if (ply % 2 === 1) html += `<span class="move-number">${moveNum}.</span>`;
-        html += `<span class="move${id === currentNodeId ? ' move-current' : ''}" data-node-id="${id}">${node.san}</span> `;
-        id = node.mainChild;
-    }
-    return html;
+function cleanComment(comment) {
+    if (!comment) return '';
+    return comment.replace(/\[#\]/g, '').replace(/\[%[^\]]*\]/g, '').trim();
 }
 
 function renderMoveTable() {
-    // Collect main line nodes
-    const mainLine = [];
-    let id = nodes[0].mainChild;
-    while (id !== null) {
-        mainLine.push(nodes[id]);
-        id = nodes[id].mainChild;
+    let row = 0;
+    let html = '<div class="move-table">';
+
+    // Render a variation line as inline text spanning all columns
+    function renderVariationInline(startId) {
+        let vhtml = '';
+        let id = startId;
+        while (id !== null) {
+            const n = nodes[id];
+            if (!n || n.deleted) break;
+            const ply = n.ply;
+            const moveNum = Math.floor((ply - 1) / 2) + 1;
+            const isBlack = ply % 2 === 0;
+            if (!isBlack) {
+                vhtml += `<span class="move-number">${moveNum}.</span>`;
+            } else if (id === startId) {
+                vhtml += `<span class="move-number">${moveNum}...</span>`;
+            }
+            const current = id === currentNodeId ? ' move-current' : '';
+            const vnag = n.nags?.length > 0 ? `<span class="move-nag">${n.nags.map(nagToHtml).join(' ')}</span>` : '';
+            vhtml += `<span class="move-variation${current}" data-node-id="${id}">${n.san}${vnag}</span> `;
+            const comment = cleanComment(n.comment);
+            if (comment) vhtml += `<span class="move-comment">${comment}</span> `;
+            // Sub-variations within this variation line
+            if (n.children.length > 1) {
+                const subMain = n.mainChild;
+                for (const subId of n.children) {
+                    if (subId !== subMain && !nodes[subId].deleted) {
+                        vhtml += `<span class="move-variation-block">(${renderVariationInline(subId)})</span> `;
+                    }
+                }
+            }
+            id = n.mainChild;
+        }
+        return vhtml;
     }
 
-    let html = '<div class="move-table">';
-    for (let i = 0; i < mainLine.length; i += 2) {
-        const white = mainLine[i];
-        const black = mainLine[i + 1];
-        const moveNum = Math.floor(i / 2) + 1;
+    // Emit variation rows spanning all 3 columns
+    function emitVariations(parentNode) {
+        if (!parentNode || parentNode.children.length <= 1) return;
+        const mainId = parentNode.mainChild;
+        const alts = parentNode.children.filter(cid => cid !== mainId && !nodes[cid].deleted);
+        if (alts.length === 0) return;
+        for (const altId of alts) {
+            html += `<span class="mt-variation">(${renderVariationInline(altId)})</span>`;
+        }
+    }
 
-        html += `<span class="move-num">${moveNum}.</span>`;
-        html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}" data-node-id="${white.id}">${white.san}</span>`;
+    // Walk main line node-by-node, pairing white+black per grid row
+    let id = nodes[0].mainChild;
+    while (id !== null) {
+        const white = nodes[id];
+        if (!white || white.deleted) break;
+        const moveNum = Math.floor((white.ply - 1) / 2) + 1;
+        const stripe = row % 2 === 0 ? ' mt-stripe' : '';
+        const wNag = white.nags && white.nags.length > 0 ? `<span class="move-nag">${white.nags.map(nagToHtml).join(' ')}</span>` : '';
+        const wComment = commentsHidden ? '' : cleanComment(white.comment);
+        const whiteParent = nodes[white.parentId];
+        const hasWhiteVars = !commentsHidden && whiteParent && whiteParent.children.length > 1;
 
-        if (black) {
-            html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}" data-node-id="${black.id}">${black.san}</span>`;
+        const blackId = white.mainChild;
+        const black = blackId !== null ? nodes[blackId] : null;
+        const validBlack = black && !black.deleted && black.ply % 2 === 0;
+
+        if (wComment || hasWhiteVars) {
+            html += `<span class="move-num${stripe}">${moveNum}.</span>`;
+            html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
+            html += `<span class="move-empty${stripe}"></span>`;
+            if (wComment) html += `<span class="mt-comment${stripe}">${wComment}</span>`;
+            if (hasWhiteVars) emitVariations(whiteParent);
+            row++;
+
+            if (validBlack) {
+                const stripe2 = row % 2 === 0 ? ' mt-stripe' : '';
+                const bNag = black.nags && black.nags.length > 0 ? `<span class="move-nag">${black.nags.map(nagToHtml).join(' ')}</span>` : '';
+                const bComment = cleanComment(black.comment);
+                const hasBlackVars = white.children.length > 1;
+
+                html += `<span class="move-num${stripe2}"></span>`;
+                html += `<span class="move-empty${stripe2}"></span>`;
+                html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe2}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
+                if (bComment) html += `<span class="mt-comment${stripe2}">${bComment}</span>`;
+                if (hasBlackVars) emitVariations(white);
+                row++;
+                id = black.mainChild;
+            } else {
+                row++;
+                id = white.mainChild;
+                if (validBlack) id = black.mainChild;
+            }
         } else {
-            html += `<span class="move-empty"></span>`;
+            html += `<span class="move-num${stripe}">${moveNum}.</span>`;
+            html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
+
+            if (validBlack) {
+                const bNag = black.nags && black.nags.length > 0 ? `<span class="move-nag">${black.nags.map(nagToHtml).join(' ')}</span>` : '';
+                const bComment = commentsHidden ? '' : cleanComment(black.comment);
+                const hasBlackVars = !commentsHidden && white.children.length > 1;
+
+                html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
+                if (bComment || hasBlackVars) {
+                    if (bComment) html += `<span class="mt-comment${stripe}">${bComment}</span>`;
+                    if (hasBlackVars) emitVariations(white);
+                }
+                row++;
+                id = black.mainChild;
+            } else {
+                html += `<span class="move-empty${stripe}"></span>`;
+                row++;
+                id = white.mainChild;
+            }
         }
     }
     html += '</div>';
@@ -714,10 +823,13 @@ function renderAnnotatedMoves(moves, parentNodeId, isVariation) {
         }
 
         // The move itself — all moves are now clickable (main line and variations)
-        const nags = m.nags ? m.nags.map(nagToSymbol).join('') : '';
         const cls = isVariation ? 'move-variation' : 'move';
         const current = nodeId === currentNodeId ? ' move-current' : '';
-        html += `<span class="${cls}${current}" data-node-id="${nodeId}">${m.san}${nags}</span> `;
+        html += `<span class="${cls}${current}" data-node-id="${nodeId}">${m.san}</span>`;
+        if (m.nags && m.nags.length > 0) {
+            html += `<span class="move-nag">${m.nags.map(nagToHtml).join(' ')}</span>`;
+        }
+        html += ' ';
 
         // Post-move comment
         if (m.comment) {

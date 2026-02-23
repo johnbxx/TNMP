@@ -21,6 +21,9 @@ export function openModal(modalId, focusTarget) {
 
     modal.classList.remove('hidden');
 
+    // Prevent background scrolling
+    document.body.style.overflow = 'hidden';
+
     // Hide background content from screen readers
     const container = document.querySelector('.container');
     if (container) container.setAttribute('aria-hidden', 'true');
@@ -43,9 +46,10 @@ export function closeModal(modalId) {
 
     modal.classList.add('hidden');
 
-    // Restore background content for screen readers (only if no other modals are open)
+    // Restore background content (only if no other modals are open)
     const anyOpen = document.querySelector('.modal:not(.hidden)');
     if (!anyOpen) {
+        document.body.style.overflow = '';
         const container = document.querySelector('.container');
         if (container) container.removeAttribute('aria-hidden');
     }

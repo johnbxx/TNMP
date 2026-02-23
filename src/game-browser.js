@@ -1,8 +1,10 @@
 import { openModal, closeModal } from './modal.js';
-import { openGameViewer } from './game-viewer.js';
+import { openGameViewer, openGameEditor } from './game-viewer.js';
+import { openEditor } from './pgn-editor.js';
 import { fitTextToContainer } from './ui.js';
 import { formatName, resultClass, resultSymbol, normalizeSection } from './utils.js';
-import { getGamesData, fetchGamesData, buildPlayerList, buildSectionList } from './browser-data.js';
+import { getGamesData, fetchGamesData, buildPlayerList, buildSectionList, getSubmissions } from './browser-data.js';
+import { WORKER_URL, getTournamentMeta } from './config.js';
 import {
     getBrowsingGame, setBrowsingGame, setNavList,
     getSelectedPlayer, setSelectedPlayer,
@@ -98,6 +100,95 @@ function hideBrowser() {
 }
 
 /**
+ * Find a game object from gamesData by round and board.
+ */
+function findGame(round, board) {
+    const gd = getGamesData();
+    if (!gd) return null;
+    const games = gd.rounds[round];
+    if (!games) return null;
+    return games.find(g => String(g.board) === String(board)) || null;
+}
+
+/**
+ * Determine board orientation based on selected player.
+ */
+function getOrientationForGame(round, board) {
+    const sp = getSelectedPlayer();
+    if (!sp) return 'White';
+    const game = findGame(round, board);
+    if (game && formatName(game.black).toLowerCase() === sp.toLowerCase()) return 'Black';
+    return 'White';
+}
+
+/**
+ * Open the editor pre-populated with game headers for a shell record.
+ */
+function openEditorForGame(round, board, game) {
+    const meta = getTournamentMeta();
+    const headers = {
+        Event: meta.name || 'Tuesday Night Marathon',
+        Site: 'San Francisco',
+        Date: new Date().toISOString().split('T')[0].replace(/-/g, '.'),
+        Round: `${round}.${board}`,
+        White: game?.white || '?',
+        Black: game?.black || '?',
+        Result: game?.result || '*',
+    };
+    if (game?.section) headers.Event += `: ${game.section}`;
+
+    const orientation = getOrientationForGame(round, board);
+
+    if (isEmbeddedBrowser()) {
+        // Already in the unified panel — just switch mode
+        openGameEditor(openEditor, {
+            headers,
+            orientation: orientation.toLowerCase(),
+            submitMode: true,
+            round: Number(round),
+            board: Number(board),
+        });
+    } else {
+        // From standalone browser — close it, open unified panel with editor
+        hideBrowser();
+        setTimeout(() => {
+            openGameEditor(openEditor, {
+                headers,
+                orientation: orientation.toLowerCase(),
+                submitMode: true,
+                round: Number(round),
+                board: Number(board),
+            });
+        }, 150);
+    }
+}
+
+/**
+ * Open the viewer with a submitted (pending) PGN, with edit capability.
+ */
+async function openViewerWithSubmission(round, board, orientation) {
+    if (!isEmbeddedBrowser()) hideBrowser();
+    try {
+        const response = await fetch(`${WORKER_URL}/submission?round=${round}&board=${board}`);
+        if (response.ok) {
+            const data = await response.json();
+            openGameViewer({
+                pgn: data.pgn,
+                round,
+                board,
+                orientation,
+                meta: { eco: data.eco, openingName: data.openingName, isSubmission: true },
+            });
+        } else {
+            // Fallback: open editor
+            openEditorForGame(round, board, findGame(round, board));
+        }
+    } catch {
+        openEditorForGame(round, board, findGame(round, board));
+    }
+}
+
+/**
  * Re-open the browser modal with current state.
  */
 export function reopenBrowser() {
@@ -187,23 +278,53 @@ export function openBrowserWithCurrentFilter() {
 }
 
 /**
+ * Open the viewer with the first game of the latest round pre-selected.
+ * Used on desktop where the embedded browser panel replaces the standalone modal.
+ */
+export async function openBrowserWithFirstGame() {
+    let gamesData = getGamesData();
+    if (!gamesData) {
+        try { gamesData = await fetchGamesData(); } catch { return openGameBrowser(); }
+    }
+    const roundNumbers = Object.keys(gamesData.rounds).map(Number).sort((a, b) => a - b);
+    if (roundNumbers.length === 0) return openGameBrowser();
+
+    // Find the latest round that has at least one game with PGN
+    let targetRound = null;
+    let first = null;
+    for (let i = roundNumbers.length - 1; i >= 0; i--) {
+        const games = gamesData.rounds[roundNumbers[i]] || [];
+        const sorted = [...games].sort((a, b) => (a.board || 999) - (b.board || 999));
+        const withPgn = sorted.find(g => g.hasPgn);
+        if (withPgn) {
+            targetRound = roundNumbers[i];
+            first = withPgn;
+            break;
+        }
+    }
+    if (!first) return openGameBrowser();
+    setSelectedRound(targetRound);
+    if (getPlayerList().length === 0) setPlayerList(buildPlayerList());
+    if (getSectionList().length === 0) {
+        const sl = buildSectionList();
+        setSectionList(sl);
+        setVisibleSections(new Set(sl));
+    }
+    setOpenedFromBrowser(true);
+    setBrowsingGame({ round: targetRound, board: first.board });
+    setNavList(buildNavList());
+
+    const orientation = getOrientationForGame(targetRound, first.board);
+    openGameViewer({ round: targetRound, board: first.board, orientation });
+}
+
+/**
  * Navigate to an adjacent game from the viewer.
  */
 export function navigateToGame(round, board) {
     setBrowsingGame({ round: Number(round), board: Number(board) });
-    let orientation = 'White';
-    const selectedPlayer = getSelectedPlayer();
-    const gamesData = getGamesData();
-    if (selectedPlayer && gamesData) {
-        const games = gamesData.rounds[round];
-        if (games) {
-            const match = games.find(g => String(g.board) === String(board));
-            if (match && formatName(match.black).toLowerCase() === selectedPlayer.toLowerCase()) {
-                orientation = 'Black';
-            }
-        }
-    }
-    openGameViewer(round, board, orientation);
+    const orientation = getOrientationForGame(round, board);
+    openGameViewer({ round, board, orientation });
 }
 
 /**
@@ -215,13 +336,13 @@ export function openGameWithPlayerNav(playerName, round, board) {
     if (!gamesData) {
         setBrowsingGame(null);
         setNavList([]);
-        openGameViewer(round, board);
+        openGameViewer({ round, board });
         return;
     }
     setSelectedPlayer(playerName);
     setBrowsingGame({ round: Number(round), board: Number(board) });
     setNavList(buildNavList());
-    openGameViewer(round, board);
+    openGameViewer({ round, board });
 }
 
 // --- Rendering ---
@@ -409,28 +530,33 @@ function renderBrowser(containerEl, roundNumbers) {
             if (row) {
                 const round = row.dataset.gameRound;
                 const board = row.dataset.gameBoard;
+                const hasPgn = row.dataset.hasPgn === '1';
                 setBrowsingGame({ round: Number(round), board: Number(board) });
                 setOpenedFromBrowser(true);
                 setNavList(buildNavList());
 
-                if (isEmbeddedBrowser()) {
-                    highlightActiveGame();
-                    let orientation = 'White';
-                    const sp = getSelectedPlayer();
-                    const gd = getGamesData();
-                    if (sp && gd) {
-                        const games = gd.rounds[round];
-                        if (games) {
-                            const match = games.find(g => String(g.board) === String(board));
-                            if (match && formatName(match.black).toLowerCase() === sp.toLowerCase()) {
-                                orientation = 'Black';
-                            }
-                        }
+                // Determine orientation from selected player
+                const orientation = getOrientationForGame(round, board);
+
+                if (!hasPgn) {
+                    // No official PGN — check for pending submission
+                    const submissions = getSubmissions();
+                    const key = `${round}:${board}`;
+                    const game = findGame(round, board);
+
+                    if (submissions[key]) {
+                        // Green: open viewer with submitted PGN
+                        openViewerWithSubmission(round, board, orientation);
+                    } else {
+                        // Orange: open editor for fresh entry
+                        openEditorForGame(round, board, game);
                     }
-                    openGameViewer(round, board, orientation);
+                } else if (isEmbeddedBrowser()) {
+                    highlightActiveGame();
+                    openGameViewer({ round, board, orientation });
                 } else {
                     hideBrowser();
-                    setTimeout(() => openGameViewer(round, board, 'White'), 150);
+                    setTimeout(() => openGameViewer({ round, board, orientation }), 150);
                 }
             }
         });
@@ -590,9 +716,22 @@ function renderGameRow(game, round, boardLabel = null) {
     const whiteScore = resultSymbol(game.result, 'white');
     const blackScore = resultSymbol(game.result, 'black');
 
+    // PGN status icon: orange = needs submission, green = submitted pending review, none = finalized
+    let statusIcon = '';
+    if (!game.hasPgn) {
+        const submissions = getSubmissions();
+        const key = `${round}:${game.board}`;
+        const plane = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+        if (submissions[key]) {
+            statusIcon = `<span class="pgn-status pgn-status-pending" title="Submitted, pending review">${plane}</span>`;
+        } else {
+            statusIcon = `<span class="pgn-status pgn-status-missing" title="Submit game moves">${plane}</span>`;
+        }
+    }
+
     return `
-        <div class="browser-game-row" data-game-round="${round}" data-game-board="${game.board}" role="button" tabindex="0">
-            <span class="browser-board">${boardLabel || game.board || '?'}</span>
+        <div class="browser-game-row" data-game-round="${round}" data-game-board="${game.board}" data-has-pgn="${game.hasPgn ? '1' : ''}" role="button" tabindex="0">
+            <span class="browser-board">${boardLabel || game.board || '?'}${statusIcon}</span>
             <div class="browser-player browser-player-white">
                 <span class="browser-name">${formatName(game.white)}</span>
                 ${game.whiteElo ? `<span class="browser-elo">${game.whiteElo}</span>` : ''}
