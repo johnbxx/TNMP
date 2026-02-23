@@ -236,8 +236,6 @@ export function closeGamePanel() {
     }
 }
 
-// Keep old name as alias for backwards compat during transition
-export const closeGameViewer = closeGamePanel;
 
 /**
  * Navigate to prev/next game from the viewer.

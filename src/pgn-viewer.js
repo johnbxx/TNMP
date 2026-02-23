@@ -1,78 +1,26 @@
-import { Chess } from 'chess.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import '@chrisoakman/chessboard2/dist/chessboard2.min.css';
 import { formatName, resultClass, resultSymbol, getHeader } from './utils.js';
-import { parseMoveText, extractMoveText, nagToHtml } from './pgn-parser.js';
+import { parseMoveText, extractMoveText } from './pgn-parser.js';
+import {
+    getNodes, setNodes, getCurrentNodeId, setCurrentNodeId,
+    getMainLineEnd, getAnnotatedMoves, setAnnotatedMoves,
+    getStartingFen, setStartingFen, START_FEN,
+    isDesktop, recalcMainLineEnd, buildMoveTree, setResizeCallback,
+    getBoard, createBoard, destroyBoard, resetState,
+    highlightSquares, clearHighlights, highlightCurrentMove,
+    goToNode, updateNavigationButtons,
+    syncDesktopLayout as syncDesktopLayoutCore,
+    renderMoveTable, renderAnnotatedMoves,
+} from './board-core.js';
 
-// --- State ---
+const VIEWER_BTNS = { start: 'viewer-start', prev: 'viewer-prev', next: 'viewer-next', end: 'viewer-end' };
 
-let board = null;
-let nodes = [];          // Flat array of tree nodes, index = node ID. nodes[0] = root (start position).
-let mainLineEnd = 0;     // Node ID of the last main-line move (cached for goToEnd)
-let currentNodeId = 0;   // Currently displayed node ID (0 = start position)
-let annotatedMoves = []; // Parsed annotation tree (from pgn-parser) — used by renderers
-let startingFen = null;
+// --- Viewer-only State ---
+
 let autoPlayTimer = null;
 let isPlaying = false;
 let rawPgn = null;       // Original PGN text for export
-
-// --- Move Tree ---
-
-/**
- * Build a flat array of position nodes by walking the annotated move tree with chess.js.
- * nodes[0] is the root (starting position, before any moves).
- * Each node: { id, parentId, fen, san, from, to, comment, nags, mainChild, children, isVariation, ply }
- */
-function buildMoveTree(moves, fen) {
-    const root = { id: 0, parentId: -1, fen, san: null, from: null, to: null, comment: null, nags: null, mainChild: null, children: [], isVariation: false, ply: 0 };
-    const result = [root];
-
-    function walk(moves, parentId, basePly, isVariation) {
-        let prevId = parentId;
-        let ply = basePly;
-        for (const m of moves) {
-            const prev = result[prevId];
-            const engine = new Chess(prev.fen);
-            let move;
-            try { move = engine.move(m.san); } catch { /* illegal move */ }
-            if (!move) break; // invalid move — stop this line
-
-            const node = {
-                id: result.length,
-                parentId: prevId,
-                fen: engine.fen(),
-                san: m.san,
-                from: move.from,
-                to: move.to,
-                comment: m.comment,
-                nags: m.nags,
-                mainChild: null,
-                children: [],
-                isVariation,
-                ply: ply + 1,
-            };
-            result.push(node);
-
-            // Link parent → child. First child added becomes mainChild.
-            if (prev.mainChild === null) prev.mainChild = node.id;
-            prev.children.push(node.id);
-
-            // Process variations branching from this move's parent position
-            if (m.variations) {
-                for (const variation of m.variations) {
-                    walk(variation, prevId, ply - 1, true);
-                }
-            }
-
-            prevId = node.id;
-            ply++;
-        }
-    }
-
-    walk(moves, 0, 0, false);
-
-    return result;
-}
 
 // --- Public API ---
 
@@ -87,47 +35,39 @@ export function initViewer(pgn, playerColor, meta = {}) {
 
     // Parse annotations from move text
     const moveText = extractMoveText(pgn);
-    annotatedMoves = parseMoveText(moveText);
+    setAnnotatedMoves(parseMoveText(moveText));
 
     // Extract starting FEN from headers (if any)
     const fenHeader = getHeader(pgn, 'FEN');
-    startingFen = fenHeader || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    setStartingFen(fenHeader || START_FEN);
 
     // Build position-annotated tree (eagerly computes FEN for every node including variations)
-    nodes = buildMoveTree(annotatedMoves, startingFen);
+    setNodes(buildMoveTree(getAnnotatedMoves(), getStartingFen()));
 
     // Cache last main-line node for goToEnd
-    let endId = 0;
-    while (nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
-    mainLineEnd = endId;
+    recalcMainLineEnd();
 
-    currentNodeId = 0;
+    setCurrentNodeId(0);
 
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
-    if (board) {
-        board.destroy();
-        board = null;
-        // Replace element to strip Chessboard2's orphaned event listeners
-        const oldEl = document.getElementById('viewer-board');
-        if (oldEl) {
-            const fresh = document.createElement('div');
-            fresh.id = 'viewer-board';
-            fresh.className = 'viewer-board';
-            oldEl.replaceWith(fresh);
-        }
-    }
-
     renderGameHeader(pgn, meta);
 
-    board = Chessboard2('viewer-board', {
-        position: startingFen,
+    createBoard(Chessboard2, {
+        position: getStartingFen(),
         orientation: orientation,
+    });
+
+    // Register viewer's resize callback
+    setResizeCallback(() => {
+        if (!getBoard()) return;
+        renderMoveList();
+        syncDesktopLayout();
     });
 
     highlightSquares(null);
     renderMoveList();
-    updateNavigationButtons();
+    updateNavigationButtons(VIEWER_BTNS);
     syncDesktopLayout();
 }
 
@@ -135,20 +75,17 @@ export function initViewer(pgn, playerColor, meta = {}) {
  * Navigate to a node by ID. Node 0 = start position.
  */
 function goToMove(nodeId) {
-    if (nodeId < 0 || nodeId >= nodes.length) return;
-    dismissBranchPopover();
-    currentNodeId = nodeId;
-    const node = nodes[nodeId];
-
-    board.position(node.fen);
-    highlightSquares(node);
-    highlightCurrentMove();
-    updateNavigationButtons();
-    updatePlayButton();
+    goToNode(nodeId, {
+        buttonIds: VIEWER_BTNS,
+        beforeNavigate: () => dismissBranchPopover(),
+        afterNavigate: () => updatePlayButton(),
+    });
 }
 
 export function goToStart() {
     stopAutoPlay(); updatePlayButton();
+    const nodes = getNodes();
+    const currentNodeId = getCurrentNodeId();
     if (nodes[currentNodeId].isVariation) {
         // In a variation — go to the branch point
         let id = currentNodeId;
@@ -161,7 +98,7 @@ export function goToStart() {
 export function goToPrev() {
     stopAutoPlay(); updatePlayButton();
     dismissBranchPopover();
-    const parent = nodes[currentNodeId].parentId;
+    const parent = getNodes()[getCurrentNodeId()].parentId;
     if (parent >= 0) goToMove(parent);
 }
 export function goToNext() {
@@ -173,7 +110,7 @@ export function goToNext() {
         return;
     }
 
-    const node = nodes[currentNodeId];
+    const node = getNodes()[getCurrentNodeId()];
     if (node.mainChild === null) return; // end of line — do nothing
 
     // Branch mode: if the current node has multiple continuations, show popover
@@ -186,17 +123,20 @@ export function goToNext() {
 }
 export function goToEnd() {
     stopAutoPlay(); updatePlayButton();
+    const nodes = getNodes();
+    const currentNodeId = getCurrentNodeId();
     if (nodes[currentNodeId].isVariation) {
         // In a variation — go to the end of this variation line
         let id = currentNodeId;
         while (nodes[id].mainChild !== null) id = nodes[id].mainChild;
         goToMove(id);
     } else {
-        goToMove(mainLineEnd);
+        goToMove(getMainLineEnd());
     }
 }
 
 export function flipBoard() {
+    const board = getBoard();
     if (board) {
         board.orientation('flip');
     }
@@ -227,6 +167,7 @@ let branchSelectedIdx = 0;
  * Shows up to maxMoves half-moves, with trailing ellipsis if the line continues.
  */
 function formatLinePreview(startNodeId, maxMoves = 6) {
+    const nodes = getNodes();
     const parts = [];
     let id = startNodeId;
     let count = 0;
@@ -349,34 +290,13 @@ export function getGameMoves() {
 
 export function destroyViewer() {
     stopAutoPlay();
-    if (board) {
-        board.destroy();
-        board = null;
-    }
-    // Replace the board element to strip Chessboard2's orphaned event listeners
-    // (destroy() clears innerHTML but doesn't remove mousemove/mousedown/etc listeners)
-    const oldBoardEl = document.getElementById('viewer-board');
-    if (oldBoardEl) {
-        const fresh = document.createElement('div');
-        fresh.id = 'viewer-board';
-        fresh.className = 'viewer-board';
-        oldBoardEl.replaceWith(fresh);
-    }
-
-    nodes = [];
-    mainLineEnd = 0;
-    currentNodeId = 0;
-    annotatedMoves = [];
-    startingFen = null;
+    destroyBoard();
+    resetState();
     rawPgn = null;
     commentsHidden = false;
     branchMode = false;
     dismissBranchPopover();
-
-    // Clear square highlights
-    if (highlightStyleEl) {
-        highlightStyleEl.textContent = '';
-    }
+    clearHighlights();
 
     const headerEl = document.getElementById('viewer-header');
     if (headerEl) headerEl.innerHTML = '';
@@ -404,12 +324,12 @@ export function toggleAutoPlay() {
 function startAutoPlay() {
     if (isPlaying) return;
     // If at the end of main line, restart from the beginning
-    if (currentNodeId === mainLineEnd) {
+    if (getCurrentNodeId() === getMainLineEnd()) {
         goToMove(0);
     }
     isPlaying = true;
     autoPlayTimer = setInterval(() => {
-        const next = nodes[currentNodeId].mainChild;
+        const next = getNodes()[getCurrentNodeId()].mainChild;
         if (next === null) {
             stopAutoPlay();
             updatePlayButton();
@@ -545,106 +465,8 @@ function extractBoardFromPgn(pgn) {
     return m ? parseInt(m[1], 10) : null;
 }
 
-const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
-
-let resizeTimer = null;
-window.addEventListener('resize', () => {
-    if (!board) return; // no viewer open
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-        renderMoveList();
-        syncDesktopLayout();
-    }, 100);
-});
-
-/**
- * On desktop, size the board as a square that fits the available layout height,
- * and constrain the moves panel to the same height.
- */
 export function syncDesktopLayout() {
-    if (!isDesktop()) {
-        // Clean up desktop inline styles so mobile layout works
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        const modalEl = document.querySelector('.modal-content-viewer');
-        const layoutEl = document.querySelector('.viewer-layout');
-        if (boardEl) boardEl.style.width = '';
-        if (movesEl) movesEl.style.maxHeight = '';
-        if (modalEl) modalEl.style.width = '';
-        if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
-        if (board && board.resize) board.resize();
-        return;
-    }
-    requestAnimationFrame(() => {
-        const modalEl = document.querySelector('.modal-content-viewer');
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        const layoutEl = document.querySelector('.viewer-layout');
-        if (!modalEl || !boardEl || !movesEl || !layoutEl) return;
-
-        // Read layout constants from CSS custom properties
-        const rootStyle = getComputedStyle(document.documentElement);
-        const cssNum = (prop) => parseFloat(rootStyle.getPropertyValue(prop)) || 0;
-        const layoutGap = cssNum('--viewer-layout-gap');
-        const minMovesWidth = cssNum('--viewer-min-moves-w');
-        const minMovesHeight = cssNum('--viewer-min-moves-h');
-        const minBoard = cssNum('--viewer-min-board');
-        const stackedThreshold = cssNum('--viewer-stacked-threshold');
-
-        const hasBrowser = modalEl.classList.contains('has-browser');
-        const containerEl = hasBrowser
-            ? modalEl.querySelector('.viewer-main')
-            : modalEl;
-        if (!containerEl) return;
-
-        const headerEl = document.getElementById('viewer-header');
-        const toolbarEl = containerEl.querySelector('.viewer-toolbar:not(.hidden)');
-
-        const headerH = headerEl ? headerEl.offsetHeight : 0;
-        const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
-        const toolbarMargin = toolbarEl ? parseFloat(getComputedStyle(toolbarEl).marginTop) || 0 : 0;
-        const containerPadding = parseFloat(getComputedStyle(containerEl).paddingTop)
-                               + parseFloat(getComputedStyle(containerEl).paddingBottom);
-        const headerMargin = headerH > 0 ? parseFloat(getComputedStyle(headerEl).marginBottom) || 0 : 0;
-
-        const availableHeight = containerEl.clientHeight - headerH - headerMargin - toolbarH - toolbarMargin - containerPadding;
-
-        let availableWidth;
-        if (hasBrowser) {
-            const mainPadding = parseFloat(getComputedStyle(containerEl).paddingLeft)
-                              + parseFloat(getComputedStyle(containerEl).paddingRight);
-            availableWidth = containerEl.clientWidth - mainPadding;
-        } else {
-            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
-                           + parseFloat(getComputedStyle(modalEl).paddingRight);
-            availableWidth = window.innerWidth * 0.95 - hPadding;
-        }
-
-        const sideBySideBoardSize = Math.min(availableHeight, availableWidth - minMovesWidth - layoutGap);
-        const stackedBoardSize = Math.min(availableWidth, availableHeight - minMovesHeight - layoutGap);
-        const useStacked = hasBrowser && stackedBoardSize > sideBySideBoardSize * stackedThreshold;
-
-        let boardSize;
-        if (useStacked) {
-            layoutEl.classList.add('viewer-layout-stacked');
-            boardSize = Math.floor(Math.max(stackedBoardSize, minBoard));
-            boardEl.style.width = boardSize + 'px';
-            movesEl.style.maxHeight = (availableHeight - boardSize - layoutGap) + 'px';
-        } else {
-            layoutEl.classList.remove('viewer-layout-stacked');
-            boardSize = Math.floor(Math.max(sideBySideBoardSize, minBoard));
-            boardEl.style.width = boardSize + 'px';
-            movesEl.style.maxHeight = boardSize + 'px';
-        }
-
-        if (!hasBrowser) {
-            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
-                           + parseFloat(getComputedStyle(modalEl).paddingRight);
-            modalEl.style.width = (boardSize + minMovesWidth + layoutGap + hPadding) + 'px';
-        }
-
-        if (board && board.resize) board.resize();
-    });
+    syncDesktopLayoutCore({ includeHeader: true, allowStacked: true });
 }
 
 function renderMoveList() {
@@ -652,14 +474,11 @@ function renderMoveList() {
     if (!container) return;
 
     if (isDesktop()) {
-        // Grid table handles comments, NAGs, and variations
-        container.innerHTML = renderMoveTable();
+        container.innerHTML = renderMoveTable({ hideComments: commentsHidden });
     } else {
-        // Mobile: inline format with variations
-        container.innerHTML = renderAnnotatedMoves(annotatedMoves, 0, false);
+        container.innerHTML = renderAnnotatedMoves(getAnnotatedMoves(), 0, false);
     }
 
-    // Event delegation for clicking moves (main line and variations)
     container.onclick = (e) => {
         const moveEl = e.target.closest('[data-node-id]');
         if (moveEl) {
@@ -670,235 +489,4 @@ function renderMoveList() {
     };
 }
 
-function cleanComment(comment) {
-    if (!comment) return '';
-    return comment.replace(/\[#\]/g, '').replace(/\[%[^\]]*\]/g, '').trim();
-}
 
-function renderMoveTable() {
-    let row = 0;
-    let html = '<div class="move-table">';
-
-    // Render a variation line as inline text spanning all columns
-    function renderVariationInline(startId) {
-        let vhtml = '';
-        let id = startId;
-        while (id !== null) {
-            const n = nodes[id];
-            if (!n || n.deleted) break;
-            const ply = n.ply;
-            const moveNum = Math.floor((ply - 1) / 2) + 1;
-            const isBlack = ply % 2 === 0;
-            if (!isBlack) {
-                vhtml += `<span class="move-number">${moveNum}.</span>`;
-            } else if (id === startId) {
-                vhtml += `<span class="move-number">${moveNum}...</span>`;
-            }
-            const current = id === currentNodeId ? ' move-current' : '';
-            const vnag = n.nags?.length > 0 ? `<span class="move-nag">${n.nags.map(nagToHtml).join(' ')}</span>` : '';
-            vhtml += `<span class="move-variation${current}" data-node-id="${id}">${n.san}${vnag}</span> `;
-            const comment = cleanComment(n.comment);
-            if (comment) vhtml += `<span class="move-comment">${comment}</span> `;
-            // Sub-variations within this variation line
-            if (n.children.length > 1) {
-                const subMain = n.mainChild;
-                for (const subId of n.children) {
-                    if (subId !== subMain && !nodes[subId].deleted) {
-                        vhtml += `<span class="move-variation-block">(${renderVariationInline(subId)})</span> `;
-                    }
-                }
-            }
-            id = n.mainChild;
-        }
-        return vhtml;
-    }
-
-    // Emit variation rows spanning all 3 columns
-    function emitVariations(parentNode) {
-        if (!parentNode || parentNode.children.length <= 1) return;
-        const mainId = parentNode.mainChild;
-        const alts = parentNode.children.filter(cid => cid !== mainId && !nodes[cid].deleted);
-        if (alts.length === 0) return;
-        for (const altId of alts) {
-            html += `<span class="mt-variation">(${renderVariationInline(altId)})</span>`;
-        }
-    }
-
-    // Walk main line node-by-node, pairing white+black per grid row
-    let id = nodes[0].mainChild;
-    while (id !== null) {
-        const white = nodes[id];
-        if (!white || white.deleted) break;
-        const moveNum = Math.floor((white.ply - 1) / 2) + 1;
-        const stripe = row % 2 === 0 ? ' mt-stripe' : '';
-        const wNag = white.nags && white.nags.length > 0 ? `<span class="move-nag">${white.nags.map(nagToHtml).join(' ')}</span>` : '';
-        const wComment = commentsHidden ? '' : cleanComment(white.comment);
-        const whiteParent = nodes[white.parentId];
-        const hasWhiteVars = !commentsHidden && whiteParent && whiteParent.children.length > 1;
-
-        const blackId = white.mainChild;
-        const black = blackId !== null ? nodes[blackId] : null;
-        const validBlack = black && !black.deleted && black.ply % 2 === 0;
-
-        if (wComment || hasWhiteVars) {
-            html += `<span class="move-num${stripe}">${moveNum}.</span>`;
-            html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
-            html += `<span class="move-empty${stripe}"></span>`;
-            if (wComment) html += `<span class="mt-comment${stripe}">${wComment}</span>`;
-            if (hasWhiteVars) emitVariations(whiteParent);
-            row++;
-
-            if (validBlack) {
-                const stripe2 = row % 2 === 0 ? ' mt-stripe' : '';
-                const bNag = black.nags && black.nags.length > 0 ? `<span class="move-nag">${black.nags.map(nagToHtml).join(' ')}</span>` : '';
-                const bComment = cleanComment(black.comment);
-                const hasBlackVars = white.children.length > 1;
-
-                html += `<span class="move-num${stripe2}"></span>`;
-                html += `<span class="move-empty${stripe2}"></span>`;
-                html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe2}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
-                if (bComment) html += `<span class="mt-comment${stripe2}">${bComment}</span>`;
-                if (hasBlackVars) emitVariations(white);
-                row++;
-                id = black.mainChild;
-            } else {
-                row++;
-                id = white.mainChild;
-                if (validBlack) id = black.mainChild;
-            }
-        } else {
-            html += `<span class="move-num${stripe}">${moveNum}.</span>`;
-            html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
-
-            if (validBlack) {
-                const bNag = black.nags && black.nags.length > 0 ? `<span class="move-nag">${black.nags.map(nagToHtml).join(' ')}</span>` : '';
-                const bComment = commentsHidden ? '' : cleanComment(black.comment);
-                const hasBlackVars = !commentsHidden && white.children.length > 1;
-
-                html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
-                if (bComment || hasBlackVars) {
-                    if (bComment) html += `<span class="mt-comment${stripe}">${bComment}</span>`;
-                    if (hasBlackVars) emitVariations(white);
-                }
-                row++;
-                id = black.mainChild;
-            } else {
-                html += `<span class="move-empty${stripe}"></span>`;
-                row++;
-                id = white.mainChild;
-            }
-        }
-    }
-    html += '</div>';
-    return html;
-}
-
-/**
- * Render annotated moves with variations. parentNodeId is the tree node whose
- * children correspond to the first move in `moves`.
- */
-function renderAnnotatedMoves(moves, parentNodeId, isVariation) {
-    let html = '';
-    let prevNodeId = parentNodeId;
-    for (let i = 0; i < moves.length; i++) {
-        const m = moves[i];
-
-        // Find the matching child node (by SAN) under prevNodeId
-        const parent = nodes[prevNodeId];
-        const nodeId = parent.children.find(cid => nodes[cid].san === m.san);
-        if (nodeId === undefined) break; // shouldn't happen if tree is consistent
-
-        const node = nodes[nodeId];
-        const ply = node.ply;
-        const moveNum = Math.floor((ply - 1) / 2) + 1;
-        const isBlack = (ply % 2 === 0);
-
-        // Move number
-        if (!isBlack) {
-            html += `<span class="move-number">${moveNum}.</span>`;
-        } else if (i === 0 && isVariation) {
-            html += `<span class="move-number">${moveNum}...</span>`;
-        }
-
-        // The move itself — all moves are now clickable (main line and variations)
-        const cls = isVariation ? 'move-variation' : 'move';
-        const current = nodeId === currentNodeId ? ' move-current' : '';
-        html += `<span class="${cls}${current}" data-node-id="${nodeId}">${m.san}</span>`;
-        if (m.nags && m.nags.length > 0) {
-            html += `<span class="move-nag">${m.nags.map(nagToHtml).join(' ')}</span>`;
-        }
-        html += ' ';
-
-        // Post-move comment
-        if (m.comment) {
-            const cleaned = m.comment.replace(/\[#\]/g, '').replace(/\[%[^\]]*\]/g, '').trim();
-            if (cleaned) {
-                html += `<span class="move-comment">${cleaned}</span> `;
-            }
-        }
-
-        // Variations (alternative lines branching from the same parent position)
-        if (m.variations) {
-            for (const variation of m.variations) {
-                html += `<span class="move-variation-block">(`;
-                html += renderAnnotatedMoves(variation, prevNodeId, true);
-                html += `)</span> `;
-            }
-        }
-
-        prevNodeId = nodeId;
-    }
-    return html;
-}
-
-// Dynamic <style> element for square highlighting — avoids touching Chessboard2's DOM
-let highlightStyleEl = null;
-
-function highlightSquares(move) {
-    if (!highlightStyleEl) {
-        highlightStyleEl = document.createElement('style');
-        highlightStyleEl.id = 'square-highlights';
-        document.head.appendChild(highlightStyleEl);
-    }
-
-    if (!move || !move.from || !move.to) {
-        highlightStyleEl.textContent = '';
-        return;
-    }
-
-    const color = 'rgba(255, 255, 100, 0.4)';
-    highlightStyleEl.textContent = [move.from, move.to]
-        .map(sq => `#viewer-board [data-square-coord="${sq}"] { box-shadow: inset 0 0 0 100px ${color}; }`)
-        .join('\n');
-}
-
-function highlightCurrentMove() {
-    const container = document.getElementById('viewer-moves');
-    if (!container) return;
-
-    container.querySelectorAll('[data-node-id]').forEach(el => {
-        el.classList.toggle('move-current', parseInt(el.dataset.nodeId) === currentNodeId);
-    });
-
-    // Auto-scroll to current move
-    const currentEl = container.querySelector('.move-current');
-    if (currentEl) {
-        currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-}
-
-function updateNavigationButtons() {
-    const startBtn = document.getElementById('viewer-start');
-    const prevBtn = document.getElementById('viewer-prev');
-    const nextBtn = document.getElementById('viewer-next');
-    const endBtn = document.getElementById('viewer-end');
-
-    const node = nodes[currentNodeId];
-    const atStart = node && node.parentId < 0;
-    const atEnd = node && node.mainChild === null;
-
-    if (startBtn) startBtn.disabled = atStart;
-    if (prevBtn) prevBtn.disabled = atStart;
-    if (nextBtn) nextBtn.disabled = atEnd;
-    if (endBtn) endBtn.disabled = atEnd;
-}

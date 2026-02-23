@@ -1,133 +1,46 @@
 /**
  * PGN Editor — Interactive board for entering and editing chess games.
  *
- * Built as a thin layer on top of the viewer's patterns. Reuses the same
- * layout, board init, desktop sizing, move rendering, and square highlighting.
- * Only adds: draggable pieces, tree mutation, undo, promotion picker,
- * comment box, NAG/import UI, and PGN serialization.
+ * Built as a thin layer on top of board-core's shared infrastructure.
+ * Reuses the same layout, board init, desktop sizing, move rendering,
+ * and square highlighting. Only adds: draggable pieces, tree mutation,
+ * undo, promotion picker, comment box, NAG/import UI, and PGN serialization.
  */
 
 import { Chess } from 'chess.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
-import { parseMoveText, extractMoveText, nagToHtml, serializePgn, NAG_INFO } from './pgn-parser.js';
+import { parseMoveText, extractMoveText, serializePgn, NAG_INFO } from './pgn-parser.js';
 import { getHeader } from './utils.js';
 import { WORKER_URL, CONFIG } from './config.js';
 import { showToast } from './toast.js';
 import { refreshGamesData } from './browser-data.js';
 import { closeGamePanel } from './game-viewer.js';
+import {
+    getNodes, setNodes, getCurrentNodeId, setCurrentNodeId,
+    getMainLineEnd, getAnnotatedMoves, setAnnotatedMoves,
+    getStartingFen, setStartingFen, START_FEN,
+    isDesktop, recalcMainLineEnd,
+    makeRootNode, treeToMoveList, setResizeCallback,
+    getBoard, createBoard, destroyBoard, resetState,
+    highlightSquares, clearHighlights, highlightCurrentMove,
+    goToNode, updateNavigationButtons,
+    syncDesktopLayout as syncDesktopLayoutCore,
+    renderMoveTable, renderAnnotatedMoves,
+} from './board-core.js';
 
-// --- State (mirrors viewer state variables) ---
+const EDITOR_BTNS = { start: 'editor-start', prev: 'editor-prev', next: 'editor-next', end: 'editor-end' };
 
-let board = null;
-let nodes = [];           // Flat array of tree nodes, same structure as viewer
-let mainLineEnd = 0;      // Node ID of the last main-line move
-let currentNodeId = 0;    // Currently displayed node ID
-let annotatedMoves = [];  // Parsed annotation tree (for rendering)
-let startingFen = null;
+// --- Editor-only State ---
+
 let headers = {};         // PGN headers
 let undoStack = [];       // For undo: snapshots of {nodes, currentNodeId, headers}
 let orientation = 'white';
 let submitContext = null; // { round, board } when in submit mode
 
 const UNDO_LIMIT = 50;
-const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-// --- Desktop layout (copied from viewer) ---
-
-const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
-
-let resizeTimer = null;
-window.addEventListener('resize', () => {
-    if (!board) return;
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-        renderMoveList();
-        syncDesktopLayout();
-    }, 100);
-});
-
-/**
- * On desktop, size the board and comment to fit available height.
- * Board (square) + comment below it, moves panel to the right.
- */
 function syncDesktopLayout() {
-    if (!isDesktop()) {
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        const modalEl = document.getElementById('viewer-modal')?.querySelector('.modal-content-viewer');
-        const commentEl = document.getElementById('editor-comment-input');
-        if (boardEl) boardEl.style.width = '';
-        if (movesEl) movesEl.style.maxHeight = '';
-        if (modalEl) modalEl.style.width = '';
-        if (commentEl) { commentEl.style.width = ''; commentEl.style.maxHeight = ''; }
-        if (board && board.resize) board.resize();
-        return;
-    }
-    requestAnimationFrame(() => {
-        const modalEl = document.getElementById('viewer-modal')?.querySelector('.modal-content-viewer');
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        const layoutEl = document.getElementById('viewer-modal')?.querySelector('.viewer-layout');
-        const commentEl = document.getElementById('editor-comment-input');
-        if (!modalEl || !boardEl || !movesEl || !layoutEl) return;
-
-        const rootStyle = getComputedStyle(document.documentElement);
-        const cssNum = (prop) => parseFloat(rootStyle.getPropertyValue(prop)) || 0;
-        const layoutGap = cssNum('--viewer-layout-gap');
-        const minMovesWidth = cssNum('--viewer-min-moves-w');
-        const minBoard = cssNum('--viewer-min-board');
-
-        const hasBrowser = modalEl.classList.contains('has-browser');
-        const containerEl = hasBrowser
-            ? modalEl.querySelector('.viewer-main')
-            : modalEl;
-        if (!containerEl) return;
-
-        // Find the visible toolbar (editor toolbar in editor mode)
-        const toolbarEl = containerEl.querySelector('.viewer-toolbar:not(.hidden)');
-        const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
-        const toolbarMargin = toolbarEl ? parseFloat(getComputedStyle(toolbarEl).marginTop) || 0 : 0;
-        const containerPadding = parseFloat(getComputedStyle(containerEl).paddingTop)
-                               + parseFloat(getComputedStyle(containerEl).paddingBottom);
-
-        const availableHeight = containerEl.clientHeight - toolbarH - toolbarMargin - containerPadding;
-
-        let availableWidth;
-        if (hasBrowser) {
-            const mainPadding = parseFloat(getComputedStyle(containerEl).paddingLeft)
-                              + parseFloat(getComputedStyle(containerEl).paddingRight);
-            availableWidth = containerEl.clientWidth - mainPadding;
-        } else {
-            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
-                           + parseFloat(getComputedStyle(modalEl).paddingRight);
-            availableWidth = window.innerWidth * 0.95 - hPadding;
-        }
-
-        // Geometry: fit square board + comment + moves into W × H
-        const commentMargin = 12;
-        const maxBoardH = Math.floor(availableHeight * 0.8);
-        const maxBoardW = availableWidth - minMovesWidth - layoutGap;
-        const boardSize = Math.floor(Math.max(Math.min(maxBoardH, maxBoardW), minBoard));
-
-        const maxModalWidth = 950;
-
-        layoutEl.classList.remove('viewer-layout-stacked');
-        boardEl.style.width = boardSize + 'px';
-        if (commentEl && !commentEl.classList.contains('hidden')) {
-            commentEl.style.width = boardSize + 'px';
-            commentEl.style.maxHeight = (availableHeight - boardSize - commentMargin) + 'px';
-        }
-        movesEl.style.maxHeight = availableHeight + 'px';
-
-        if (!hasBrowser) {
-            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
-                           + parseFloat(getComputedStyle(modalEl).paddingRight);
-            const rawModalWidth = boardSize + minMovesWidth + layoutGap + hPadding;
-            modalEl.style.width = Math.min(rawModalWidth, maxModalWidth) + 'px';
-        }
-
-        if (board && board.resize) board.resize();
-    });
+    syncDesktopLayoutCore({ commentElId: 'editor-comment-input', maxModalWidth: 950, maxBoardRatio: 0.8 });
 }
 
 /**
@@ -144,7 +57,8 @@ function updateEcoDisplay() {
         const ecoEl = document.getElementById('editor-eco');
         if (!ecoEl) return;
         // Walk up to the main line — ECO should reflect the main line, not variations
-        let ecoNodeId = currentNodeId;
+        let ecoNodeId = getCurrentNodeId();
+        const nodes = getNodes();
         while (ecoNodeId > 0 && nodes[ecoNodeId]?.isVariation) {
             ecoNodeId = nodes[ecoNodeId].parentId;
         }
@@ -194,19 +108,27 @@ export function openEditor(options = {}) {
         importPgnIntoEditor(options.pgn);
     } else {
         if (!headers.Result) headers.Result = '*';
-        startingFen = START_FEN;
-        nodes = [makeRootNode(START_FEN)];
-        mainLineEnd = 0;
-        currentNodeId = 0;
-        annotatedMoves = [];
+        setStartingFen(START_FEN);
+        setNodes([makeRootNode(START_FEN)]);
+        recalcMainLineEnd();
+        setCurrentNodeId(0);
+        setAnnotatedMoves([]);
     }
 
     initBoard();
+
+    // Register editor's resize callback
+    setResizeCallback(() => {
+        if (!getBoard()) return;
+        renderMoveList();
+        syncDesktopLayout();
+    });
+
     renderMoveList();
     updateCommentBox();
     updateEcoDisplay();
 
-    updateNavigationButtons();
+    updateNavigationButtons(EDITOR_BTNS);
     syncDesktopLayout();
 
     if (!contextMenuInitialized) {
@@ -221,7 +143,7 @@ export function closeEditor() {
 }
 
 export function getEditorPgn() {
-    const moves = treeToMoveList(nodes, 0);
+    const moves = treeToMoveList(getNodes(), 0);
     return serializePgn(moves, headers);
 }
 
@@ -257,24 +179,11 @@ export async function submitGame() {
     }
 }
 
-// --- Board Setup (mirrors viewer, adds draggable) ---
+// --- Board Setup (adds draggable on top of shared board element) ---
 
 function initBoard() {
-    if (board) {
-        board.destroy();
-        board = null;
-        // Replace element to strip Chessboard2's orphaned event listeners
-        const oldEl = document.getElementById('viewer-board');
-        if (oldEl) {
-            const fresh = document.createElement('div');
-            fresh.id = 'viewer-board';
-            fresh.className = 'viewer-board';
-            oldEl.replaceWith(fresh);
-        }
-    }
-
-    board = Chessboard2('viewer-board', {
-        position: nodes[currentNodeId].fen,
+    createBoard(Chessboard2, {
+        position: getNodes()[getCurrentNodeId()].fen,
         orientation: orientation,
         draggable: true,
         onDragStart,
@@ -286,28 +195,12 @@ function initBoard() {
 }
 
 export function destroyEditor() {
-    if (board) {
-        board.destroy();
-        board = null;
-    }
-    // Replace the board element to strip Chessboard2's orphaned event listeners
-    const oldBoardEl = document.getElementById('viewer-board');
-    if (oldBoardEl) {
-        const fresh = document.createElement('div');
-        fresh.id = 'viewer-board';
-        fresh.className = 'viewer-board';
-        oldBoardEl.replaceWith(fresh);
-    }
-
-    nodes = [];
-    mainLineEnd = 0;
-    currentNodeId = 0;
-    annotatedMoves = [];
-    startingFen = null;
+    destroyBoard();
+    resetState();
     headers = {};
     undoStack = [];
-
-    if (highlightStyleEl) highlightStyleEl.textContent = '';
+    clearSelection();
+    clearHighlights();
 
     const movesEl = document.getElementById('viewer-moves');
     if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
@@ -348,7 +241,7 @@ function onDragStart(evt) {
         return false;
     }
 
-    const engine = new Chess(nodes[currentNodeId].fen);
+    const engine = new Chess(getNodes()[getCurrentNodeId()].fen);
     const piece = evt.piece;
     if (!piece) return false;
     const isWhitePiece = piece.charAt(0) === 'w';
@@ -403,7 +296,7 @@ function showSelection(square, moves) {
     const selColor = 'rgba(20, 160, 255, 0.45)';
     const dotColor = 'rgba(20, 160, 255, 0.3)';
     const captureRing = 'rgba(20, 160, 255, 0.35)';
-    const engine = new Chess(nodes[currentNodeId].fen);
+    const engine = new Chess(getNodes()[getCurrentNodeId()].fen);
     const rules = [`#viewer-board [data-square-coord="${square}"] { box-shadow: inset 0 0 0 100px ${selColor}; }`];
     for (const m of moves) {
         const isCapture = engine.get(m.to) !== null;
@@ -424,7 +317,7 @@ function clearSelection() {
 
 function onSquareClick(evt) {
     const square = evt.square;
-    const engine = new Chess(nodes[currentNodeId].fen);
+    const engine = new Chess(getNodes()[getCurrentNodeId()].fen);
 
     // If a piece is already selected, try to move to the clicked square
     if (selectedSquare) {
@@ -459,7 +352,7 @@ function onSquareClick(evt) {
 // --- Core Move Logic ---
 
 function tryMakeMove(from, to) {
-    const engine = new Chess(nodes[currentNodeId].fen);
+    const engine = new Chess(getNodes()[getCurrentNodeId()].fen);
     const piece = engine.get(from);
     if (!piece) return false;
 
@@ -479,16 +372,16 @@ function tryMakeMove(from, to) {
 }
 
 function executeMove(from, to, promotion) {
-    const engine = new Chess(nodes[currentNodeId].fen);
+    const engine = new Chess(getNodes()[getCurrentNodeId()].fen);
     let move;
     try { move = engine.move({ from, to, promotion: promotion || undefined }); } catch { return false; }
     if (!move) return false;
 
     const san = move.san;
-    const parent = nodes[currentNodeId];
+    const parent = getNodes()[getCurrentNodeId()];
 
     // Check if this move already exists as a child
-    const existingChild = parent.children.find(cid => nodes[cid].san === san);
+    const existingChild = parent.children.find(cid => getNodes()[cid].san === san);
     if (existingChild !== undefined) {
         goToMove(existingChild);
         return true;
@@ -497,7 +390,7 @@ function executeMove(from, to, promotion) {
     pushUndo();
 
     const asVariation = parent.mainChild !== null;
-    addMoveNode(currentNodeId, san, engine.fen(), move.from, move.to, asVariation);
+    addMoveNode(getCurrentNodeId(), san, engine.fen(), move.from, move.to, asVariation);
 
     // Blur the comment box so updateCommentBox shows the new move's comment
     const commentInput = document.getElementById('editor-comment-input');
@@ -507,7 +400,7 @@ function executeMove(from, to, promotion) {
     renderMoveList();
     updateCommentBox();
 
-    updateNavigationButtons();
+    updateNavigationButtons(EDITOR_BTNS);
     syncDesktopLayout();
     return true;
 }
@@ -542,16 +435,10 @@ function showPromotionPicker(from, to, color) {
     picker.addEventListener('click', handler);
 }
 
-// --- Move Tree (same structure as viewer) ---
-
-function makeRootNode(fen) {
-    return {
-        id: 0, parentId: -1, fen, san: null, from: null, to: null,
-        comment: null, nags: null, mainChild: null, children: [], isVariation: false, ply: 0,
-    };
-}
+// --- Move Tree Mutation ---
 
 function addMoveNode(parentId, san, fen, from, to, asVariation) {
+    const nodes = getNodes();
     const parent = nodes[parentId];
     const node = {
         id: nodes.length, parentId, fen, san, from, to,
@@ -565,42 +452,40 @@ function addMoveNode(parentId, san, fen, from, to, asVariation) {
 
     // Update mainLineEnd cache
     if (!asVariation) {
-        let endId = node.id;
-        while (nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
-        mainLineEnd = endId;
+        recalcMainLineEnd();
     }
 
     goToMove(node.id);
 }
 
 export function deleteFromHere() {
-    if (currentNodeId === 0) return;
+    if (getCurrentNodeId() === 0) return;
     pushUndo();
 
-    const node = nodes[currentNodeId];
+    const nodes = getNodes();
+    const node = nodes[getCurrentNodeId()];
     const parentId = node.parentId;
     const parent = nodes[parentId];
 
-    parent.children = parent.children.filter(cid => cid !== currentNodeId);
-    if (parent.mainChild === currentNodeId) {
+    parent.children = parent.children.filter(cid => cid !== getCurrentNodeId());
+    if (parent.mainChild === getCurrentNodeId()) {
         parent.mainChild = parent.children.length > 0 ? parent.children[0] : null;
     }
-    markDeleted(currentNodeId);
+    markDeleted(getCurrentNodeId());
 
-    let endId = 0;
-    while (nodes[endId] && nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
-    mainLineEnd = endId;
+    recalcMainLineEnd();
 
     goToMove(parentId);
     rebuildAnnotatedMoves();
     renderMoveList();
     updateCommentBox();
 
-    updateNavigationButtons();
+    updateNavigationButtons(EDITOR_BTNS);
     syncDesktopLayout();
 }
 
 function markDeleted(nodeId) {
+    const nodes = getNodes();
     const node = nodes[nodeId];
     if (!node) return;
     node.deleted = true;
@@ -609,7 +494,7 @@ function markDeleted(nodeId) {
 
 export function setComment(text) {
     pushUndo();
-    nodes[currentNodeId].comment = text || null;
+    getNodes()[getCurrentNodeId()].comment = text || null;
     rebuildAnnotatedMoves();
     renderMoveList();
 }
@@ -622,10 +507,10 @@ function nagGroup(nag) {
 }
 
 export function toggleNag(nagNum) {
-    const targetId = nagTargetNodeId != null ? nagTargetNodeId : currentNodeId;
+    const targetId = nagTargetNodeId != null ? nagTargetNodeId : getCurrentNodeId();
     if (targetId === 0) return;
     pushUndo();
-    const node = nodes[targetId];
+    const node = getNodes()[targetId];
     if (!node.nags) node.nags = [];
 
     // Resolve to correct White/Black variant based on move color
@@ -657,8 +542,9 @@ export function toggleNag(nagNum) {
 }
 
 export function promoteVariation() {
-    if (currentNodeId === 0) return;
-    const node = nodes[currentNodeId];
+    if (getCurrentNodeId() === 0) return;
+    const nodes = getNodes();
+    const node = nodes[getCurrentNodeId()];
     if (!node.isVariation) return;
 
     pushUndo();
@@ -666,34 +552,34 @@ export function promoteVariation() {
     const parent = nodes[node.parentId];
     if (!parent) return;
 
-    const childIdx = parent.children.indexOf(currentNodeId);
+    const childIdx = parent.children.indexOf(getCurrentNodeId());
     if (childIdx > 0) {
         const oldMain = parent.mainChild;
-        parent.mainChild = currentNodeId;
+        parent.mainChild = getCurrentNodeId();
         parent.children.splice(childIdx, 1);
-        parent.children.unshift(currentNodeId);
+        parent.children.unshift(getCurrentNodeId());
         node.isVariation = false;
-        markLineAsMain(currentNodeId);
+        markLineAsMain(getCurrentNodeId());
         if (oldMain !== null) {
             nodes[oldMain].isVariation = true;
             markLineAsVariation(oldMain);
         }
     }
 
-    let endId = 0;
-    while (nodes[endId] && nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
-    mainLineEnd = endId;
+    recalcMainLineEnd();
 
     rebuildAnnotatedMoves();
     renderMoveList();
 }
 
 function markLineAsMain(nodeId) {
+    const nodes = getNodes();
     let id = nodeId;
     while (id !== null) { nodes[id].isVariation = false; id = nodes[id].mainChild; }
 }
 
 function markLineAsVariation(nodeId) {
+    const nodes = getNodes();
     let id = nodeId;
     while (id !== null) { nodes[id].isVariation = true; id = nodes[id].mainChild; }
 }
@@ -702,8 +588,8 @@ function markLineAsVariation(nodeId) {
 
 function pushUndo() {
     undoStack.push({
-        nodes: structuredClone(nodes),
-        currentNodeId,
+        nodes: structuredClone(getNodes()),
+        currentNodeId: getCurrentNodeId(),
         headers: { ...headers },
     });
     if (undoStack.length > UNDO_LIMIT) undoStack.shift();
@@ -712,42 +598,37 @@ function pushUndo() {
 export function undo() {
     if (undoStack.length === 0) return;
     const snapshot = undoStack.pop();
-    nodes = snapshot.nodes;
-    currentNodeId = snapshot.currentNodeId;
+    setNodes(snapshot.nodes);
+    setCurrentNodeId(snapshot.currentNodeId);
     headers = snapshot.headers;
 
-    let endId = 0;
-    while (nodes[endId] && nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
-    mainLineEnd = endId;
+    recalcMainLineEnd();
 
-    if (board) board.position(nodes[currentNodeId].fen, false);
-    highlightSquares(nodes[currentNodeId]);
+    const board = getBoard();
+    if (board) board.position(getNodes()[getCurrentNodeId()].fen, false);
+    highlightSquares(getNodes()[getCurrentNodeId()]);
     rebuildAnnotatedMoves();
     renderMoveList();
     updateCommentBox();
 
-    updateNavigationButtons();
+    updateNavigationButtons(EDITOR_BTNS);
     syncDesktopLayout();
 }
 
-// --- Navigation (same as viewer) ---
+// --- Navigation ---
 
 function goToMove(nodeId) {
-    if (nodeId < 0 || nodeId >= nodes.length) return;
-    if (nodes[nodeId].deleted) return;
-    currentNodeId = nodeId;
-    const node = nodes[nodeId];
-
-    clearSelection();
-    if (board) board.position(node.fen, false);
-    highlightSquares(node);
-    highlightCurrentMove();
-    updateCommentBox();
-
-    updateNavigationButtons();
+    goToNode(nodeId, {
+        buttonIds: EDITOR_BTNS,
+        animate: false,
+        beforeNavigate: () => clearSelection(),
+        afterNavigate: () => updateCommentBox(),
+    });
 }
 
 export function editorGoToStart() {
+    const nodes = getNodes();
+    const currentNodeId = getCurrentNodeId();
     if (nodes[currentNodeId].isVariation) {
         let id = currentNodeId;
         while (id > 0 && nodes[id].isVariation) id = nodes[id].parentId;
@@ -758,58 +639,39 @@ export function editorGoToStart() {
 }
 
 export function editorGoToPrev() {
-    const parent = nodes[currentNodeId].parentId;
+    const parent = getNodes()[getCurrentNodeId()].parentId;
     if (parent >= 0) goToMove(parent);
 }
 
 export function editorGoToNext() {
-    const node = nodes[currentNodeId];
+    const node = getNodes()[getCurrentNodeId()];
     if (node.mainChild !== null) goToMove(node.mainChild);
 }
 
 export function editorGoToEnd() {
+    const nodes = getNodes();
+    const currentNodeId = getCurrentNodeId();
     if (nodes[currentNodeId].isVariation) {
         let id = currentNodeId;
         while (nodes[id].mainChild !== null) id = nodes[id].mainChild;
         goToMove(id);
     } else {
-        goToMove(mainLineEnd);
+        goToMove(getMainLineEnd());
     }
 }
 
 export function editorFlipBoard() {
+    const board = getBoard();
     if (board) {
         orientation = orientation === 'white' ? 'black' : 'white';
         board.orientation('flip');
     }
 }
 
-// --- Square Highlighting (copied from viewer, targeting editor board) ---
-
-let highlightStyleEl = null;
-
-function highlightSquares(node) {
-    if (!highlightStyleEl) {
-        highlightStyleEl = document.createElement('style');
-        highlightStyleEl.id = 'editor-square-highlights';
-        document.head.appendChild(highlightStyleEl);
-    }
-
-    if (!node || !node.from || !node.to) {
-        highlightStyleEl.textContent = '';
-        return;
-    }
-
-    const color = 'rgba(255, 255, 100, 0.4)';
-    highlightStyleEl.textContent = [node.from, node.to]
-        .map(sq => `#viewer-board [data-square-coord="${sq}"] { box-shadow: inset 0 0 0 100px ${color}; }`)
-        .join('\n');
-}
-
-// --- Move List Rendering (copied from viewer, targeting editor DOM) ---
+// --- Move List Rendering ---
 
 function rebuildAnnotatedMoves() {
-    annotatedMoves = treeToMoveList(nodes, 0);
+    setAnnotatedMoves(treeToMoveList(getNodes(), 0));
     updateEcoDisplay();
 }
 
@@ -817,11 +679,11 @@ function renderMoveList() {
     const container = document.getElementById('viewer-moves');
     if (!container) return;
 
+    const opts = { filterDeleted: true };
     if (isDesktop()) {
-        // Grid table handles comments, NAGs, and variations
         container.innerHTML = renderMoveTable();
     } else {
-        container.innerHTML = renderAnnotatedMoves(annotatedMoves, 0, false);
+        container.innerHTML = renderAnnotatedMoves(getAnnotatedMoves(), 0, false, opts);
     }
 
     container.onclick = (e) => {
@@ -834,197 +696,6 @@ function renderMoveList() {
     highlightCurrentMove();
 }
 
-function renderMoveTable() {
-    let row = 0;
-    let html = '<div class="move-table">';
-
-    // Render a variation line as inline text spanning all columns
-    function renderVariationInline(startId) {
-        let vhtml = '';
-        let id = startId;
-        while (id !== null) {
-            const n = nodes[id];
-            if (!n || n.deleted) break;
-            const ply = n.ply;
-            const moveNum = Math.floor((ply - 1) / 2) + 1;
-            const isBlack = ply % 2 === 0;
-            if (!isBlack) {
-                vhtml += `<span class="move-number">${moveNum}.</span>`;
-            } else if (id === startId) {
-                vhtml += `<span class="move-number">${moveNum}...</span>`;
-            }
-            const current = id === currentNodeId ? ' move-current' : '';
-            const vnag = n.nags?.length > 0 ? `<span class="move-nag">${n.nags.map(nagToHtml).join(' ')}</span>` : '';
-            vhtml += `<span class="move-variation${current}" data-node-id="${id}">${n.san}${vnag}</span> `;
-            const comment = cleanComment(n.comment);
-            if (comment) vhtml += `<span class="move-comment">${comment}</span> `;
-            // Sub-variations within this variation line
-            if (n.children.length > 1) {
-                const subMain = n.mainChild;
-                for (const subId of n.children) {
-                    if (subId !== subMain && !nodes[subId].deleted) {
-                        vhtml += `<span class="move-variation-block">(${renderVariationInline(subId)})</span> `;
-                    }
-                }
-            }
-            id = n.mainChild;
-        }
-        return vhtml;
-    }
-
-    // Emit a variation row spanning all 3 columns
-    function emitVariations(parentNode) {
-        if (!parentNode || parentNode.children.length <= 1) return;
-        const mainId = parentNode.mainChild;
-        const alts = parentNode.children.filter(cid => cid !== mainId && !nodes[cid].deleted);
-        if (alts.length === 0) return;
-        for (const altId of alts) {
-            html += `<span class="mt-variation">(${renderVariationInline(altId)})</span>`;
-        }
-    }
-
-    // Walk main line node-by-node, pairing white+black per grid row
-    let id = nodes[0].mainChild;
-    while (id !== null) {
-        const white = nodes[id];
-        if (!white || white.deleted) break;
-        const moveNum = Math.floor((white.ply - 1) / 2) + 1;
-        const stripe = row % 2 === 0 ? ' mt-stripe' : '';
-        const wNag = white.nags && white.nags.length > 0 ? `<span class="move-nag">${white.nags.map(nagToHtml).join(' ')}</span>` : '';
-        const wComment = cleanComment(white.comment);
-        // Check for variations on white's move (siblings of white under white's parent)
-        const whiteParent = nodes[white.parentId];
-        const hasWhiteVars = whiteParent && whiteParent.children.length > 1;
-
-        // Determine black (white's mainChild, if it's a black move)
-        const blackId = white.mainChild;
-        const black = blackId !== null ? nodes[blackId] : null;
-        const validBlack = black && !black.deleted && black.ply % 2 === 0;
-
-        if (wComment || hasWhiteVars) {
-            // White move alone on its row
-            html += `<span class="move-num${stripe}">${moveNum}.</span>`;
-            html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
-            html += `<span class="move-empty${stripe}"></span>`;
-            if (wComment) html += `<span class="mt-comment${stripe}">${wComment}</span>`;
-            if (hasWhiteVars) emitVariations(whiteParent);
-            row++;
-
-            if (validBlack) {
-                const stripe2 = row % 2 === 0 ? ' mt-stripe' : '';
-                const bNag = black.nags && black.nags.length > 0 ? `<span class="move-nag">${black.nags.map(nagToHtml).join(' ')}</span>` : '';
-                const bComment = cleanComment(black.comment);
-                const hasBlackVars = white.children.length > 1;
-
-                html += `<span class="move-num${stripe2}"></span>`;
-                html += `<span class="move-empty${stripe2}"></span>`;
-                html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe2}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
-                if (bComment) html += `<span class="mt-comment${stripe2}">${bComment}</span>`;
-                if (hasBlackVars) emitVariations(white);
-                row++;
-                id = black.mainChild;
-            } else {
-                row++;
-                id = white.mainChild;
-                // Skip if mainChild is actually black (already handled above as invalid)
-                if (validBlack) id = black.mainChild;
-            }
-        } else {
-            // Normal row: num, white, black
-            html += `<span class="move-num${stripe}">${moveNum}.</span>`;
-            html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
-
-            if (validBlack) {
-                const bNag = black.nags && black.nags.length > 0 ? `<span class="move-nag">${black.nags.map(nagToHtml).join(' ')}</span>` : '';
-                const bComment = cleanComment(black.comment);
-                const hasBlackVars = white.children.length > 1;
-
-                html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
-                if (bComment || hasBlackVars) {
-                    if (bComment) html += `<span class="mt-comment${stripe}">${bComment}</span>`;
-                    if (hasBlackVars) emitVariations(white);
-                }
-                row++;
-                id = black.mainChild;
-            } else {
-                html += `<span class="move-empty${stripe}"></span>`;
-                row++;
-                id = white.mainChild;
-            }
-        }
-    }
-    html += '</div>';
-    return html;
-}
-
-function cleanComment(comment) {
-    if (!comment) return '';
-    return comment.replace(/\[#\]/g, '').replace(/\[%[^\]]*\]/g, '').trim();
-}
-
-function renderAnnotatedMoves(moves, parentNodeId, isVariation) {
-    let html = '';
-    let prevNodeId = parentNodeId;
-    for (let i = 0; i < moves.length; i++) {
-        const m = moves[i];
-
-        const parent = nodes[prevNodeId];
-        if (!parent) break;
-        const nodeId = parent.children.find(cid => nodes[cid].san === m.san && !nodes[cid].deleted);
-        if (nodeId === undefined) break;
-
-        const node = nodes[nodeId];
-        const ply = node.ply;
-        const moveNum = Math.floor((ply - 1) / 2) + 1;
-        const isBlack = (ply % 2 === 0);
-
-        if (!isBlack) {
-            html += `<span class="move-number">${moveNum}.</span>`;
-        } else if (i === 0 && isVariation) {
-            html += `<span class="move-number">${moveNum}...</span>`;
-        }
-
-        const cls = isVariation ? 'move-variation' : 'move';
-        const current = nodeId === currentNodeId ? ' move-current' : '';
-        html += `<span class="${cls}${current}" data-node-id="${nodeId}">${m.san}</span>`;
-        if (m.nags && m.nags.length > 0) {
-            html += `<span class="move-nag">${m.nags.map(nagToHtml).join(' ')}</span>`;
-        }
-        html += ' ';
-
-        if (m.comment) {
-            const cleaned = m.comment.replace(/\[#\]/g, '').replace(/\[%[^\]]*\]/g, '').trim();
-            if (cleaned) {
-                html += `<span class="move-comment">${cleaned}</span> `;
-            }
-        }
-
-        if (m.variations) {
-            for (const variation of m.variations) {
-                html += `<span class="move-variation-block">(`;
-                html += renderAnnotatedMoves(variation, prevNodeId, true);
-                html += `)</span> `;
-            }
-        }
-
-        prevNodeId = nodeId;
-    }
-    return html;
-}
-
-function highlightCurrentMove() {
-    const container = document.getElementById('viewer-moves');
-    if (!container) return;
-
-    container.querySelectorAll('[data-node-id]').forEach(el => {
-        el.classList.toggle('move-current', parseInt(el.dataset.nodeId) === currentNodeId);
-    });
-
-    const currentEl = container.querySelector('.move-current');
-    if (currentEl) {
-        currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-}
 
 // --- Comment Box (always visible, live-syncs to PGN) ---
 
@@ -1035,7 +706,7 @@ function updateCommentBox() {
     if (!input) return;
     // Don't overwrite if the user is actively editing
     if (document.activeElement === input) return;
-    input.value = nodes[currentNodeId].comment || '';
+    input.value = getNodes()[getCurrentNodeId()].comment || '';
     syncCommentElastic();
 }
 
@@ -1047,7 +718,7 @@ export function onCommentInput() {
     const input = document.getElementById('editor-comment-input');
     if (!input) return;
     const text = input.value.trim();
-    nodes[currentNodeId].comment = text || null;
+    getNodes()[getCurrentNodeId()].comment = text || null;
     rebuildAnnotatedMoves();
     renderMoveList();
     syncCommentElastic();
@@ -1055,14 +726,14 @@ export function onCommentInput() {
 
 export function onCommentFocus() {
     // Capture undo snapshot when user starts editing
-    commentFocusSnapshot = { nodes: structuredClone(nodes), currentNodeId, headers: { ...headers } };
+    commentFocusSnapshot = { nodes: structuredClone(getNodes()), currentNodeId: getCurrentNodeId(), headers: { ...headers } };
 }
 
 export function onCommentBlur() {
     // Push undo if the comment actually changed during this focus session
     if (commentFocusSnapshot) {
-        const oldComment = commentFocusSnapshot.nodes[currentNodeId]?.comment || '';
-        const newComment = nodes[currentNodeId].comment || '';
+        const oldComment = commentFocusSnapshot.nodes[getCurrentNodeId()]?.comment || '';
+        const newComment = getNodes()[getCurrentNodeId()].comment || '';
         if (oldComment !== newComment) {
             undoStack.push(commentFocusSnapshot);
             if (undoStack.length > UNDO_LIMIT) undoStack.shift();
@@ -1071,19 +742,6 @@ export function onCommentBlur() {
     }
 }
 
-// --- Nav Button State (same as viewer) ---
-
-function updateNavigationButtons() {
-    const node = nodes[currentNodeId];
-    const atStart = node && node.parentId < 0;
-    const atEnd = node && node.mainChild === null;
-
-    const ids = { 'editor-start': atStart, 'editor-prev': atStart, 'editor-next': atEnd, 'editor-end': atEnd };
-    for (const [id, disabled] of Object.entries(ids)) {
-        const btn = document.getElementById(id);
-        if (btn) btn.disabled = disabled;
-    }
-}
 
 // --- NAG Picker (right-click / long-press on moves) ---
 
@@ -1117,7 +775,7 @@ export function showNagPicker(targetNodeId, anchorEl) {
     if (!picker) return;
 
     // If called with no arguments (toolbar button), use current move
-    if (targetNodeId == null) targetNodeId = currentNodeId;
+    if (targetNodeId == null) targetNodeId = getCurrentNodeId();
     if (targetNodeId === 0) return; // can't annotate root
 
     nagTargetNodeId = targetNodeId;
@@ -1151,7 +809,7 @@ export function showNagPicker(targetNodeId, anchorEl) {
     }
 
     // Highlight active NAGs (check both White and Black variants for paired NAGs)
-    const node = nodes[nagTargetNodeId];
+    const node = getNodes()[nagTargetNodeId];
     picker.querySelectorAll('.nag-btn').forEach(btn => {
         const nag = parseInt(btn.dataset.nag, 10);
         btn.classList.toggle('nag-active', node ? nodeHasNagOrPair(node, nag) : false);
@@ -1181,12 +839,12 @@ function showContextMenu(nodeId, anchorEl) {
     // Show/hide "Make mainline" based on whether this is a variation
     const mainlineBtn = menu.querySelector('.ctx-mainline');
     if (mainlineBtn) {
-        const node = nodes[nodeId];
+        const node = getNodes()[nodeId];
         mainlineBtn.classList.toggle('hidden', !node || !node.isVariation);
     }
 
     // Highlight active quick NAGs
-    const node = nodes[nodeId];
+    const node = getNodes()[nodeId];
     menu.querySelectorAll('.ctx-nag').forEach(btn => {
         const nag = parseInt(btn.dataset.nag, 10);
         btn.classList.toggle('nag-active', node ? nodeHasNagOrPair(node, nag) : false);
@@ -1267,7 +925,7 @@ function setupMoveContextMenu() {
                 nagTargetNodeId = ctxTargetNodeId;
                 toggleNag(nag);
                 // Update active state on all quick NAG buttons
-                const node = nodes[ctxTargetNodeId];
+                const node = getNodes()[ctxTargetNodeId];
                 menu.querySelectorAll('.ctx-nag').forEach(btn => {
                     const n = parseInt(btn.dataset.nag, 10);
                     btn.classList.toggle('nag-active', node ? nodeHasNagOrPair(node, n) : false);
@@ -1348,11 +1006,12 @@ export function doImport() {
     pushUndo();
     importPgnIntoEditor(pgn);
     hideImportDialog();
-    if (board) board.position(nodes[currentNodeId].fen, false);
+    const board = getBoard();
+    if (board) board.position(getNodes()[getCurrentNodeId()].fen, false);
     renderMoveList();
     updateCommentBox();
 
-    updateNavigationButtons();
+    updateNavigationButtons(EDITOR_BTNS);
     syncDesktopLayout();
 }
 
@@ -1367,22 +1026,21 @@ function importPgnIntoEditor(pgn) {
 
     const moveText = extractMoveText(pgn);
     const parsed = parseMoveText(moveText);
-    annotatedMoves = parsed;
+    setAnnotatedMoves(parsed);
 
     const fenHeader = getHeader(pgn, 'FEN');
-    startingFen = fenHeader || START_FEN;
+    setStartingFen(fenHeader || START_FEN);
 
-    nodes = [makeRootNode(startingFen)];
+    setNodes([makeRootNode(getStartingFen())]);
     buildTreeFromParsed(parsed, 0);
 
-    let endId = 0;
-    while (nodes[endId].mainChild !== null) endId = nodes[endId].mainChild;
-    mainLineEnd = endId;
+    recalcMainLineEnd();
 
-    currentNodeId = 0;
+    setCurrentNodeId(0);
 }
 
 function buildTreeFromParsed(moves, parentId) {
+    const nodes = getNodes();
     let prevId = parentId;
     for (const m of moves) {
         const prev = nodes[prevId];
@@ -1412,50 +1070,6 @@ function buildTreeFromParsed(moves, parentId) {
 
         prevId = node.id;
     }
-}
-
-/**
- * Convert flat node tree back into nested move list format.
- */
-function treeToMoveList(treeNodes, rootId) {
-    const root = treeNodes[rootId];
-    if (!root || root.mainChild === null) return [];
-
-    function walkLine(nodeId, skipSiblings) {
-        const line = [];
-        let id = nodeId;
-        let first = true;
-        while (id !== null) {
-            const node = treeNodes[id];
-            if (!node || node.deleted) break;
-            const m = {
-                san: node.san,
-                comment: node.comment,
-                nags: node.nags ? [...node.nags] : null,
-                variations: null,
-            };
-
-            // Check for sibling variations, but skip on the first node of a
-            // variation walk to avoid infinite recursion (siblings share the
-            // same parent and would recurse back to each other).
-            if (!(first && skipSiblings)) {
-                const parent = treeNodes[node.parentId];
-                if (parent && parent.children.length > 1) {
-                    const siblings = parent.children.filter(cid => cid !== id && !treeNodes[cid].deleted);
-                    if (siblings.length > 0) {
-                        m.variations = siblings.map(sibId => walkLine(sibId, true));
-                    }
-                }
-            }
-            first = false;
-
-            line.push(m);
-            id = node.mainChild;
-        }
-        return line;
-    }
-
-    return walkLine(root.mainChild);
 }
 
 export async function copyPgn() {
