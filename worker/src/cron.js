@@ -91,26 +91,50 @@ export async function handleScheduled(env) {
         console.error('Failed to persist standings:', err.message);
     }
 
-    // Store games in D1
-    let gameCount = 0;
+    // Store games in D1 (only new or changed)
+    let newCount = 0;
+    let updatedCount = 0;
     try {
         const shortCode = getTournamentSlug(tournament.name);
         const startDate = tournament.roundDates?.[0] || null;
         await env.DB.prepare(
-            'INSERT OR REPLACE INTO tournaments (slug, name, short_code, start_date, total_rounds) VALUES (?, ?, ?, ?, ?)'
+            `INSERT INTO tournaments (slug, name, short_code, start_date, total_rounds) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(slug) DO UPDATE SET name=excluded.name, short_code=excluded.short_code,
+             start_date=excluded.start_date, total_rounds=excluded.total_rounds`
         ).bind(slug, tournament.name, shortCode, startDate, tournament.totalRounds || null).run();
+
+        // Fetch existing games for this tournament to diff against
+        const existing = await env.DB.prepare(
+            'SELECT round, board, result, pgn FROM games WHERE tournament_slug = ?'
+        ).bind(slug).all();
+        const existingMap = new Map();
+        for (const row of existing.results) {
+            existingMap.set(`${row.round}:${row.board}`, { result: row.result, hasPgn: !!row.pgn });
+        }
 
         const stmts = [];
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
             for (const g of games) {
                 if (g.board === null) continue;
+                const key = `${roundNum}:${g.board}`;
+                const ex = existingMap.get(key);
+
+                // Skip if row exists with same result and already has a PGN
+                if (ex && ex.hasPgn && ex.result === g.result) continue;
+
                 const opening = classifyOpening(g.pgn);
                 stmts.push(
                     env.DB.prepare(
-                        `INSERT OR REPLACE INTO games
+                        `INSERT INTO games
                          (tournament_slug, round, board, white, black, white_norm, black_norm,
                           white_elo, black_elo, result, eco, opening_name, section, date, game_id, pgn)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
+                          white=excluded.white, black=excluded.black,
+                          white_norm=excluded.white_norm, black_norm=excluded.black_norm,
+                          white_elo=excluded.white_elo, black_elo=excluded.black_elo,
+                          result=excluded.result, eco=excluded.eco, opening_name=excluded.opening_name,
+                          section=excluded.section, date=excluded.date, game_id=excluded.game_id, pgn=excluded.pgn`
                     ).bind(
                         slug, parseInt(roundNum), g.board,
                         g.white, g.black,
@@ -123,13 +147,16 @@ export async function handleScheduled(env) {
                         g.section, g.date, g.gameId || null, g.pgn
                     )
                 );
-                gameCount++;
+                if (ex) updatedCount++;
+                else newCount++;
             }
         }
-        for (let i = 0; i < stmts.length; i += 100) {
-            await env.DB.batch(stmts.slice(i, i + 100));
+        if (stmts.length > 0) {
+            for (let i = 0; i < stmts.length; i += 100) {
+                await env.DB.batch(stmts.slice(i, i + 100));
+            }
+            console.log(`D1: ${newCount} new, ${updatedCount} updated games across ${Object.keys(parsed.fullGames).length} rounds.`);
         }
-        console.log(`Stored ${gameCount} games across ${Object.keys(parsed.fullGames).length} rounds in D1.`);
     } catch (err) {
         console.error('Failed to store games in D1:', err.message);
     }

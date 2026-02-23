@@ -134,10 +134,20 @@ export async function handleOgGameImage(request, env) {
 export async function handleGetGames(request, env) {
     const url = new URL(request.url);
     const roundParam = url.searchParams.get('round');
+    const tournamentParam = url.searchParams.get('tournament');
 
-    const resolved = await resolveCurrentSlug(env, request);
-    if (resolved instanceof Response) return resolved;
-    const { slug, meta } = resolved;
+    let slug, meta;
+    if (tournamentParam) {
+        const t = await env.DB.prepare('SELECT * FROM tournaments WHERE slug = ?').bind(tournamentParam).first();
+        if (!t) return corsResponse({ error: 'Tournament not found' }, 404, env, request);
+        slug = t.slug;
+        meta = { name: t.name };
+    } else {
+        const resolved = await resolveCurrentSlug(env, request);
+        if (resolved instanceof Response) return resolved;
+        slug = resolved.slug;
+        meta = resolved.meta;
+    }
 
     let rows;
     if (roundParam) {
@@ -454,6 +464,66 @@ export async function handleSubmitGame(request, env) {
     ).run();
 
     return corsResponse({ success: true, eco: opening?.eco || null, openingName: opening?.name || null }, 200, env, request);
+}
+
+// --- ECO Backfill ---
+
+export async function handleBackfillEco(request, env) {
+    // Auth: require ADMIN_KEY as bearer token
+    const auth = request.headers.get('Authorization');
+    if (!auth || auth !== `Bearer ${env.ADMIN_KEY}`) {
+        return corsResponse({ error: 'Unauthorized' }, 401, env, request);
+    }
+
+    const url = new URL(request.url);
+    const dryRun = url.searchParams.get('dry-run') === 'true';
+    const batchSize = parseInt(url.searchParams.get('batch') || '200');
+    const afterId = parseInt(url.searchParams.get('after') || '0');
+
+    // Fetch a batch of games with PGN
+    const result = await env.DB.prepare(
+        'SELECT id, round, board, white, black, eco, opening_name, pgn FROM games WHERE id > ? ORDER BY id LIMIT ?'
+    ).bind(afterId, batchSize).all();
+    const games = result.results || [];
+
+    let unchanged = 0;
+    let noMatch = 0;
+    let noPgn = 0;
+    const changes = [];
+
+    for (const game of games) {
+        if (!game.pgn) { noPgn++; continue; }
+        const opening = classifyOpening(game.pgn);
+        if (!opening) { noMatch++; continue; }
+        if (game.eco === opening.eco && game.opening_name === opening.name) { unchanged++; continue; }
+        changes.push({ id: game.id, eco: opening.eco, name: opening.name, oldEco: game.eco, oldName: game.opening_name });
+    }
+
+    if (!dryRun && changes.length > 0) {
+        const stmts = changes.map(c =>
+            env.DB.prepare('UPDATE games SET eco = ?, opening_name = ? WHERE id = ?')
+                .bind(c.eco, c.name, c.id)
+        );
+        await env.DB.batch(stmts);
+    }
+
+    const lastId = games.length > 0 ? games[games.length - 1].id : null;
+    const hasMore = games.length === batchSize;
+
+    return corsResponse({
+        processed: games.length,
+        updated: dryRun ? 0 : changes.length,
+        toUpdate: changes.length,
+        unchanged,
+        noMatch,
+        noPgn,
+        dryRun,
+        lastId,
+        hasMore,
+        sample: changes.slice(0, 10).map(c => ({
+            id: c.id, oldEco: c.oldEco, oldName: c.oldName, newEco: c.eco, newName: c.name,
+        })),
+    }, 200, env, request);
 }
 
 export async function handleGetSubmission(request, env) {

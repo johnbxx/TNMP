@@ -33,9 +33,11 @@ export function classifyFen(fen) {
  * Strips variations, comments, NAGs, move numbers, and result tokens.
  */
 function extractMoveTokens(pgn) {
+    // Normalize line endings (some PGNs use \r\n)
+    const normalized = pgn.replace(/\r\n/g, '\n');
     // Find move text after the last header
-    const lastHeader = pgn.lastIndexOf(']\n');
-    const moveText = lastHeader >= 0 ? pgn.substring(lastHeader + 2).trim() : pgn.trim();
+    const lastHeader = normalized.lastIndexOf(']\n');
+    const moveText = lastHeader >= 0 ? normalized.substring(lastHeader + 2).trim() : normalized.trim();
 
     // Strip nested variations by counting parens
     let depth = 0;
