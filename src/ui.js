@@ -3,6 +3,12 @@ import { getRandomMeme } from './memes.js';
 import { stopOffSeasonCountdown, startOffSeasonCountdown, updateCountdownDisplay } from './countdown.js';
 import { resultDisplay } from './utils.js';
 
+/** Set the state class on <html>, preserving the dark-mode class if present. */
+function setHtmlClass(stateClass) {
+    const dark = document.documentElement.classList.contains('dark-mode');
+    document.documentElement.className = dark ? `${stateClass} dark-mode` : stateClass;
+}
+
 // --- Tracker state (module-private, only used within ui.js) ---
 let _selectedHistoryRound = null;
 let _livePairingHtml = null;
@@ -114,7 +120,7 @@ export function updateTournamentLink() {
 }
 
 export function showLoading() {
-    document.documentElement.className = 'loading-state';
+    setHtmlClass('loading-state');
     document.getElementById('loading').classList.remove('hidden');
     document.getElementById('result').classList.add('hidden');
     document.getElementById('check-btn').disabled = true;
@@ -140,7 +146,7 @@ export function showState(state, info, pairingInfo = null) {
     };
 
     const config = STATE_CONFIG[state];
-    document.documentElement.className = config.className;
+    setHtmlClass(config.className);
     answerEl.textContent = config.answer;
     fitAnswerText();
 
@@ -408,7 +414,7 @@ export function showError(message) {
     document.getElementById('result').classList.remove('hidden');
     document.getElementById('check-btn').disabled = false;
 
-    document.documentElement.className = 'no';
+    setHtmlClass('no');
     document.getElementById('answer').textContent = '???';
     document.getElementById('meme').innerHTML = `
         <p class="meme-text">Couldn't check the page. Maybe try opening it directly?</p>

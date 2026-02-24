@@ -153,6 +153,20 @@ html.off-season {
     background: linear-gradient(135deg, var(--gradient-off-season-start) 0%, var(--gradient-off-season-end) 100%);
 }
 
+/* Dark mode: solid background + colored answer text */
+html.dark-mode.yes, html.dark-mode.no, html.dark-mode.loading-state,
+html.dark-mode.too-early, html.dark-mode.in-progress,
+html.dark-mode.results, html.dark-mode.off-season {
+    background: #1a1a1a;
+}
+html.dark-mode.yes .answer { color: var(--gradient-yes-start); text-shadow: 0 0 40px rgba(0, 200, 83, 0.3); }
+html.dark-mode.no .answer { color: var(--gradient-no-start); text-shadow: 0 0 40px rgba(255, 23, 68, 0.3); }
+html.dark-mode.loading-state .answer { color: var(--gradient-loading-end); }
+html.dark-mode.too-early .answer { color: var(--gradient-too-early-end); text-shadow: 0 0 40px rgba(156, 39, 176, 0.3); }
+html.dark-mode.in-progress .answer { color: var(--gradient-in-progress-end); text-shadow: 0 0 40px rgba(66, 165, 245, 0.3); }
+html.dark-mode.results .answer { color: var(--gradient-results-start); text-shadow: 0 0 40px rgba(245, 124, 0, 0.3); }
+html.dark-mode.off-season .answer { color: var(--gradient-off-season-end); text-shadow: 0 0 40px rgba(123, 168, 98, 0.3); }
+
 /* Off-season: let the meme container expand for the countdown */
 html.off-season .meme {
     max-width: 520px;

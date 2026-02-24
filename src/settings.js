@@ -4,11 +4,18 @@ import { clearRoundHistory } from './history.js';
 import { openModal, closeModal } from './modal.js';
 import { checkPushStatus, syncPushSubscription } from './push.js';
 
+export function initDarkMode() {
+    if (localStorage.getItem('darkMode') === '1') {
+        document.documentElement.classList.add('dark-mode');
+    }
+}
+
 // --- Settings modal ---
 
 export function openSettings() {
     const input = document.getElementById('player-name-input');
     input.value = CONFIG.playerName;
+    document.getElementById('dark-mode-toggle').checked = localStorage.getItem('darkMode') === '1';
     openModal('settings-modal', input);
     checkPushStatus();
 }
@@ -19,6 +26,11 @@ export function saveSettings(checkPairings) {
     const oldName = CONFIG.playerName;
 
     CONFIG.playerName = newName;
+
+    const dark = document.getElementById('dark-mode-toggle').checked;
+    localStorage.setItem('darkMode', dark ? '1' : '0');
+    document.documentElement.classList.toggle('dark-mode', dark);
+
     closeModal('settings-modal');
 
     if (newName !== oldName) {

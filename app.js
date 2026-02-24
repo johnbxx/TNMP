@@ -2,7 +2,7 @@ import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setCur
 import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
-import { openSettings, saveSettings } from './src/settings.js';
+import { openSettings, saveSettings, initDarkMode } from './src/settings.js';
 import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/history.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
@@ -338,6 +338,8 @@ if ('serviceWorker' in navigator) {
 
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
+    initDarkMode();
+
     // Hold-to-repeat for prev/next buttons
     document.querySelectorAll('[data-hold]').forEach(btn => {
         const action = ACTIONS[btn.dataset.action];
