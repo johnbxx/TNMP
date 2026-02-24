@@ -300,26 +300,24 @@ export async function openGameBrowser(query = null) {
         panelEl.innerHTML = `<h2 id="browser-title-panel">${_selectedPlayer}'s Games</h2><div class="browser-content"></div>`;
         fitTextToContainer(document.getElementById('browser-title-panel'));
     } else {
-        const tournamentName = getLocalTitle() || getGamesData()?.games?.[0]?.tournament || 'Tournament Games';
-        panelEl.innerHTML = `<h2 id="browser-title-panel">${tournamentName}</h2><div class="browser-content"></div>`;
+        panelEl.innerHTML = `<h2 id="browser-title-panel">${getDefaultTitle()}</h2><div class="browser-content"></div>`;
 
         if (roundNums.length === 0 && !isLocal) {
             const containerEl = panelEl.querySelector('.browser-content');
             renderBrowserContent(containerEl, []);
             containerEl.querySelector('#browser-games').innerHTML = '<p class="viewer-error">No games available yet.</p>';
-            await renderTournamentDropdown();
+            await renderDataSourceDropdown();
             return;
         }
         if (isLocal) {
             // Import mode: default to show all (null = no round filter)
             if (_selectedRound && !roundNums.includes(_selectedRound)) _selectedRound = null;
-            renderLocalEventDropdown();
         } else {
             if (!_selectedRound || !roundNums.includes(_selectedRound)) {
                 _selectedRound = roundNums[roundNums.length - 1];
             }
-            await renderTournamentDropdown();
         }
+        await renderDataSourceDropdown();
         ensureBrowserLists();
     }
 
@@ -330,38 +328,25 @@ export async function openGameBrowser(query = null) {
 // --- Editor/submission helpers ---
 
 export function openEditorForGame(game) {
-    const isLocal = !!getGamesData()?.query?.local;
-    const orientation = getOrientationForGame(game);
+    const orientation = getOrientationForGame(game).toLowerCase();
 
-    if (isLocal) {
-        openGameEditor({
-            pgn: game.pgn || '',
-            orientation: orientation.toLowerCase(),
-            gameId: game.gameId,
-        });
-        return;
+    if (game.pgn) {
+        // Game has PGN — open editor with it directly
+        openGameEditor({ pgn: game.pgn, orientation, gameId: game.gameId });
+    } else {
+        // No PGN — build headers from game metadata for a blank editor
+        let event = game.tournament || getTournamentMeta().name || 'Tournament';
+        if (game.section) event += `: ${game.section}`;
+        const headers = {
+            Event: event,
+            Date: game.date || new Date().toISOString().split('T')[0].replace(/-/g, '.'),
+            Round: game.board ? `${game.round}.${game.board}` : String(game.round || ''),
+            White: game.white || '?',
+            Black: game.black || '?',
+            Result: game.result || '*',
+        };
+        openGameEditor({ headers, orientation, gameId: game.gameId });
     }
-
-    const meta = getTournamentMeta();
-    const headers = {
-        Event: meta.name || 'Tuesday Night Marathon',
-        Site: 'San Francisco',
-        Date: new Date().toISOString().split('T')[0].replace(/-/g, '.'),
-        Round: `${game.round}.${game.board}`,
-        White: game.white || '?',
-        Black: game.black || '?',
-        Result: game.result || '*',
-    };
-    if (game.section) headers.Event += `: ${game.section}`;
-
-    openGameEditor({
-        headers,
-        orientation: orientation.toLowerCase(),
-        submitMode: true,
-        round: Number(game.round),
-        board: Number(game.board),
-        gameId: game.gameId,
-    });
 }
 
 function openViewerWithSubmission(game) {
@@ -422,7 +407,7 @@ export function hideBrowserPanel() {
 
 // --- Game opening from browser ---
 
-function openGameFromBrowser(gameId) {
+export function openGameFromBrowser(gameId) {
     const gameList = buildCurrentGameList();
     const idx = gameList.indexOf(gameId);
     if (idx === -1) return;
@@ -487,134 +472,137 @@ export async function openBrowserWithFirstGame() {
     }
 }
 
-// --- Event/Tournament Dropdowns ---
+// --- Title Dropdown ---
 
-function renderLocalEventDropdown() {
+/**
+ * Build the title dropdown from a list of data sources.
+ * @param {Array<{value: string, label: string}>} items - dropdown options
+ * @param {object} opts
+ * @param {string|null} opts.activeValue - currently selected value
+ * @param {string|null} [opts.allLabel] - label for "All" option (null = no "All" option)
+ * @param {Function} opts.onChange - callback(value) when selection changes
+ */
+function renderTitleDropdown(items, { activeValue, allLabel = null, onChange }) {
     const titleEl = document.getElementById('browser-title-panel');
-    if (!titleEl) return;
-
-    const games = getGamesData()?.games || [];
-    const events = [...new Set(games.map(g => g.tournament).filter(Boolean))];
-    if (events.length <= 1) return; // No dropdown needed for 0 or 1 events
+    if (!titleEl || items.length <= 1) return;
 
     const select = document.createElement('select');
     select.id = 'browser-title-select';
     select.className = 'browser-title-select';
 
-    // "All" option
-    const allOpt = document.createElement('option');
-    allOpt.value = '';
-    allOpt.textContent = `All Events (${games.length} games)`;
-    if (!_filterEvent) allOpt.selected = true;
-    select.appendChild(allOpt);
+    if (allLabel) {
+        const allOpt = document.createElement('option');
+        allOpt.value = '';
+        allOpt.textContent = allLabel;
+        if (!activeValue) allOpt.selected = true;
+        select.appendChild(allOpt);
+    }
 
-    for (const event of events) {
+    for (const { value, label } of items) {
         const opt = document.createElement('option');
-        opt.value = event;
-        opt.textContent = event;
-        if (_filterEvent === event) opt.selected = true;
+        opt.value = value;
+        opt.textContent = label;
+        if (value === activeValue) opt.selected = true;
         select.appendChild(opt);
     }
 
     titleEl.textContent = '';
     titleEl.appendChild(select);
-    select.addEventListener('change', () => switchEvent(select.value || null));
+    select.addEventListener('change', () => onChange(select.value || null));
 }
 
-function switchEvent(event) {
-    _filterEvent = event;
-    _selectedRound = null;
-    _playerList = buildPlayerList(); // Rebuild from full dataset (filtering is in getVisibleGames)
-    _sectionList = buildFilteredSectionList();
-    _visibleSections = new Set(_sectionList);
+/**
+ * Build title dropdown items and render. Works for both local (events) and server (tournaments).
+ */
+async function renderDataSourceDropdown() {
+    const isLocal = !!getGamesData()?.query?.local;
 
-    const roundNums = getFilteredRoundNumbers();
-    const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
-    if (containerEl) renderBrowserContent(containerEl, roundNums);
-}
+    if (isLocal) {
+        const games = getGamesData()?.games || [];
+        const events = [...new Set(games.map(g => g.tournament).filter(Boolean))];
+        renderTitleDropdown(
+            events.map(e => ({ value: e, label: e })),
+            { activeValue: _filterEvent, allLabel: `All Events (${games.length} games)`, onChange: switchDataSource },
+        );
+    } else {
+        const titleEl = document.getElementById('browser-title-panel');
+        const currentName = getGamesData()?.games?.[0]?.tournament || 'Tournament Games';
+        if (titleEl) { titleEl.textContent = currentName; fitTextToContainer(titleEl); }
 
+        let tournaments;
+        try { tournaments = await fetchTournamentList(); } catch { return; }
+        if (!tournaments) return;
 
-async function renderTournamentDropdown() {
-    const titleEl = document.getElementById('browser-title-panel');
-    if (!titleEl) return;
+        const activeSlug = getActiveTournamentSlug();
+        const currentSlug = getTournamentMeta().slug
+            || tournaments.find(t => t.name === currentName)?.slug;
 
-    const gamesData = getGamesData();
-    const currentName = gamesData?.games?.[0]?.tournament || 'Tournament Games';
-    titleEl.textContent = currentName;
-    fitTextToContainer(titleEl);
-
-    let tournaments;
-    try { tournaments = await fetchTournamentList(); } catch { return; }
-    if (!tournaments || tournaments.length <= 1) return;
-
-    const select = document.createElement('select');
-    select.id = 'browser-title-select';
-    select.className = 'browser-title-select';
-    const activeSlug = getActiveTournamentSlug();
-    const currentSlug = getTournamentMeta().slug
-        || tournaments.find(t => t.name === currentName)?.slug;
-    for (const t of tournaments) {
-        const opt = document.createElement('option');
-        opt.value = t.slug;
-        opt.textContent = t.name;
-        if (activeSlug ? t.slug === activeSlug : t.slug === currentSlug) {
-            opt.selected = true;
-        }
-        select.appendChild(opt);
-    }
-    titleEl.textContent = '';
-    titleEl.appendChild(select);
-    select.addEventListener('change', () => switchTournament(select.value, currentSlug));
-}
-
-async function switchTournament(slug, currentSlug) {
-    const isCurrentTournament = slug === currentSlug;
-    const previousPlayer = _selectedPlayer;
-
-    setActiveTournamentSlug(isCurrentTournament ? null : slug);
-    clearGamesData();
-    resetBrowserState();
-
-    const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
-    if (containerEl) containerEl.innerHTML = '<p class="viewer-loading">Loading games...</p>';
-
-    try {
-        const fetchParams = { tournament: slug, include: 'pgn,submissions' };
-        await fetchGames(fetchParams, { cache: isCurrentTournament });
-        const roundNums = getRoundNumbers();
-
-        if (roundNums.length === 0) {
-            if (containerEl) containerEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
-            return;
-        }
-
-        _selectedRound = roundNums[roundNums.length - 1];
-        _playerList = buildPlayerList();
-        _sectionList = buildFilteredSectionList();
-        _visibleSections = new Set(_sectionList);
-
-        // Preserve player filter if the player exists in the new tournament
-        if (previousPlayer && _playerList.some(p => p.toLowerCase() === previousPlayer.toLowerCase())) {
-            _selectedPlayer = previousPlayer;
-        }
-
-        if (containerEl) renderBrowserContent(containerEl, roundNums);
-    } catch (err) {
-        if (containerEl) containerEl.innerHTML = `<p class="viewer-error">Failed to load games: ${err.message}</p>`;
+        renderTitleDropdown(
+            tournaments.map(t => ({ value: t.slug, label: t.name })),
+            { activeValue: activeSlug || currentSlug, onChange: (v) => switchDataSource(v, currentSlug) },
+        );
     }
 }
 
 /**
- * Compute a display title for locally imported games.
- * Returns null if not in local mode.
+ * Switch the active data source (event filter for local, tournament fetch for server).
  */
-function getLocalTitle() {
+async function switchDataSource(value, currentSlug) {
+    const isLocal = !!getGamesData()?.query?.local;
+    const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
+
+    if (isLocal) {
+        // Local: just change the filter — data is already loaded
+        _filterEvent = value || null;
+    } else {
+        // Server: fetch new tournament data
+        const previousPlayer = _selectedPlayer;
+        const isCurrentTournament = value === currentSlug;
+        setActiveTournamentSlug(isCurrentTournament ? null : value);
+        clearGamesData();
+        resetBrowserState();
+
+        if (containerEl) containerEl.innerHTML = '<p class="viewer-loading">Loading games...</p>';
+        try {
+            await fetchGames({ tournament: value, include: 'pgn,submissions' }, { cache: isCurrentTournament });
+        } catch (err) {
+            if (containerEl) containerEl.innerHTML = `<p class="viewer-error">Failed to load games: ${err.message}</p>`;
+            return;
+        }
+
+        // Preserve player filter if the player exists in the new tournament
+        const newPlayerList = buildPlayerList();
+        if (previousPlayer && newPlayerList.some(p => p.toLowerCase() === previousPlayer.toLowerCase())) {
+            _selectedPlayer = previousPlayer;
+        }
+    }
+
+    // Shared: reset derived state and re-render
+    const roundNums = getFilteredRoundNumbers();
+    _selectedRound = isLocal ? null : (roundNums.length ? roundNums[roundNums.length - 1] : null);
+    _playerList = buildPlayerList();
+    _sectionList = buildFilteredSectionList();
+    _visibleSections = new Set(_sectionList);
+
+    if (roundNums.length === 0 && !isLocal) {
+        if (containerEl) containerEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
+        return;
+    }
+    if (containerEl) renderBrowserContent(containerEl, roundNums);
+}
+
+/**
+ * Compute display title from games data.
+ */
+function getDefaultTitle() {
     const data = getGamesData();
-    if (!data?.query?.local) return null;
-    const games = data.games || [];
-    const events = new Set(games.map(g => g.tournament).filter(Boolean));
-    if (events.size === 1) return [...events][0];
-    return `Imported Games (${games.length})`;
+    if (data?.query?.local) {
+        const games = data.games || [];
+        const events = new Set(games.map(g => g.tournament).filter(Boolean));
+        if (events.size === 1) return [...events][0];
+        return `Imported Games (${games.length})`;
+    }
+    return data?.games?.[0]?.tournament || 'Tournament Games';
 }
 
 // --- Browser rendering ---
@@ -879,15 +867,10 @@ async function clearPlayerMode() {
     // Restore title and dropdown
     const titleEl = document.getElementById('browser-title-panel');
     if (titleEl) {
-        const title = getLocalTitle() || getGamesData()?.games?.[0]?.tournament || 'Tournament Games';
-        titleEl.textContent = title;
+        titleEl.textContent = getDefaultTitle();
         fitTextToContainer(titleEl);
     }
-    if (isLocal) {
-        renderLocalEventDropdown();
-    } else {
-        await renderTournamentDropdown();
-    }
+    await renderDataSourceDropdown();
 
     // Re-render
     const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
@@ -936,41 +919,33 @@ function renderChips() {
     container.classList.remove('hidden');
 
     const data = getGamesData();
-    const isLocal = !!data?.query?.local;
     const pLower = _selectedPlayer.toLowerCase();
     const playerGames = (data?.games || []).filter(g =>
         g.white.toLowerCase() === pLower || g.black.toLowerCase() === pLower
     );
 
-    // Build event/tournament options from the player's games
-    let eventDropdown = '';
-    if (isLocal) {
-        const events = [...new Set(playerGames.map(g => g.tournament).filter(Boolean))];
-        if (events.length > 1) {
-            const options = events.map(e =>
-                `<option value="${e}"${_filterTournament === e ? ' selected' : ''}>${e}</option>`
-            ).join('');
-            eventDropdown = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">All Events</option>${options}</select>`;
-        }
-    } else {
-        const tournaments = new Map();
-        for (const g of playerGames) {
-            const key = g.tournamentSlug || g.tournament;
-            if (key && !tournaments.has(key)) tournaments.set(key, g.tournament || key);
-        }
-        if (tournaments.size > 1) {
-            const options = [...tournaments].map(([slug, name]) =>
-                `<option value="${slug}"${_filterTournament === slug ? ' selected' : ''}>${name}</option>`
-            ).join('');
-            eventDropdown = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">All Tournaments</option>${options}</select>`;
-        } else if (tournaments.size === 1) {
-            const [slug, name] = [...tournaments][0];
-            eventDropdown = `<button type="button" class="browser-section-btn${_filterTournament ? ' browser-section-active' : ''}" data-chip="tournament" data-value="${slug}">${name}</button>`;
-        }
+    // Build unique data sources from the player's games (tournaments or events)
+    const sources = new Map();
+    for (const g of playerGames) {
+        const key = g.tournamentSlug || g.tournament;
+        if (key && !sources.has(key)) sources.set(key, g.tournament || key);
+    }
+
+    // Render dropdown (multiple sources) or single chip (one source)
+    let sourceHtml = '';
+    if (sources.size > 1) {
+        const options = [...sources].map(([value, label]) =>
+            `<option value="${value}"${_filterTournament === value ? ' selected' : ''}>${label}</option>`
+        ).join('');
+        const allLabel = data?.query?.local ? 'All Events' : 'All Tournaments';
+        sourceHtml = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">${allLabel}</option>${options}</select>`;
+    } else if (sources.size === 1) {
+        const [value, label] = [...sources][0];
+        sourceHtml = `<button type="button" class="browser-section-btn${_filterTournament ? ' browser-section-active' : ''}" data-chip="tournament" data-value="${value}">${label}</button>`;
     }
 
     container.innerHTML = `
-        ${eventDropdown}
+        ${sourceHtml}
         <button type="button" class="browser-section-btn${_filterColor === 'white' ? ' browser-section-active' : ''}" data-chip="color" data-value="white">White</button>
         <button type="button" class="browser-section-btn${_filterColor === 'black' ? ' browser-section-active' : ''}" data-chip="color" data-value="black">Black</button>
     `;

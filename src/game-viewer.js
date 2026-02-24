@@ -2,7 +2,7 @@ import { openModal, closeModal } from './modal.js';
 import { initViewer, destroyViewer, syncDesktopLayout, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
 import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, isEditorDirty, copyPgn } from './pgn-editor.js';
 import { loadRoundHistory } from './history.js';
-import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, clearFilter, getCachedGame, openEditorForGame } from './game-browser.js';
+import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, openGameFromBrowser, clearFilter, getCachedGame, openEditorForGame } from './game-browser.js';
 
 const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
 
@@ -117,35 +117,16 @@ function showViewer() {
 
 /**
  * Open the viewer+browser with imported local games.
- * Opens the first game and sets up prev/next navigation.
+ * Uses the standard browser navigation pipeline.
  */
 export async function openImportedGames(games) {
     if (!games || games.length === 0) return;
-    const first = games[0];
-    const gameList = games.map(g => g.gameId);
-    await openGameViewer({
-        game: first,
-        orientation: 'White',
-        onPrev: null,
-        onNext: gameList.length > 1 ? () => openLocalGameAtIndex(games, gameList, 1) : null,
-        meta: { isLocal: true },
-    });
-    // Re-render browser panel with local games data
+    // Open panel and render browser with the imported data
+    await ensurePanelOpen();
     await openGameBrowser();
-    highlightActiveGame(first.gameId);
-}
-
-function openLocalGameAtIndex(games, gameList, idx) {
-    const game = games.find(g => g.gameId === gameList[idx]);
-    if (!game) return;
-    openGameViewer({
-        game,
-        orientation: 'White',
-        onPrev: idx > 0 ? () => openLocalGameAtIndex(games, gameList, idx - 1) : null,
-        onNext: idx < gameList.length - 1 ? () => openLocalGameAtIndex(games, gameList, idx + 1) : null,
-        meta: { isLocal: true },
-    });
-    highlightActiveGame(gameList[idx]);
+    // Open the first game using the standard browser navigation
+    const first = games.find(g => g.hasPgn && g.gameId);
+    if (first) openGameFromBrowser(first.gameId);
 }
 
 // Sync browser panel layout on resize
@@ -172,6 +153,36 @@ window.addEventListener('resize', () => {
 });
 
 /**
+ * Ensure the viewer modal and browser panel are open and ready.
+ * Shared setup for both viewer and editor entry points.
+ * @param {string} [gameId] - Optional gameId to highlight in browser
+ * @returns {Promise<void>}
+ */
+async function ensurePanelOpen(gameId) {
+    wireViewerHeader();
+    const viewerModal = document.getElementById('viewer-modal');
+    const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
+
+    if (!alreadyOpen) {
+        openModal('viewer-modal');
+    }
+
+    let hadAsyncGap = false;
+    const panelEl = document.getElementById('viewer-browser-panel');
+    if (panelEl && panelEl.classList.contains('hidden')) {
+        await renderBrowserInPanel();
+        hadAsyncGap = true;
+    }
+
+    showViewer();
+    if (gameId) highlightActiveGame(gameId);
+
+    if (!hadAsyncGap && !alreadyOpen) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+}
+
+/**
  * Open the game viewer modal and initialize the board.
  *
  * @param {object} opts
@@ -192,38 +203,14 @@ export async function openGameViewer(opts = {}) {
         });
     }
 
-    wireViewerHeader();
-    const viewerModal = document.getElementById('viewer-modal');
-    const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
-
-    if (!alreadyOpen) {
-        openModal('viewer-modal');
-    }
-
-    // Show browser panel (renders if needed)
-    let hadAsyncGap = false;
-    const panelEl = document.getElementById('viewer-browser-panel');
-    if (panelEl && panelEl.classList.contains('hidden')) {
-        await renderBrowserInPanel();
-        hadAsyncGap = true;
-    }
-
     const game = opts.game;
-    const gameId = game?.gameId;
 
-    // On mobile: show viewer if we have a game, otherwise stay on browser
-    if (game) {
-        showViewer();
-    } else if (!isCombinedWidth()) {
+    await ensurePanelOpen(game?.gameId);
+
+    // On mobile with no game: stay on browser view
+    if (!game && !isCombinedWidth()) {
         const modal = document.querySelector('.modal-content-viewer');
         if (modal) modal.classList.add('browser-only');
-    }
-
-    if (gameId) highlightActiveGame(gameId);
-
-    // Ensure browser has reflowed after modal becomes visible.
-    if (!hadAsyncGap && !alreadyOpen) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
     }
 
     setMode('viewer');
@@ -275,28 +262,7 @@ export function editCurrentGame() {
  * Open the editor in the unified game panel.
  */
 export async function openGameEditor(options = {}) {
-    wireViewerHeader();
-    const viewerModal = document.getElementById('viewer-modal');
-    const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
-
-    if (!alreadyOpen) {
-        openModal('viewer-modal');
-    }
-
-    let hadAsyncGap = false;
-    const panelEl = document.getElementById('viewer-browser-panel');
-    if (panelEl && panelEl.classList.contains('hidden')) {
-        await renderBrowserInPanel();
-        hadAsyncGap = true;
-    }
-
-    showViewer();
-
-    if (options.gameId) highlightActiveGame(options.gameId);
-
-    if (!hadAsyncGap && !alreadyOpen) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-    }
+    await ensurePanelOpen(options.gameId);
 
     // Clean up viewer if switching from viewer to editor
     if (panelMode === 'viewer') destroyViewer();
