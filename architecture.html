@@ -633,11 +633,11 @@
         <ul>
           <li>Vanilla JS PWA — no framework</li>
           <li>Vite build with hashed assets</li>
-          <li><code>app.js</code> → 14 ES modules in <code>src/</code></li>
-          <li>DOMParser-based HTML parser</li>
+          <li><code>app.js</code> → 17 ES modules in <code>src/</code></li>
           <li>Chess.js + Chessboard2 for game viewer</li>
           <li>PGN editor with move validation</li>
-          <li>Game browser with filters</li>
+          <li>Game browser with filters + PGN import</li>
+          <li>Player profiles with all-time stats</li>
         </ul>
       </div>
 
@@ -657,9 +657,9 @@
       <div class="box c-green" id="o-worker" style="--area:worker">
         <h3>⚙️ Worker <span class="badge" style="background:rgba(63,185,80,0.15);color:var(--green)">Cloudflare Workers</span></h3>
         <ul>
-          <li>HTTP API: 18 endpoints (tournament, games, push, OG)</li>
+          <li>HTTP API: 16 endpoints (tournament, games, push, OG)</li>
           <li>Cron: 3 schedules (pairings, results, cache refresh)</li>
-          <li>HTMLRewriter + regex parsers for MI website</li>
+          <li>Regex parser for MI website</li>
           <li>Web Push (VAPID JWT + AES-128-GCM encryption)</li>
           <li>ECO opening classification (3,641 positions)</li>
           <li>OG board image generation (SVG → PNG)</li>
@@ -724,17 +724,16 @@
             <li><code>push.js</code> — push notification lifecycle</li>
             <li><code>settings.js</code> — player name, preferences</li>
             <li><code>share.js</code> — native share / clipboard</li>
-            <li><code>about.js</code> — about + privacy modals</li>
+            <li><code>player-profile.js</code> — all-time player stats</li>
           </ul>
         </div>
 
         <div class="fe-cluster c-cyan" id="fd-state-data">
           <h4 style="color:var(--cyan)">State &amp; Data</h4>
           <ul>
-            <li><code>state.js</code> — centralized getter/setter store</li>
-            <li><code>config.js</code> — constants, WORKER_URL, VAPID key</li>
+            <li><code>config.js</code> — constants, state getters/setters</li>
             <li><code>history.js</code> — round history, server sync</li>
-            <li><code>browser-data.js</code> — game index fetch/cache</li>
+            <li><code>browser-data.js</code> — /query fetch/cache layer</li>
           </ul>
         </div>
       </div>
@@ -754,8 +753,6 @@
           <h4 style="color:var(--blue)">Rendering</h4>
           <ul>
             <li><code>ui.js</code> — state display, round tracker, pairing cards</li>
-            <li><code>parser2.js</code> — DOMParser HTML extraction</li>
-            <li><code>time.js</code> — time window detection</li>
             <li><code>memes.js</code> — state-specific meme selection</li>
             <li><code>countdown.js</code> — auto-refresh + off-season timer</li>
           </ul>
@@ -765,15 +762,15 @@
           <h4 style="color:var(--pink)">Game Browser</h4>
           <ul>
             <li><code>game-browser.js</code> — round tabs, player search, section filters</li>
-            <li>Standalone modal (mobile) or embedded side panel (desktop)</li>
-            <li>Tournament dropdown for archive browsing</li>
+            <li>Embedded side panel (desktop) or mobile-first browser view</li>
+            <li>Tournament/event dropdown, PGN import/export</li>
           </ul>
         </div>
 
         <div class="fe-cluster c-pink" id="fd-viewer">
-          <h4 style="color:var(--pink)">Game Viewer</h4>
+          <h4 style="color:var(--pink)">Game Panel</h4>
           <ul>
-            <li><code>game-viewer.js</code> — modal, header, ECO display</li>
+            <li><code>game-viewer.js</code> — panel orchestrator, viewer/editor mode switching</li>
             <li><code>pgn-viewer.js</code> — replay engine, auto-play, branches</li>
             <li><code>board-core.js</code> — shared board + move tree infrastructure</li>
           </ul>
@@ -792,7 +789,7 @@
     </div>
     <div class="fe-infra-bar">
       <span class="fe-infra-label">Infrastructure</span>
-      <code>modal.js</code> <code>toast.js</code> <code>utils.js</code> <code>sw.js</code>
+      <code>modal.js</code> <code>toast.js</code> <code>utils.js</code> <code>debug.js</code> <code>sw.js</code>
       <span class="fe-infra-note">— shared by all modules</span>
     </div>
   </div>
@@ -816,25 +813,16 @@
     <div class="module-card" style="border-left:3px solid var(--cyan)">
       <h4 style="color:var(--cyan)">config.js</h4>
       <div class="path">src/config.js</div>
-      <p>Constants and persistent settings. Worker URL, VAPID key, STATE enum, player name (localStorage), tournament metadata.</p>
+      <p>Constants, persistent settings, and centralized app state. Worker URL, VAPID key, STATE enum, player name (localStorage), tournament metadata. Getter/setter pairs for all mutable state.</p>
       <div class="exports">
         <span>WORKER_URL</span>
         <span>STATE</span>
         <span>CONFIG</span>
         <span>getTournamentMeta()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--cyan)">
-      <h4 style="color:var(--cyan)">state.js</h4>
-      <div class="path">src/state.js</div>
-      <p>Centralized getter/setter store for all mutable app state. No mutable <code>export let</code> — all state accessed via functions.</p>
-      <div class="exports">
         <span>getCurrentState()</span>
         <span>setCurrentState()</span>
-        <span>getBrowsingGame()</span>
-        <span>buildNavList()</span>
-        <span>clearNavContext()</span>
+        <span>getCurrentPairing()</span>
+        <span>getRoundInfo()</span>
       </div>
     </div>
 
@@ -847,19 +835,7 @@
         <span>showLoading()</span>
         <span>showError()</span>
         <span>renderRoundTracker()</span>
-        <span>renderPairingHtml()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--blue)">
-      <h4 style="color:var(--blue)">parser2.js</h4>
-      <div class="path">src/parser2.js</div>
-      <p>DOMParser-based HTML parser for tournament data. Extracts pairings, standings, player info, and results from cached HTML.</p>
-      <div class="exports">
-        <span>parsePairingsSections()</span>
-        <span>findPlayerPairing()</span>
-        <span>parseStandings()</span>
-        <span>parseResult()</span>
+        <span>fitTextToContainer()</span>
       </div>
     </div>
 
@@ -905,12 +881,14 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">game-viewer.js</h4>
       <div class="path">src/game-viewer.js</div>
-      <p>Modal for viewing games with interactive board. Fetches PGN, initializes board viewer, renders header with ECO/opening. Keyboard shortcuts (arrows).</p>
+      <p>Orchestrates the unified viewer/editor panel. Mode switching (viewer ↔ editor), embedded browser panel, dirty editor warnings, keyboard dispatch, panel close cleanup.</p>
       <div class="exports">
         <span>openGameViewer()</span>
+        <span>openGameEditor()</span>
+        <span>openImportedGames()</span>
         <span>closeGamePanel()</span>
-        <span>getCurrentMode()</span>
-        <span>setMode()</span>
+        <span>handlePanelKeydown()</span>
+        <span>editCurrentGame()</span>
       </div>
     </div>
 
@@ -956,11 +934,14 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">game-browser.js</h4>
       <div class="path">src/game-browser.js</div>
-      <p>Browse all games across rounds. Round tabs, player/section filters. Embedded side panel on desktop, full modal on mobile.</p>
+      <p>Unified game browser. Round tabs, player search, section filters, tournament/event dropdown. PGN import/export. Embedded side panel on desktop. Single render pipeline for local imports and server data.</p>
       <div class="exports">
         <span>openGameBrowser()</span>
-        <span>closeGameBrowser()</span>
+        <span>openGameFromBrowser()</span>
         <span>openGameWithPlayerNav()</span>
+        <span>openBrowserWithFirstGame()</span>
+        <span>renderBrowserInPanel()</span>
+        <span>hideBrowserPanel()</span>
         <span>prefetchGames()</span>
       </div>
     </div>
@@ -990,10 +971,13 @@
       <div class="path">src/settings.js</div>
       <p>Settings modal — player name, push enable/disable, notification prefs.</p>
     </div>
-    <div class="module-card" style="border-left:3px solid var(--text-dim)">
-      <h4>about.js</h4>
-      <div class="path">src/about.js</div>
-      <p>About modal (first-visit flow → chains to Settings) and Privacy modal.</p>
+    <div class="module-card" style="border-left:3px solid var(--pink)">
+      <h4 style="color:var(--pink)">player-profile.js</h4>
+      <div class="path">src/player-profile.js</div>
+      <p>Player profile modal. Fetches all-time stats from <code>/query?player=NAME&amp;tournament=all</code>. Win/loss/draw record, rating history, game list.</p>
+      <div class="exports">
+        <span>openPlayerProfile()</span>
+      </div>
     </div>
     <div class="module-card" style="border-left:3px solid var(--text-dim)">
       <h4>memes.js</h4>
@@ -1018,7 +1002,20 @@
     <div class="module-card" style="border-left:3px solid var(--cyan)">
       <h4 style="color:var(--cyan)">browser-data.js</h4>
       <div class="path">src/browser-data.js</div>
-      <p>Game data fetch/cache layer. LocalStorage first, network refresh in background.</p>
+      <p>Game data fetch/cache layer for game browser. Fetches <code>/query</code> endpoint, caches in localStorage, builds indexes by round/player/section/tournament.</p>
+      <div class="exports">
+        <span>fetchGames()</span>
+        <span>prefetchGames()</span>
+        <span>getGamesData()</span>
+        <span>getCachedGame()</span>
+        <span>fetchTournamentList()</span>
+        <span>buildPlayerList()</span>
+      </div>
+    </div>
+    <div class="module-card" style="border-left:3px solid var(--text-dim)">
+      <h4>debug.js</h4>
+      <div class="path">src/debug.js</div>
+      <p>Debug panel. <code>previewState()</code> renders debug state overlays for testing.</p>
     </div>
   </div>
 
@@ -1076,7 +1073,7 @@
         <div class="fe-cluster c-green" id="wd-router">
           <h4 style="color:var(--green)">Router</h4>
           <ul>
-            <li><code>index.js</code> — HTTP router (18 routes) + cron dispatcher</li>
+            <li><code>index.js</code> — HTTP router (16 routes) + cron dispatcher</li>
             <li>Routes HTTP to Tournament, Push, Game Data</li>
             <li><code>fetch()</code> and <code>scheduled()</code> entry points</li>
           </ul>
@@ -1132,7 +1129,7 @@
     <div class="module-card" style="border-left:3px solid var(--green)">
       <h4 style="color:var(--green)">index.js</h4>
       <div class="path">worker/src/index.js</div>
-      <p>HTTP router (18 routes) and cron dispatcher. CORS handling, rate limiting. Entry point for both <code>fetch</code> and <code>scheduled</code> events.</p>
+      <p>HTTP router (16 routes) and cron dispatcher. CORS handling, rate limiting. Entry point for both <code>fetch</code> and <code>scheduled</code> events.</p>
       <div class="exports">
         <span>fetch()</span>
         <span>scheduled()</span>
@@ -1166,22 +1163,13 @@
     <div class="module-card" style="border-left:3px solid var(--orange)">
       <h4 style="color:var(--orange)">parser.js</h4>
       <div class="path">worker/src/parser.js</div>
-      <p>Regex-based HTML parser (v1). Single-pass <code>parseTournamentPage()</code> extracts pairings, standings, PGN, round dates, tournament name from MI HTML.</p>
+      <p>Regex-based HTML parser. Single-pass <code>parseTournamentPage()</code> extracts pairings, standings, PGN, round dates, tournament name from MI HTML.</p>
       <div class="exports">
         <span>parseTournamentPage()</span>
         <span>hasPairings()</span>
         <span>hasResults()</span>
         <span>findPlayerPairing()</span>
-        <span>composeMessage()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--orange)">
-      <h4 style="color:var(--orange)">parser2.js</h4>
-      <div class="path">worker/src/parser2.js</div>
-      <p>HTMLRewriter-based parser (v2). Async parsing for worker context. Re-exports pure functions from parser.js.</p>
-      <div class="exports">
-        <span>extractPgnColors()</span>
+        <span>extractPairingsColors()</span>
         <span>composeMessage()</span>
         <span>composeResultsMessage()</span>
       </div>
@@ -1218,14 +1206,14 @@
     <div class="module-card" style="border-left:3px solid var(--cyan)">
       <h4 style="color:var(--cyan)">games.js</h4>
       <div class="path">worker/src/games.js</div>
-      <p>D1-based game endpoints. Single game, games list, composable query, player history. OG image generation with board SVG → PNG.</p>
+      <p>D1-based game endpoints. Composable <code>/query</code> API with filters (player, tournament, round, section, hasPgn). Player history, OG image generation, ECO classification, game submissions.</p>
       <div class="exports">
-        <span>handleGetGame()</span>
-        <span>handleGetGameById()</span>
-        <span>handleGetGames()</span>
         <span>handleQuery()</span>
         <span>handlePlayerHistory()</span>
+        <span>handleTournaments()</span>
         <span>handleSubmitGame()</span>
+        <span>handleOgGame()</span>
+        <span>handleOgGameImage()</span>
       </div>
     </div>
 
@@ -1627,7 +1615,7 @@
       </tr>
       <tr>
         <td><code>gamesData</code></td>
-        <td>Cached games index from /games endpoint</td>
+        <td>Cached games from /query endpoint (flat array + query params)</td>
         <td>browser-data.js</td>
       </tr>
       <tr>
@@ -1638,7 +1626,7 @@
       <tr>
         <td><code>aboutSeen</code></td>
         <td>First-visit About modal shown flag</td>
-        <td>about.js</td>
+        <td>app.js</td>
       </tr>
     </tbody>
   </table>
@@ -1662,8 +1650,8 @@
       <tr>
         <td><code>/tournament-html</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Cached tournament HTML + round number + PGN colors (legacy)</td>
-        <td>Frontend (app.js)</td>
+        <td>Cached tournament HTML + round number + PGN colors</td>
+        <td>Internal / debug</td>
       </tr>
       <tr>
         <td><code>/og-state</code></td>
@@ -1685,58 +1673,40 @@
     <thead><tr><th>Route</th><th>Method</th><th>Purpose</th><th>Called By</th></tr></thead>
     <tbody>
       <tr>
-        <td><code>/game</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Fetch PGN by round + board. Optional <code>?slug=</code></td>
-        <td>Game viewer</td>
-      </tr>
-      <tr>
-        <td><code>/game-by-id</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Fetch game by gameId (deep links)</td>
-        <td>Deep link handler</td>
-      </tr>
-      <tr>
-        <td><code>/games</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>All games index: rounds, PGNs, submissions</td>
-        <td>Game browser</td>
-      </tr>
-      <tr>
         <td><code>/query</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Composable query — filter by round, section, player, ECO, etc.</td>
-        <td>Advanced queries</td>
+        <td>Primary game endpoint. Composable filters: <code>player</code>, <code>tournament</code>, <code>round</code>, <code>board</code>, <code>gameId</code>, <code>hasPgn</code>, <code>include=submissions</code></td>
+        <td>Game browser, player profiles, deep links</td>
       </tr>
       <tr>
         <td><code>/tournaments</code></td>
         <td><span class="method method-get">GET</span></td>
         <td>List all tournaments in D1</td>
-        <td>Multi-tournament support</td>
+        <td>Tournament dropdown</td>
       </tr>
       <tr>
         <td><code>/player-history</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Player's games across all rounds (colors, results, boards)</td>
-        <td>Round history sync</td>
+        <td>Player's round-by-round history (colors, results, boards, opponents)</td>
+        <td>Round tracker</td>
       </tr>
       <tr>
         <td><code>/eco-classify</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Classify opening from PGN moves</td>
+        <td>Classify opening from FEN position</td>
         <td>PGN editor</td>
       </tr>
       <tr>
         <td><code>/submit-game</code></td>
         <td><span class="method method-post">POST</span></td>
-        <td>Submit a game PGN for a round/board</td>
+        <td>Submit a community PGN (goes to <code>game_submissions</code> table)</td>
         <td>PGN editor</td>
       </tr>
       <tr>
-        <td><code>/submission</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Check game submission status</td>
-        <td>PGN editor</td>
+        <td><code>/backfill-eco</code></td>
+        <td><span class="method method-post">POST</span></td>
+        <td>Backfill ECO classifications for existing D1 games</td>
+        <td>Admin</td>
       </tr>
     </tbody>
   </table>
@@ -1802,20 +1772,20 @@
     <thead><tr><th>Cron Expression</th><th>Frequency</th><th>Pacific Time</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr>
-        <td><code>* 4-8 * * TUE</code></td>
+        <td><code>* 3-8 * * TUE</code></td>
         <td>Every 1 min</td>
-        <td>Mon 8PM – midnight</td>
+        <td>Mon 7PM – midnight (PDT) / 8PM (PST)</td>
         <td>Check pairings (TNM Monday night)</td>
       </tr>
       <tr>
-        <td><code>*/5 3-8 * * WED</code></td>
+        <td><code>*/5 2-8 * * WED</code></td>
         <td>Every 5 min</td>
-        <td>Tue 7PM – midnight</td>
+        <td>Tue 6PM – midnight (PDT) / 7PM (PST)</td>
         <td>Check results (TNM Tuesday night)</td>
       </tr>
       <tr>
-        <td><code>0 * * * *</code></td>
-        <td>Every hour</td>
+        <td><code>*/20 * * * *</code></td>
+        <td>Every 20 min</td>
         <td>24/7</td>
         <td>Cache refresh + background notification check</td>
       </tr>
