@@ -9,23 +9,23 @@
 
 import { Chess } from 'chess.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
-import { parseMoveText, extractMoveText, serializePgn, NAG_INFO } from './pgn-parser.js';
-import { getHeader } from './utils.js';
+import { serializePgn, NAG_INFO } from './pgn-parser.js';
 import { WORKER_URL, CONFIG } from './config.js';
 import { showToast } from './toast.js';
 import { refreshGamesData } from './browser-data.js';
 import { closeGamePanel } from './game-viewer.js';
 import {
     getNodes, setNodes, getCurrentNodeId, setCurrentNodeId,
-    getMainLineEnd, getAnnotatedMoves, setAnnotatedMoves,
-    getStartingFen, setStartingFen, START_FEN,
-    isDesktop, recalcMainLineEnd,
-    makeRootNode, treeToMoveList, setResizeCallback,
-    getBoard, createBoard, destroyBoard, resetState,
+    setAnnotatedMoves,
+    setStartingFen, START_FEN,
+    recalcMainLineEnd, makeRootNode, parsePgnToTree,
+    navigateToStart, navigateToPrev, navigateToNext, navigateToEnd,
+    flipBoard, treeToMoveList, setResizeCallback,
+    getBoard, createBoard, destroyBoard, resetState, cleanupBoardDOM,
     highlightSquares, clearHighlights, highlightCurrentMove,
     goToNode, updateNavigationButtons,
     syncDesktopLayout as syncDesktopLayoutCore,
-    renderMoveTable, renderAnnotatedMoves,
+    renderMoveList as renderMoveListCore,
 } from './board-core.js';
 
 const EDITOR_BTNS = { start: 'editor-start', prev: 'editor-prev', next: 'editor-next', end: 'editor-end' };
@@ -93,8 +93,17 @@ function syncCommentElastic() {
 // --- Public API ---
 
 let contextMenuInitialized = false;
+let _commentWired = false;
 
 export function openEditor(options = {}) {
+    if (!_commentWired) {
+        _commentWired = true;
+        const commentEl = document.getElementById('editor-comment-input');
+        commentEl.addEventListener('input', onCommentInput);
+        commentEl.addEventListener('focus', onCommentFocus);
+        commentEl.addEventListener('blur', onCommentBlur);
+    }
+
     orientation = options.orientation || 'white';
     headers = options.headers || {};
     undoStack = [];
@@ -142,7 +151,7 @@ export function closeEditor() {
     destroyEditor();
 }
 
-export function getEditorPgn() {
+function getEditorPgn() {
     const moves = treeToMoveList(getNodes(), 0);
     return serializePgn(moves, headers);
 }
@@ -188,28 +197,20 @@ function initBoard() {
         draggable: true,
         onDragStart,
         onDrop,
-        onSnapEnd,
         onMousedownSquare: onSquareClick,
         onTouchSquare: onSquareClick,
     });
 }
 
-export function destroyEditor() {
+function destroyEditor() {
     destroyBoard();
     resetState();
     headers = {};
     undoStack = [];
     clearSelection();
     clearHighlights();
+    cleanupBoardDOM();
 
-    const movesEl = document.getElementById('viewer-moves');
-    if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
-    const boardEl = document.getElementById('viewer-board');
-    if (boardEl) boardEl.style.width = '';
-    const modalEl = document.getElementById('viewer-modal')?.querySelector('.modal-content-viewer');
-    if (modalEl) modalEl.style.width = '';
-    const layoutEl = document.getElementById('viewer-modal')?.querySelector('.viewer-layout');
-    if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
     const commentInput = document.getElementById('editor-comment-input');
     if (commentInput) { commentInput.style.width = ''; commentInput.style.maxHeight = ''; commentInput.value = ''; }
     const nagPicker = document.getElementById('editor-nag-picker');
@@ -270,11 +271,6 @@ function onDrop(evt) {
     }
     setTimeout(resetSquareOpacity, 300);
 }
-
-function onSnapEnd() {
-    resetSquareOpacity();
-}
-
 
 // --- Click-to-Move ---
 
@@ -443,7 +439,7 @@ function addMoveNode(parentId, san, fen, from, to, asVariation) {
     const node = {
         id: nodes.length, parentId, fen, san, from, to,
         comment: null, nags: null, mainChild: null, children: [],
-        isVariation: asVariation, ply: parent.ply + 1,
+        isVariation: asVariation || parent.isVariation, ply: parent.ply + 1,
     };
     nodes.push(node);
 
@@ -492,12 +488,6 @@ function markDeleted(nodeId) {
     for (const cid of node.children) markDeleted(cid);
 }
 
-export function setComment(text) {
-    pushUndo();
-    getNodes()[getCurrentNodeId()].comment = text || null;
-    rebuildAnnotatedMoves();
-    renderMoveList();
-}
 
 // Two NAG groups: 'move' (move quality) and 'other' (everything else).
 // At most 1 NAG per group allowed on a move.
@@ -541,7 +531,7 @@ export function toggleNag(nagNum) {
     }
 }
 
-export function promoteVariation() {
+function promoteVariation() {
     if (getCurrentNodeId() === 0) return;
     const nodes = getNodes();
     const node = nodes[getCurrentNodeId()];
@@ -626,46 +616,13 @@ function goToMove(nodeId) {
     });
 }
 
-export function editorGoToStart() {
-    const nodes = getNodes();
-    const currentNodeId = getCurrentNodeId();
-    if (nodes[currentNodeId].isVariation) {
-        let id = currentNodeId;
-        while (id > 0 && nodes[id].isVariation) id = nodes[id].parentId;
-        goToMove(id);
-    } else {
-        goToMove(0);
-    }
-}
-
-export function editorGoToPrev() {
-    const parent = getNodes()[getCurrentNodeId()].parentId;
-    if (parent >= 0) goToMove(parent);
-}
-
-export function editorGoToNext() {
-    const node = getNodes()[getCurrentNodeId()];
-    if (node.mainChild !== null) goToMove(node.mainChild);
-}
-
-export function editorGoToEnd() {
-    const nodes = getNodes();
-    const currentNodeId = getCurrentNodeId();
-    if (nodes[currentNodeId].isVariation) {
-        let id = currentNodeId;
-        while (nodes[id].mainChild !== null) id = nodes[id].mainChild;
-        goToMove(id);
-    } else {
-        goToMove(getMainLineEnd());
-    }
-}
+export function editorGoToStart() { navigateToStart(goToMove); }
+export function editorGoToPrev() { navigateToPrev(goToMove); }
+export function editorGoToNext() { navigateToNext(goToMove); }
+export function editorGoToEnd() { navigateToEnd(goToMove); }
 
 export function editorFlipBoard() {
-    const board = getBoard();
-    if (board) {
-        orientation = orientation === 'white' ? 'black' : 'white';
-        board.orientation('flip');
-    }
+    flipBoard(() => { orientation = orientation === 'white' ? 'black' : 'white'; });
 }
 
 // --- Move List Rendering ---
@@ -676,24 +633,11 @@ function rebuildAnnotatedMoves() {
 }
 
 function renderMoveList() {
-    const container = document.getElementById('viewer-moves');
-    if (!container) return;
-
-    const opts = { filterDeleted: true };
-    if (isDesktop()) {
-        container.innerHTML = renderMoveTable();
-    } else {
-        container.innerHTML = renderAnnotatedMoves(getAnnotatedMoves(), 0, false, opts);
-    }
-
-    container.onclick = (e) => {
-        const moveEl = e.target.closest('[data-node-id]');
-        if (moveEl) {
-            goToMove(parseInt(moveEl.dataset.nodeId, 10));
-        }
-    };
-
-    highlightCurrentMove();
+    renderMoveListCore({
+        filterDeleted: true,
+        onMoveClick: (nodeId) => goToMove(nodeId),
+        afterRender: () => highlightCurrentMove(),
+    });
 }
 
 
@@ -714,7 +658,7 @@ function updateCommentBox() {
  * Live-sync: update comment on every keystroke, re-render PGN immediately.
  * Undo snapshot is pushed once on blur if the comment changed.
  */
-export function onCommentInput() {
+function onCommentInput() {
     const input = document.getElementById('editor-comment-input');
     if (!input) return;
     const text = input.value.trim();
@@ -724,12 +668,12 @@ export function onCommentInput() {
     syncCommentElastic();
 }
 
-export function onCommentFocus() {
+function onCommentFocus() {
     // Capture undo snapshot when user starts editing
     commentFocusSnapshot = { nodes: structuredClone(getNodes()), currentNodeId: getCurrentNodeId(), headers: { ...headers } };
 }
 
-export function onCommentBlur() {
+function onCommentBlur() {
     // Push undo if the comment actually changed during this focus session
     if (commentFocusSnapshot) {
         const oldComment = commentFocusSnapshot.nodes[getCurrentNodeId()]?.comment || '';
@@ -770,7 +714,7 @@ function nodeHasNagOrPair(node, nagNum) {
     return false;
 }
 
-export function showNagPicker(targetNodeId, anchorEl) {
+function showNagPicker(targetNodeId, anchorEl) {
     const picker = document.getElementById('editor-nag-picker');
     if (!picker) return;
 
@@ -816,7 +760,7 @@ export function showNagPicker(targetNodeId, anchorEl) {
     });
 }
 
-export function hideNagPicker() {
+function hideNagPicker() {
     const picker = document.getElementById('editor-nag-picker');
     if (picker) picker.classList.add('hidden');
     nagTargetNodeId = null;
@@ -936,7 +880,7 @@ function setupMoveContextMenu() {
             // Action items
             const item = e.target.closest('.ctx-item');
             if (!item) return;
-            const action = item.dataset.action;
+            const action = item.dataset.ctxAction;
 
             if (action === 'annotate') {
                 const anchor = ctxAnchorEl;
@@ -1023,53 +967,7 @@ function importPgnIntoEditor(pgn) {
         headers[match[1]] = match[2];
     }
     if (!headers.Result) headers.Result = '*';
-
-    const moveText = extractMoveText(pgn);
-    const parsed = parseMoveText(moveText);
-    setAnnotatedMoves(parsed);
-
-    const fenHeader = getHeader(pgn, 'FEN');
-    setStartingFen(fenHeader || START_FEN);
-
-    setNodes([makeRootNode(getStartingFen())]);
-    buildTreeFromParsed(parsed, 0);
-
-    recalcMainLineEnd();
-
-    setCurrentNodeId(0);
-}
-
-function buildTreeFromParsed(moves, parentId) {
-    const nodes = getNodes();
-    let prevId = parentId;
-    for (const m of moves) {
-        const prev = nodes[prevId];
-        const engine = new Chess(prev.fen);
-        let move;
-        try { move = engine.move(m.san); } catch { /* illegal */ }
-        if (!move) break;
-
-        const isVariation = prev.mainChild !== null;
-        const node = {
-            id: nodes.length, parentId: prevId,
-            fen: engine.fen(), san: m.san, from: move.from, to: move.to,
-            comment: m.comment, nags: m.nags,
-            mainChild: null, children: [],
-            isVariation, ply: prev.ply + 1,
-        };
-        nodes.push(node);
-
-        if (prev.mainChild === null) prev.mainChild = node.id;
-        prev.children.push(node.id);
-
-        if (m.variations) {
-            for (const variation of m.variations) {
-                buildTreeFromParsed(variation, prevId);
-            }
-        }
-
-        prevId = node.id;
-    }
+    parsePgnToTree(pgn);
 }
 
 export async function copyPgn() {

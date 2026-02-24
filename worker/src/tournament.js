@@ -82,15 +82,21 @@ export async function resolveTournament(env) {
     for (let i = 0; i < parsed.length; i++) {
         const t = parsed[i];
         const nextT = i + 1 < parsed.length ? parsed[i + 1] : null;
-        const activeEnd = nextT
-            ? new Date(nextT.start.getTime() - 7 * 24 * 60 * 60 * 1000)
+        // Use 6:30PM Pacific on the next tournament's start date (round 1 start time)
+        // rather than midnight, so the old tournament stays active until the new one begins
+        const nextStart = nextT
+            ? new Date(nextT.start.getFullYear(), nextT.start.getMonth(), nextT.start.getDate(), 18, 30)
+            : null;
+        const activeEnd = nextStart
+            ? new Date(nextStart.getTime() - 7 * 24 * 60 * 60 * 1000)
             : new Date(t.end.getTime() + 7 * 24 * 60 * 60 * 1000);
         if (now <= activeEnd) { current = t; next = nextT || null; break; }
     }
 
     // Fall back to persisted previous tournament if next listed is >7 days away
     if (current?.start && current.start.getTime() > now.getTime()) {
-        const sevenDaysBefore = new Date(current.start.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const r1Start = new Date(current.start.getFullYear(), current.start.getMonth(), current.start.getDate(), 18, 30);
+        const sevenDaysBefore = new Date(r1Start.getTime() - 7 * 24 * 60 * 60 * 1000);
         if (now < sevenDaysBefore) {
             const prev = await env.SUBSCRIBERS.get('state:previousTournament', 'json');
             if (prev?.url) {

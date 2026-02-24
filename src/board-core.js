@@ -8,7 +8,8 @@
  */
 
 import { Chess } from 'chess.js';
-import { nagToHtml } from './pgn-parser.js';
+import { nagToHtml, parseMoveText, extractMoveText } from './pgn-parser.js';
+import { getHeader } from './utils.js';
 
 // --- Shared State (getter/setter pattern, matching state.js convention) ---
 
@@ -115,6 +116,23 @@ export function buildMoveTree(moves, fen) {
 
     walk(moves, 0, 0, false);
     return result;
+}
+
+/**
+ * Parse a PGN string into annotated moves + position tree.
+ * Sets shared state: annotatedMoves, startingFen, nodes, mainLineEnd, currentNodeId.
+ */
+export function parsePgnToTree(pgn) {
+    const moveText = extractMoveText(pgn);
+    const parsed = parseMoveText(moveText);
+    _annotatedMoves = parsed;
+
+    const fenHeader = getHeader(pgn, 'FEN');
+    _startingFen = fenHeader || START_FEN;
+
+    _nodes = buildMoveTree(parsed, _startingFen);
+    recalcMainLineEnd();
+    _currentNodeId = 0;
 }
 
 /**
@@ -228,6 +246,19 @@ export function resetState() {
     _resizeCallback = null;
 }
 
+/**
+ * Clean up shared DOM elements to initial state.
+ * Called by both destroyViewer and destroyEditor.
+ */
+export function cleanupBoardDOM() {
+    const movesEl = document.getElementById('viewer-moves');
+    if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
+    const modalEl = document.querySelector('.modal-content-viewer');
+    if (modalEl) modalEl.style.width = '';
+    const layoutEl = document.querySelector('.viewer-layout');
+    if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
+}
+
 // --- Square Highlighting ---
 
 let _highlightStyleEl = null;
@@ -288,6 +319,61 @@ export function goToNode(nodeId, hooks = {}) {
     highlightCurrentMove();
     hooks.afterNavigate?.(node);
     if (hooks.buttonIds) updateNavigationButtons(hooks.buttonIds);
+}
+
+/**
+ * Navigate to start (or branch point if in a variation).
+ * @param {function} goToMove - Consumer's goToMove(nodeId) wrapper
+ * @param {function} [beforeNav] - Called before navigating (e.g., stopAutoPlay)
+ */
+export function navigateToStart(goToMove, beforeNav) {
+    beforeNav?.();
+    if (_nodes[_currentNodeId].isVariation) {
+        let id = _currentNodeId;
+        while (id > 0 && _nodes[id].isVariation) id = _nodes[id].parentId;
+        goToMove(id);
+    } else {
+        goToMove(0);
+    }
+}
+
+export function navigateToPrev(goToMove, beforeNav) {
+    beforeNav?.();
+    const parent = _nodes[_currentNodeId].parentId;
+    if (parent >= 0) goToMove(parent);
+}
+
+/**
+ * Navigate to next main-line move. Returns false if at end of line.
+ */
+export function navigateToNext(goToMove, beforeNav) {
+    beforeNav?.();
+    const node = _nodes[_currentNodeId];
+    if (node.mainChild === null) return false;
+    goToMove(node.mainChild);
+    return true;
+}
+
+export function navigateToEnd(goToMove, beforeNav) {
+    beforeNav?.();
+    if (_nodes[_currentNodeId].isVariation) {
+        let id = _currentNodeId;
+        while (_nodes[id].mainChild !== null) id = _nodes[id].mainChild;
+        goToMove(id);
+    } else {
+        goToMove(_mainLineEnd);
+    }
+}
+
+/**
+ * Flip the board orientation.
+ * @param {function} [afterFlip] - Called after flip (e.g., sync orientation state)
+ */
+export function flipBoard(afterFlip) {
+    if (_board) {
+        _board.orientation('flip');
+        afterFlip?.();
+    }
 }
 
 /**
@@ -629,4 +715,36 @@ export function renderAnnotatedMoves(moves, parentNodeId, isVariation, options =
         prevNodeId = nodeId;
     }
     return html;
+}
+
+/**
+ * Render the move list into the #viewer-moves container.
+ * Shared by viewer and editor — consumer-specific behavior via options.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.hideComments] - Suppress comments (viewer toggle)
+ * @param {boolean} [options.filterDeleted] - Skip deleted nodes (editor)
+ * @param {function} [options.onMoveClick] - Called with nodeId when a move is clicked
+ * @param {function} [options.afterRender] - Called after rendering (e.g., highlightCurrentMove)
+ */
+export function renderMoveList(options = {}) {
+    const container = document.getElementById('viewer-moves');
+    if (!container) return;
+
+    if (isDesktop()) {
+        container.innerHTML = renderMoveTable({ hideComments: options.hideComments });
+    } else {
+        container.innerHTML = renderAnnotatedMoves(
+            _annotatedMoves, 0, false, { filterDeleted: options.filterDeleted }
+        );
+    }
+
+    container.onclick = (e) => {
+        const moveEl = e.target.closest('[data-node-id]');
+        if (moveEl && options.onMoveClick) {
+            options.onMoveClick(parseInt(moveEl.dataset.nodeId, 10));
+        }
+    };
+
+    options.afterRender?.();
 }

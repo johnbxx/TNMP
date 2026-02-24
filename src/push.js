@@ -37,7 +37,15 @@ async function getSubscription() {
  * Check push status and update the UI sections accordingly.
  * Shows one of: #push-unsupported, #push-unsubscribed, #push-subscribed
  */
+let _prefsWired = false;
+
 export async function checkPushStatus() {
+    if (!_prefsWired) {
+        _prefsWired = true;
+        document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
+        document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
+    }
+
     const unsupported = document.getElementById('push-unsupported');
     const unsubscribed = document.getElementById('push-unsubscribed');
     const subscribed = document.getElementById('push-subscribed');
@@ -184,7 +192,7 @@ export async function disablePush() {
 /**
  * Update push notification preferences (pairings/results checkboxes).
  */
-export async function updatePushPrefs() {
+async function updatePushPrefs() {
     const sub = await getSubscription();
     if (!sub) return;
 
@@ -225,6 +233,3 @@ export async function syncPushSubscription() {
         console.warn('Push sync failed:', err.message);
     }
 }
-
-// Keep the old name as an alias for settings.js
-export { syncPushSubscription as syncPushName };

@@ -1,52 +1,56 @@
 /**
- * Shared modal helpers: focus trapping, focus restoration, backdrop click.
+ * Shared modal helpers: open/close, focus trapping, backdrop/button/Escape dismiss.
  */
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Track which element had focus before the modal opened
 const previousFocus = new Map();
+const closeHooks = {};
+
+/**
+ * Register a cleanup hook called when a modal is closed.
+ * @param {string} modalId
+ * @param {Function} fn
+ */
+export function onModalClose(modalId, fn) {
+    closeHooks[modalId] = fn;
+}
 
 /**
  * Open a modal by ID with proper focus management.
- * @param {string} modalId - The modal element ID
- * @param {HTMLElement} [focusTarget] - Element to focus inside the modal (defaults to first focusable)
+ * @param {string} modalId
+ * @param {HTMLElement} [focusTarget] - Element to focus (defaults to first focusable)
  */
 export function openModal(modalId, focusTarget) {
     const modal = document.getElementById(modalId);
     if (!modal) return;
 
-    // Remember what had focus before opening
     previousFocus.set(modalId, document.activeElement);
-
     modal.classList.remove('hidden');
-
-    // Prevent background scrolling
     document.body.style.overflow = 'hidden';
 
-    // Hide background content from screen readers
     const container = document.querySelector('.container');
     if (container) container.setAttribute('aria-hidden', 'true');
 
-    // Focus the target or first focusable element
     const target = focusTarget || modal.querySelector(FOCUSABLE);
     if (target) {
-        // Delay to ensure the modal is visible before focusing
         requestAnimationFrame(() => target.focus());
     }
 }
 
 /**
- * Close a modal by ID and restore focus to the previously focused element.
- * @param {string} modalId - The modal element ID
+ * Close a modal by ID, run its close hook, and restore focus.
+ * @param {string} modalId
  */
 export function closeModal(modalId) {
     const modal = document.getElementById(modalId);
-    if (!modal) return;
+    if (!modal || modal.classList.contains('hidden')) return;
 
     modal.classList.add('hidden');
 
-    // Restore background content (only if no other modals are open)
+    const hook = closeHooks[modalId];
+    if (hook) hook();
+
     const anyOpen = document.querySelector('.modal:not(.hidden)');
     if (!anyOpen) {
         document.body.style.overflow = '';
@@ -54,7 +58,6 @@ export function closeModal(modalId) {
         if (container) container.removeAttribute('aria-hidden');
     }
 
-    // Restore focus
     const prev = previousFocus.get(modalId);
     if (prev && typeof prev.focus === 'function') {
         prev.focus();
@@ -64,7 +67,6 @@ export function closeModal(modalId) {
 
 /**
  * Trap focus within a modal when Tab is pressed.
- * Call this from the keydown handler when a modal is open.
  * @param {KeyboardEvent} e
  * @param {string} modalId
  */
@@ -93,19 +95,36 @@ export function trapFocus(e, modalId) {
     }
 }
 
-// --- Backdrop click handling ---
-// Delegate click on .modal-backdrop to close the parent modal.
-// Each modal's close function is registered here.
-const closeHandlers = {};
+// --- Generic click delegation ---
 
-export function registerModalClose(modalId, closeFn) {
-    closeHandlers[modalId] = closeFn;
-}
-
+// Backdrop click → close the parent modal
+// data-close-modal button → close the parent modal
+// data-open-modal="id" button → open that modal
 document.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('modal-backdrop')) return;
-    const modal = e.target.closest('.modal');
-    if (!modal) return;
-    const handler = closeHandlers[modal.id];
-    if (handler) handler();
+    if (e.target.classList.contains('modal-backdrop')) {
+        const modal = e.target.closest('.modal');
+        if (modal) closeModal(modal.id);
+        return;
+    }
+
+    const closeBtn = e.target.closest('[data-close-modal]');
+    if (closeBtn) {
+        const modal = closeBtn.closest('.modal');
+        if (modal) closeModal(modal.id);
+        return;
+    }
+
+    const openBtn = e.target.closest('[data-open-modal]');
+    if (openBtn) {
+        openModal(openBtn.dataset.openModal);
+        return;
+    }
+
+    const switchBtn = e.target.closest('[data-switch-modal]');
+    if (switchBtn) {
+        e.preventDefault();
+        const current = switchBtn.closest('.modal');
+        if (current) closeModal(current.id);
+        setTimeout(() => openModal(switchBtn.dataset.switchModal), 300);
+    }
 });

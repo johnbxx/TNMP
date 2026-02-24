@@ -1,6 +1,5 @@
-import { STATE } from './config.js';
+import { STATE, getCurrentState, getCurrentPairing, getRoundInfo } from './config.js';
 import { resultDisplay } from './utils.js';
-import { getCurrentState, getCurrentPairing, getRoundInfo } from './state.js';
 import { showToast } from './toast.js';
 
 function getShareText() {

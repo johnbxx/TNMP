@@ -1,52 +1,13 @@
 /**
  * D1 game query endpoints, OG image generation, game submissions, and player history.
  *
- * Handles: /game, /game-by-id, /games, /query, /tournaments,
- *          /og-game, /og-game-image, /player-history,
- *          /eco-classify, /submit-game, /submission
+ * Handles: /query, /tournaments, /og-game, /og-game-image,
+ *          /player-history, /eco-classify, /submit-game
  */
 
-import { corsResponse, normalizePlayerName, formatPlayerName, slugifyTournament, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId, parseRoundBoard } from './helpers.js';
+import { corsResponse, normalizePlayerName, formatPlayerName, slugifyTournament, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId } from './helpers.js';
 import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import { generateBoardSvg } from './og-board.js';
-
-// --- Single Game Endpoints ---
-
-export async function handleGetGame(request, env) {
-    const url = new URL(request.url);
-    const { round, board, error: rbErr } = parseRoundBoard(url, env, request);
-    if (rbErr) return rbErr;
-
-    const resolved = await resolveCurrentSlug(env, request);
-    if (resolved instanceof Response) return resolved;
-
-    const row = await env.DB.prepare(
-        'SELECT pgn FROM games WHERE tournament_slug = ? AND round = ? AND board = ?'
-    ).bind(resolved.slug, round, board).first();
-
-    if (!row) return corsResponse({ error: 'Game not found' }, 404, env, request);
-    return corsResponse({ pgn: row.pgn, round, board }, 200, env, request);
-}
-
-export async function handleGetGameById(request, env) {
-    const url = new URL(request.url);
-    const { gameId, error: idErr } = validateGameId(url, env, request);
-    if (idErr) return idErr;
-
-    const row = await env.DB.prepare(
-        `SELECT g.pgn, g.round, g.board, g.game_id, g.eco, g.opening_name, t.name as tournament_name
-         FROM games g JOIN tournaments t ON g.tournament_slug = t.slug
-         WHERE g.game_id = ?`
-    ).bind(gameId).first();
-
-    if (!row) return corsResponse({ error: 'Game not found' }, 404, env, request);
-
-    return corsResponse({
-        pgn: row.pgn, round: row.round, board: row.board,
-        gameId: row.game_id, tournamentName: row.tournament_name,
-        eco: row.eco, openingName: row.opening_name,
-    }, 200, env, request);
-}
 
 // --- OG Game Endpoints ---
 
@@ -129,70 +90,6 @@ export async function handleOgGameImage(request, env) {
     });
 }
 
-// --- Games Index ---
-
-export async function handleGetGames(request, env) {
-    const url = new URL(request.url);
-    const roundParam = url.searchParams.get('round');
-    const tournamentParam = url.searchParams.get('tournament');
-
-    let slug, meta;
-    if (tournamentParam) {
-        const t = await env.DB.prepare('SELECT * FROM tournaments WHERE slug = ?').bind(tournamentParam).first();
-        if (!t) return corsResponse({ error: 'Tournament not found' }, 404, env, request);
-        slug = t.slug;
-        meta = { name: t.name };
-    } else {
-        const resolved = await resolveCurrentSlug(env, request);
-        if (resolved instanceof Response) return resolved;
-        slug = resolved.slug;
-        meta = resolved.meta;
-    }
-
-    let rows;
-    if (roundParam) {
-        const result = await env.DB.prepare(
-            'SELECT * FROM games WHERE tournament_slug = ? AND round = ? ORDER BY board'
-        ).bind(slug, parseInt(roundParam)).all();
-        rows = result.results;
-        if (rows.length === 0) return corsResponse({ error: 'No games found for this round' }, 404, env, request);
-    } else {
-        rows = (await env.DB.prepare(
-            'SELECT * FROM games WHERE tournament_slug = ? ORDER BY round, board'
-        ).bind(slug).all()).results;
-    }
-
-    const rounds = {};
-    const pgns = {};
-    for (const row of rows) {
-        const rnd = String(row.round);
-        if (!rounds[rnd]) rounds[rnd] = [];
-        rounds[rnd].push({
-            board: row.board, white: row.white, black: row.black, result: row.result,
-            whiteElo: row.white_elo, blackElo: row.black_elo,
-            eco: row.eco, openingName: row.opening_name,
-            gameId: row.game_id, section: row.section, hasPgn: !!row.pgn,
-        });
-        if (!roundParam && row.pgn) pgns[`${row.round}:${row.board}`] = row.pgn;
-    }
-
-    // Fetch pending submissions
-    const submissionResult = await env.DB.prepare(
-        `SELECT round, board, status, submitted_by, updated_at
-         FROM game_submissions WHERE tournament_slug = ? AND status = 'pending'`
-    ).bind(slug).all();
-    const submissions = {};
-    for (const sub of submissionResult.results) {
-        submissions[`${sub.round}:${sub.board}`] = {
-            status: sub.status, submittedBy: sub.submitted_by, updatedAt: sub.updated_at,
-        };
-    }
-
-    const response = { rounds, tournamentName: meta.name, submissions };
-    if (!roundParam) response.pgns = pgns;
-    return corsResponse(response, 200, env, request);
-}
-
 // --- Query Endpoint ---
 
 function parseEcoFilter(eco) {
@@ -219,7 +116,10 @@ export async function handleQuery(request, env) {
     const section = url.searchParams.get('section');
     const after = url.searchParams.get('after');
     const before = url.searchParams.get('before');
-    const include = url.searchParams.get('include');
+    const gameId = url.searchParams.get('gameId');
+    const roundParam = url.searchParams.get('round');
+    const boardParam = url.searchParams.get('board');
+    const includeSet = new Set((url.searchParams.get('include') || '').split(',').filter(Boolean));
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
@@ -290,23 +190,44 @@ export async function handleQuery(request, env) {
         conditions.push(`(${ratingConds.join(' OR ')})`);
     }
 
+    if (gameId) { conditions.push('g.game_id = ?'); params.push(gameId); }
+    if (roundParam) { conditions.push('g.round = ?'); params.push(parseInt(roundParam)); }
+    if (boardParam) { conditions.push('g.board = ?'); params.push(parseInt(boardParam)); }
     if (section) { conditions.push('g.section = ?'); params.push(section); }
     if (after) { conditions.push('g.date >= ?'); params.push(after); }
     if (before) { conditions.push('g.date <= ?'); params.push(before); }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const selectCols = include === 'pgn'
-        ? 'g.*, t.name as tournament_name, t.short_code'
-        : `g.tournament_slug, g.round, g.board, g.white, g.black, g.white_elo, g.black_elo,
+
+    // Build SELECT columns based on include options
+    const includePgn = includeSet.has('pgn');
+    const includeSubmissions = includeSet.has('submissions');
+
+    let selectCols;
+    if (includePgn) {
+        selectCols = 'g.*, t.name as tournament_name, t.short_code';
+    } else {
+        selectCols = `g.tournament_slug, g.round, g.board, g.white, g.black, g.white_elo, g.black_elo,
            g.result, g.eco, g.opening_name, g.section, g.date, g.game_id,
+           (g.pgn IS NOT NULL AND g.pgn != '') as has_pgn,
            t.name as tournament_name, t.short_code`;
+    }
+
+    // LEFT JOIN submissions when requested
+    const submissionJoin = includeSubmissions
+        ? `LEFT JOIN game_submissions s
+           ON g.tournament_slug = s.tournament_slug AND g.round = s.round AND g.board = s.board AND s.status = 'pending'`
+        : '';
+    const submissionCols = includeSubmissions
+        ? ', s.pgn AS submission_pgn, s.submitted_by, s.status AS submission_status'
+        : '';
 
     const countResult = await env.DB.prepare(
         `SELECT COUNT(*) as total FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where}`
     ).bind(...params).first();
 
     const result2 = await env.DB.prepare(
-        `SELECT ${selectCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
+        `SELECT ${selectCols}${submissionCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${submissionJoin} ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
     ).bind(...params, limit, offset).all();
 
     const games = result2.results.map(row => {
@@ -317,8 +238,16 @@ export async function handleQuery(request, env) {
             whiteElo: row.white_elo, blackElo: row.black_elo, result: row.result,
             eco: row.eco, openingName: row.opening_name,
             section: row.section, date: row.date, gameId: row.game_id,
+            hasPgn: includePgn ? !!row.pgn : !!row.has_pgn,
         };
-        if (include === 'pgn') game.pgn = row.pgn;
+        if (includePgn) game.pgn = row.pgn;
+        if (includeSubmissions && row.submission_status) {
+            game.submission = {
+                pgn: row.submission_pgn,
+                submittedBy: row.submitted_by,
+                status: row.submission_status,
+            };
+        }
         return game;
     });
 
@@ -393,24 +322,25 @@ export async function handlePlayerHistory(request, env) {
         }
 
         const opponent = rankMap[roundData.opponentRank];
-        let color = null, board = null;
+        let color = null, board = null, gameId = null;
 
-        // Check pairings colors, then D1 fallback
-        if (pairingsColors[roundNum]) {
+        // D1 first (has game_id), then pairingsColors fallback for very recent rounds
+        const gameRow = await env.DB.prepare(
+            'SELECT white_norm, board, game_id FROM games WHERE tournament_slug = ? AND round = ? AND (white_norm = ? OR black_norm = ?)'
+        ).bind(slug, roundNum, norm, norm).first();
+        if (gameRow) {
+            color = gameRow.white_norm === norm ? 'White' : 'Black';
+            board = gameRow.board;
+            gameId = gameRow.game_id || null;
+        } else if (pairingsColors[roundNum]) {
             for (const game of pairingsColors[roundNum]) {
                 if (patterns.some(r => r.test(game.white))) { color = 'White'; board = game.board || null; break; }
                 if (patterns.some(r => r.test(game.black))) { color = 'Black'; board = game.board || null; break; }
             }
         }
-        if (!color) {
-            const gameRow = await env.DB.prepare(
-                'SELECT white_norm, board FROM games WHERE tournament_slug = ? AND round = ? AND (white_norm = ? OR black_norm = ?)'
-            ).bind(slug, roundNum, norm, norm).first();
-            if (gameRow) { color = gameRow.white_norm === norm ? 'White' : 'Black'; board = gameRow.board; }
-        }
 
         rounds[roundNum] = {
-            result: code, isBye: false, color, board,
+            result: code, isBye: false, color, board, gameId,
             opponent: opponent?.name || null, opponentRating: opponent?.rating || null,
             opponentUrl: opponent?.url || null,
         };
@@ -526,25 +456,3 @@ export async function handleBackfillEco(request, env) {
     }, 200, env, request);
 }
 
-export async function handleGetSubmission(request, env) {
-    const url = new URL(request.url);
-    const { round, board, error: rbErr } = parseRoundBoard(url, env, request);
-    if (rbErr) return rbErr;
-
-    const resolved = await resolveCurrentSlug(env, request);
-    if (resolved instanceof Response) return resolved;
-
-    const row = await env.DB.prepare(
-        `SELECT pgn, eco, opening_name, submitted_by, submitted_at, updated_at
-         FROM game_submissions
-         WHERE tournament_slug = ? AND round = ? AND board = ? AND status = 'pending'
-         ORDER BY updated_at DESC LIMIT 1`
-    ).bind(resolved.slug, round, board).first();
-
-    if (!row) return corsResponse({ error: 'No pending submission found' }, 404, env, request);
-
-    return corsResponse({
-        pgn: row.pgn, eco: row.eco, openingName: row.opening_name,
-        submittedBy: row.submitted_by, submittedAt: row.submitted_at, updatedAt: row.updated_at,
-    }, 200, env, request);
-}

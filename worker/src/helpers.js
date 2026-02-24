@@ -131,22 +131,10 @@ export function validateGameId(url, env, request) {
     return { gameId, error: null };
 }
 
-export function parseRoundBoard(url, env, request) {
-    const round = url.searchParams.get('round');
-    const board = url.searchParams.get('board');
-    if (!round || !board) {
-        return { round: null, board: null, error: corsResponse({ error: 'round and board parameters are required' }, 400, env, request) };
-    }
-    return { round: parseInt(round), board: parseInt(board), error: null };
-}
-
 // --- Rate Limiting ---
 
 const RATE_LIMITS = {
     '/tournament-html': 60,
-    '/game': 60,
-    '/game-by-id': 60,
-    '/games': 30,
     '/tournament-state': 60,
     '/player-history': 30,
     '/og-state': 60,

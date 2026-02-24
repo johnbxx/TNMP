@@ -11,7 +11,7 @@
 
 import { corsHeaders, corsResponse, checkRateLimit } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
-import { handleGetGame, handleGetGameById, handleOgGame, handleOgGameImage, handleGetGames, handleQuery, handleTournaments, handlePlayerHistory, handleEcoClassify, handleSubmitGame, handleGetSubmission, handleBackfillEco } from './games.js';
+import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayerHistory, handleEcoClassify, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest } from './push.js';
 import { handleScheduled } from './cron.js';
 
@@ -41,9 +41,6 @@ export default {
             if (path === '/health' && request.method === 'GET') return await handleHealth(env, request);
 
             // Games & queries
-            if (path === '/game' && request.method === 'GET') return await handleGetGame(request, env);
-            if (path === '/game-by-id' && request.method === 'GET') return await handleGetGameById(request, env);
-            if (path === '/games' && request.method === 'GET') return await handleGetGames(request, env);
             if (path === '/query' && request.method === 'GET') return await handleQuery(request, env);
             if (path === '/tournaments' && request.method === 'GET') return await handleTournaments(request, env);
             if (path === '/player-history' && request.method === 'GET') return await handlePlayerHistory(request, env);
@@ -53,7 +50,6 @@ export default {
 
             // Game submissions
             if (path === '/submit-game' && request.method === 'POST') return await handleSubmitGame(request, env);
-            if (path === '/submission' && request.method === 'GET') return await handleGetSubmission(request, env);
             if (path === '/backfill-eco' && request.method === 'POST') return await handleBackfillEco(request, env);
 
             // Push notifications

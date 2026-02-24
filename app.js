@@ -1,19 +1,18 @@
-import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta } from './src/config.js';
-import { showLoading, showState, showError, updateTournamentLink, showOfflineBanner, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setCurrentState, setCurrentPairing, setLastRoundNumber, setRoundInfo, DEBUG_PGN } from './src/config.js';
+import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
-import { setLastRoundNumber, setCurrentState, setCurrentPairing, setRoundInfo } from './src/state.js';
 import { shareStatus } from './src/share.js';
-import { openSettings, closeSettings, saveSettings } from './src/settings.js';
+import { openSettings, saveSettings } from './src/settings.js';
 import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/history.js';
-import { openAbout, closeAbout, openPrivacy, closePrivacy } from './src/about.js';
-import { registerModalClose, trapFocus } from './src/modal.js';
-import { enablePush, disablePush, updatePushPrefs, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGamePanel, openGameEditor, viewerNavigateGame, updateNavArrows, getCurrentMode, switchToEditor } from './src/game-viewer.js';
-import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, onCommentInput, onCommentFocus, onCommentBlur, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, submitGame } from './src/pgn-editor.js';
-import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
+import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
+import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
+import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown } from './src/game-viewer.js';
+import { editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, submitGame } from './src/pgn-editor.js';
+import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
 import { showToast } from './src/toast.js';
-import { openGameBrowser, closeGameBrowser, prefetchGames, openGameWithPlayerNav, clearFilter, openBrowserWithCurrentFilter, openBrowserWithFirstGame, getFilteredGames, getCachedPgn, getActiveFilter } from './src/game-browser.js';
+import { openGameBrowser, closeGameBrowser, prefetchGames, openBrowserWithFirstGame, getFilteredGames, getCachedGame, getActiveFilter } from './src/game-browser.js';
+import { fetchGames } from './src/browser-data.js';
 import { formatName, getHeader } from './src/utils.js';
 
 function downloadPgn(pgnText, filename) {
@@ -28,69 +27,19 @@ function downloadPgn(pgnText, filename) {
     URL.revokeObjectURL(url);
 }
 
-const TOURNAMENT_SLUGS = {
-    '2026 New Years Tuesday Night Marathon': '2026NY',
-    '2026 Spring Tuesday Night Marathon': '2026Spring',
-    '3rd Silman Memorial Tuesday Night Marathon': '2026Silman',
-};
-
-function tournamentSlug() {
-    const name = getTournamentMeta().name;
-    return (name && TOURNAMENT_SLUGS[name]) || null;
-}
-
-const SECTION_SLUGS = {
-    '2000+': '2000',
-    '1600-1999': 'u2000',
-    'U1600': 'u1600',
-    'Extra Games': 'extra',
-};
-
 function sectionForFilename(s) {
     if (!s) return null;
-    return SECTION_SLUGS[s] || s.replace(/[^a-zA-Z0-9]/g, '');
-}
-
-// --- Deep link handler ---
-
-async function handleGameDeepLink(gameId) {
-    try {
-        const response = await fetch(`${WORKER_URL}/game-by-id?id=${gameId}`);
-        if (!response.ok) {
-            console.log(`Game ${gameId} not found`);
-            return;
-        }
-        const data = await response.json();
-        openGameViewer({
-            pgn: data.pgn,
-            round: data.round,
-            board: data.board,
-            meta: { eco: data.eco, openingName: data.openingName },
-        });
-        // Clean URL so refreshing doesn't re-open the game
-        window.history.replaceState({}, '', window.location.pathname);
-    } catch (err) {
-        console.error('Failed to load deep-linked game:', err.message);
-    }
+    return s.replace(/[^a-zA-Z0-9]/g, '');
 }
 
 // --- Main check logic ---
 
-// Map server state strings to STATE enum
-const STATE_MAP = {
-    'off_season': STATE.OFF_SEASON,
-    'too_early': STATE.TOO_EARLY,
-    'no': STATE.NO,
-    'yes': STATE.YES,
-    'in_progress': STATE.IN_PROGRESS,
-    'results': STATE.RESULTS,
-};
+function renderTrackerIfReady(roundHistory, roundNumber, state) {
+    if (state === 'off_season' || !CONFIG.playerName || !Object.keys(roundHistory.rounds).length) return;
+    const lastRound = Math.max(...Object.keys(roundHistory.rounds).map(Number));
+    renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, state, lastRound);
+}
 
-/**
- * Render UI from a tournament state object.
- * @param {object} stateData - Server or cached tournament state
- * @param {object} roundHistory - Round history object (from localStorage or server)
- */
 function renderState(stateData, roundHistory) {
     // Update tournament metadata
     if (stateData.tournamentName || stateData.roundDates) {
@@ -103,20 +52,16 @@ function renderState(stateData, roundHistory) {
             totalRounds: stateData.totalRounds || prev.totalRounds,
             nextTournament: stateData.nextTournament || prev.nextTournament,
         });
-        if (stateData.tournamentUrl) {
-            CONFIG.tournamentUrl = stateData.tournamentUrl;
-        }
         updateTournamentLink();
     }
 
     const state = stateData.state;
     const info = stateData.info;
     const roundNumber = stateData.round || 0;
-    const displayedState = STATE_MAP[state] || STATE.NO;
 
-    // Set Model state before rendering View
-    setCurrentState(displayedState);
+    setCurrentState(state);
     setRoundInfo(info || '');
+    if (state !== 'no') stopCountdown();
 
     if (state === 'off_season') {
         const offSeasonOpts = stateData.offSeason?.targetDate
@@ -124,11 +69,9 @@ function renderState(stateData, roundHistory) {
             : null;
         setCurrentPairing(null);
         showState(STATE.OFF_SEASON, info, offSeasonOpts);
-        stopCountdown();
     } else if (state === 'too_early' || state === 'no') {
         setCurrentPairing(null);
-        showState(displayedState, info);
-        if (state === 'too_early') stopCountdown();
+        showState(state, info);
     } else {
         // yes, in_progress, results
         setLastRoundNumber(roundNumber || 1);
@@ -137,8 +80,7 @@ function renderState(stateData, roundHistory) {
             roundHistory = updateRoundHistory(roundNumber, pairingInfo, getTournamentMeta().name);
         }
         setCurrentPairing(pairingInfo);
-        showState(displayedState, info, pairingInfo);
-        if (state === 'results' || state === 'yes') stopCountdown();
+        showState(state, info, pairingInfo);
         if (pairingInfo) saveLivePairingHtml();
     }
 
@@ -146,12 +88,7 @@ function renderState(stateData, roundHistory) {
     const btn = document.getElementById('check-btn');
     if (!btn.onclick) btn.onclick = wrappedCheckPairings;
 
-    // Render round tracker
-    if (CONFIG.playerName && Object.keys(roundHistory.rounds).length > 0) {
-        const rounds = Object.keys(roundHistory.rounds);
-        const lastRound = Math.max(...rounds.map(Number));
-        renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, displayedState, lastRound);
-    }
+    renderTrackerIfReady(roundHistory, roundNumber, state);
 }
 
 /**
@@ -165,92 +102,47 @@ function stateChanged(a, b) {
 async function checkPairings() {
     hideOfflineBanner();
 
-    // --- Instant render from cache ---
+    // Instant render from cache
     let cachedState = null;
     try {
         const raw = localStorage.getItem('lastTournamentState');
         if (raw) cachedState = JSON.parse(raw);
-    } catch { /* ignore */ }
+    } catch { /* corrupt */ }
 
     if (cachedState) {
-        console.log(`Instant render from cache (state: ${cachedState.state})`);
         renderState(cachedState, loadRoundHistory());
     } else {
         showLoading();
     }
 
-    // --- Fetch fresh state from server ---
+    // Fetch fresh state from server
+    let serverState = null;
     try {
-        let serverState = null;
-
-        try {
-            console.log('Fetching tournament state...');
-            const startTime = performance.now();
-            const stateUrl = CONFIG.playerName
-                ? `${WORKER_URL}/tournament-state?player=${encodeURIComponent(CONFIG.playerName)}`
-                : `${WORKER_URL}/tournament-state`;
-            const response = await fetch(stateUrl);
-            const data = await response.json();
-            const endTime = performance.now();
-
-            if (data.state) {
-                serverState = data;
-                console.log(`Server state: ${serverState.state} (${Math.round(endTime - startTime)}ms)`);
-                localStorage.setItem('lastTournamentState', JSON.stringify(serverState));
-            } else {
-                console.log('Server returned unexpected response, falling back');
-            }
-        } catch (e) {
-            console.log('Server state unavailable:', e.message);
-            if (!cachedState) {
-                // No cache and no server — try offline fallback from localStorage
-                const cached = localStorage.getItem('lastTournamentState');
-                if (cached) {
-                    try {
-                        serverState = JSON.parse(cached);
-                        showOfflineBanner(serverState.fetchedAt);
-                    } catch (parseErr) {
-                        console.log('Failed to parse offline state cache:', parseErr.message);
-                    }
-                }
-            }
-            // If we already rendered from cache, nothing more to do
-            if (cachedState && !serverState) return;
+        const url = CONFIG.playerName
+            ? `${WORKER_URL}/tournament-state?player=${encodeURIComponent(CONFIG.playerName)}`
+            : `${WORKER_URL}/tournament-state`;
+        const data = await (await fetch(url)).json();
+        if (data.state) {
+            serverState = data;
+            localStorage.setItem('lastTournamentState', JSON.stringify(data));
         }
+    } catch { /* network failure */ }
 
-        if (serverState) {
-            // Fetch fresh player history from server
-            let roundHistory = loadRoundHistory();
-            if (CONFIG.playerName) {
-                roundHistory = await fetchPlayerHistory(CONFIG.playerName, getTournamentMeta().name);
-            }
+    if (!serverState) {
+        if (!cachedState) showError('Could not reach the server. Please try again later.');
+        return;
+    }
 
-            // Only re-render if state changed (avoid meme flicker)
-            if (stateChanged(cachedState, serverState)) {
-                console.log('State changed, re-rendering');
-                renderState(serverState, roundHistory);
-            } else {
-                // State unchanged — still update round tracker with fresh history
-                if (CONFIG.playerName && Object.keys(roundHistory.rounds).length > 0) {
-                    const rounds = Object.keys(roundHistory.rounds);
-                    const lastRound = Math.max(...rounds.map(Number));
-                    const roundNumber = serverState.round || 0;
-                    const displayedState = STATE_MAP[serverState.state] || STATE.NO;
-                    renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, displayedState, lastRound);
-                }
-            }
-            return;
-        }
+    // Fetch player history + re-render if state changed (skip in offseason — no active tournament)
+    let roundHistory = loadRoundHistory();
+    if (CONFIG.playerName && serverState.state !== 'off_season') {
+        roundHistory = await fetchPlayerHistory(CONFIG.playerName, getTournamentMeta().name);
+    }
 
-        // No server state and no cache
-        if (!cachedState) {
-            console.log('No server state available');
-            showError('Could not reach the server. Please try again later.');
-        }
-
-    } catch (error) {
-        console.error('Error checking pairings:', error);
-        if (!cachedState) showError(error.message);
+    if (stateChanged(cachedState, serverState)) {
+        renderState(serverState, roundHistory);
+    } else {
+        renderTrackerIfReady(roundHistory, serverState.round || 0, serverState.state);
     }
 }
 
@@ -260,19 +152,9 @@ const wrappedCheckPairings = async function() {
     await checkPairings();
 };
 
-// --- Register modal close handlers for backdrop clicks ---
-registerModalClose('settings-modal', closeSettings);
-registerModalClose('about-modal', closeAbout);
-registerModalClose('privacy-modal', closePrivacy);
-registerModalClose('viewer-modal', () => {
-    if (getCurrentMode() === 'editor') closeEditor();
-    closeGamePanel();
-});
-document.getElementById('viewer-close').addEventListener('click', () => {
-    if (getCurrentMode() === 'editor') closeEditor();
-    closeGamePanel();
-});
-registerModalClose('browser-modal', closeGameBrowser);
+// --- Modal close hooks (cleanup for complex modals) ---
+onModalClose('viewer-modal', closeGamePanel);
+onModalClose('browser-modal', closeGameBrowser);
 
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
@@ -283,419 +165,224 @@ document.addEventListener('keydown', (e) => {
     const browserModal = document.getElementById('browser-modal');
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
-        const mode = getCurrentMode();
-
-        if (mode === 'editor') {
-            // Don't intercept keys when typing in inputs/textareas
-            const tag = document.activeElement.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            if (e.key === 'ArrowLeft') { editorGoToPrev(); e.preventDefault(); }
-            else if (e.key === 'ArrowRight') { editorGoToNext(); e.preventDefault(); }
-            else if (e.key === 'Home') { editorGoToStart(); e.preventDefault(); }
-            else if (e.key === 'End') { editorGoToEnd(); e.preventDefault(); }
-            else if (e.key === 'f' || e.key === 'F') { editorFlipBoard(); }
-            else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) { editorUndo(); e.preventDefault(); }
-            else if (e.key === 'Delete' || e.key === 'Backspace') { deleteFromHere(); e.preventDefault(); }
-            else if (e.key === 'Escape') { closeEditor(); closeGamePanel(); }
-        } else {
-            // Viewer mode
-            // Branch popover intercepts arrow keys when open
-            if (isBranchPopoverOpen()) {
-                if (e.key === 'ArrowUp') { branchPopoverNavigate('up'); e.preventDefault(); }
-                else if (e.key === 'ArrowDown') { branchPopoverNavigate('down'); e.preventDefault(); }
-                else if (e.key === 'ArrowRight' || e.key === 'Enter') { branchPopoverNavigate('select'); e.preventDefault(); }
-                else if (e.key === 'ArrowLeft' || e.key === 'Escape') { goToPrev(); e.preventDefault(); }
-                return;
-            }
-            if (e.key === 'ArrowLeft') { goToPrev(); e.preventDefault(); }
-            else if (e.key === 'ArrowRight') { goToNext(); e.preventDefault(); }
-            else if (e.key === 'Home') { goToStart(); e.preventDefault(); }
-            else if (e.key === 'End') { goToEnd(); e.preventDefault(); }
-            else if (e.key === ' ') { toggleAutoPlay(); e.preventDefault(); }
-            else if (e.key === 'f' || e.key === 'F') { flipBoard(); }
-            else if (e.key === 'c' || e.key === 'C') {
-                const hidden = toggleComments();
-                document.getElementById('viewer-comments').classList.toggle('active', !hidden);
-            }
-            else if (e.key === 'b' || e.key === 'B') {
-                const active = toggleBranchMode();
-                document.getElementById('viewer-branch').classList.toggle('active', active);
-            }
-            else if (e.key === 'Escape') { closeGamePanel(); }
-        }
+        handlePanelKeydown(e);
+        if (e.key === 'Escape') { closeModal('viewer-modal'); }
     } else if (!browserModal.classList.contains('hidden')) {
         trapFocus(e, 'browser-modal');
-        if (e.key === 'Escape') { closeGameBrowser(); }
+        if (e.key === 'Escape') { closeModal('browser-modal'); }
     } else if (!settingsModal.classList.contains('hidden')) {
         trapFocus(e, 'settings-modal');
         if (e.key === 'Enter' && !['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
             saveSettings(wrappedCheckPairings);
         } else if (e.key === 'Escape') {
-            closeSettings();
+            closeModal('settings-modal');
         }
     } else if (!aboutModal.classList.contains('hidden')) {
         trapFocus(e, 'about-modal');
         if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
-            closeAbout();
+            closeModal('about-modal');
         }
     } else if (!privacyModal.classList.contains('hidden')) {
         trapFocus(e, 'privacy-modal');
         if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
-            closePrivacy();
+            closeModal('privacy-modal');
         }
     }
 });
 
-// --- Wire up event handlers (CSP-compliant, no inline handlers) ---
-document.getElementById('games-btn').addEventListener('click', () => {
-    if (window.matchMedia('(min-width: 1000px)').matches) {
-        openBrowserWithFirstGame();
-    } else {
-        openGameBrowser();
-    }
-});
+// --- Action dispatch table ---
+const ACTIONS = {
+    'open-settings': openSettings,
+    'share-status': shareStatus,
+    'save-settings': () => saveSettings(wrappedCheckPairings),
+    'enable-push': enablePush,
+    'disable-push': disablePush,
+    'open-games': () => {
+        if (window.matchMedia('(min-width: 1000px)').matches) openBrowserWithFirstGame();
+        else openGameBrowser();
+    },
+    // Viewer
+    'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
+    'viewer-next': goToNext, 'viewer-end': goToEnd, 'viewer-flip': flipBoard,
+    'viewer-comments': (e) => {
+        const btn = e.target.closest('[data-action]');
+        btn.classList.toggle('active', !toggleComments());
+    },
+    'viewer-branch': (e) => {
+        const btn = e.target.closest('[data-action]');
+        btn.classList.toggle('active', toggleBranchMode());
+    },
+    'viewer-analysis': async () => {
+        const pgn = getGamePgn();
+        if (!pgn) return;
+        const tab = window.open('about:blank', '_blank');
+        try {
+            const res = await fetch('https://lichess.org/api/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                body: 'pgn=' + encodeURIComponent(pgn),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.url) { if (tab) tab.location.href = data.url; else window.open(data.url, '_blank'); return; }
+            }
+        } catch { /* network error */ }
+        if (tab) tab.location.href = 'https://lichess.org/paste';
+        else window.open('https://lichess.org/paste', '_blank');
+    },
+    'viewer-share': (e) => {
+        e.stopPropagation();
+        document.getElementById('share-popover').classList.toggle('hidden');
+    },
+    // Editor
+    'editor-start': editorGoToStart, 'editor-prev': editorGoToPrev,
+    'editor-next': editorGoToNext, 'editor-end': editorGoToEnd,
+    'editor-flip': editorFlipBoard, 'editor-import': showImportDialog,
+    'editor-copy': copyPgn, 'editor-submit': submitGame,
+    'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
+    // Share popover
+    'share-copy-pgn': () => handleShareAction('copy-pgn'),
+    'share-copy-link': () => handleShareAction('copy-link'),
+    'share-download': () => handleShareAction('download'),
+    'share-native': () => handleShareAction('share'),
+};
+
+// Single delegated click listener
 document.addEventListener('click', (e) => {
-    if (!e.target.closest('#browser-export')) return;
-    const games = getFilteredGames();
-    if (games.length === 0) { showToast('No games to export'); return; }
-    const pgns = games.map(g => getCachedPgn(g.round, g.board)).filter(Boolean);
-    if (pgns.length === 0) { showToast('No PGN data available'); return; }
-    const pgnText = pgns.join('\n\n');
-    const slug = tournamentSlug();
-    const filter = getActiveFilter();
-    const prefix = slug || 'games';
-    let filename;
-    if (filter?.type === 'player') {
-        filename = `${prefix}-${filter.label.replace(/\s+/g, '-')}.pgn`;
-    } else if (filter?.type === 'section') {
-        const secs = filter.sections.map(sectionForFilename).join('-');
-        filename = `${prefix}-${secs}-R${games[0].round}.pgn`;
-    } else {
-        filename = `${prefix}-R${games[0].round}.pgn`;
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+        const handler = ACTIONS[actionBtn.dataset.action];
+        if (handler) { handler(e); return; }
     }
-    downloadPgn(pgnText, filename);
-    showToast(`${pgns.length} game${pgns.length > 1 ? 's' : ''} exported`);
-});
-document.getElementById('settings-link').addEventListener('click', openSettings);
-document.getElementById('share-link').addEventListener('click', shareStatus);
-document.getElementById('about-link').addEventListener('click', openAbout);
-document.getElementById('privacy-link').addEventListener('click', openPrivacy);
 
-// Settings modal
-document.getElementById('cancel-settings-btn').addEventListener('click', closeSettings);
-document.getElementById('save-settings-btn').addEventListener('click', () => saveSettings(wrappedCheckPairings));
+    // Dismiss share popover on outside click
+    if (!e.target.closest('.share-btn-wrapper')) {
+        const popover = document.getElementById('share-popover');
+        if (popover) popover.classList.add('hidden');
+    }
 
-// Push notifications
-document.getElementById('enable-push-btn').addEventListener('click', enablePush);
-document.getElementById('disable-push-btn').addEventListener('click', disablePush);
-document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
-document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
+    // Browser export
+    if (e.target.closest('#browser-export')) { handleBrowserExport(); return; }
 
-// About modal
-document.getElementById('close-about-btn').addEventListener('click', () => closeAbout());
-document.getElementById('about-privacy-link').addEventListener('click', (e) => {
-    e.preventDefault();
-    closeAbout();
-    setTimeout(openPrivacy, 300);
+    // NAG picker
+    const nagBtn = e.target.closest('.nag-btn');
+    if (nagBtn) { toggleNag(parseInt(nagBtn.dataset.nag, 10)); return; }
+
+    // Debug panel
+    const debugBtn = e.target.closest('[data-debug]');
+    if (debugBtn) { previewState(debugBtn.dataset.debug, debugBtn.dataset.variant); return; }
+
+    if (e.target.closest('#debug-game-viewer')) { openGameViewer({ pgn: DEBUG_PGN, orientation: 'Black' }); return; }
+    if (e.target.closest('#debug-pgn-editor')) { openGameEditor({}); return; }
 });
 
-// Privacy modal
-document.getElementById('close-privacy-btn').addEventListener('click', closePrivacy);
-
-// Hold-to-repeat: fires action once on press, then repeats while held.
+// Hold-to-repeat helper
 function holdToRepeat(btn, action) {
     let timer = null;
-    const DELAY = 400;
-    const INTERVAL = 80;
-    const start = () => {
-        action();
-        timer = setTimeout(() => {
-            timer = setInterval(action, INTERVAL);
-        }, DELAY);
-    };
-    const stop = () => {
-        clearTimeout(timer);
-        clearInterval(timer);
-        timer = null;
-    };
+    const start = () => { action(); timer = setTimeout(() => { timer = setInterval(action, 80); }, 400); };
+    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
     btn.addEventListener('pointerdown', (e) => { e.preventDefault(); start(); });
     btn.addEventListener('pointerup', stop);
     btn.addEventListener('pointerleave', stop);
     btn.addEventListener('pointercancel', stop);
 }
 
-// Game viewer modal
-document.getElementById('viewer-start').addEventListener('click', goToStart);
-holdToRepeat(document.getElementById('viewer-prev'), goToPrev);
-document.getElementById('viewer-play').addEventListener('click', toggleAutoPlay);
-holdToRepeat(document.getElementById('viewer-next'), goToNext);
-document.getElementById('viewer-end').addEventListener('click', goToEnd);
-document.getElementById('viewer-flip').addEventListener('click', flipBoard);
-
-document.getElementById('viewer-comments').addEventListener('click', () => {
-    const hidden = toggleComments();
-    document.getElementById('viewer-comments').classList.toggle('active', !hidden);
-});
-// Comments are visible by default, so mark the button active initially
-document.getElementById('viewer-comments').classList.add('active');
-
-document.getElementById('viewer-branch').addEventListener('click', () => {
-    const active = toggleBranchMode();
-    document.getElementById('viewer-branch').classList.toggle('active', active);
-});
-
-document.getElementById('viewer-analysis').addEventListener('click', async () => {
+async function handleShareAction(action) {
+    document.getElementById('share-popover').classList.add('hidden');
     const pgn = getGamePgn();
     if (!pgn) return;
-    // Open window immediately to preserve user gesture (standalone PWAs block async window.open)
-    const tab = window.open('about:blank', '_blank');
-    // Use lichess API to import full PGN (with annotations/variations)
-    try {
-        const res = await fetch('https://lichess.org/api/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-            body: 'pgn=' + encodeURIComponent(pgn),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (data.url) {
-                if (tab) tab.location.href = data.url;
-                else window.open(data.url, '_blank');
-                return;
-            }
-        }
-    } catch { /* network error */ }
-    // Fallback: open lichess paste page so user can paste manually
-    if (tab) tab.location.href = 'https://lichess.org/paste';
-    else window.open('https://lichess.org/paste', '_blank');
-});
-
-// Share popover toggle
-const sharePopover = document.getElementById('share-popover');
-
-document.getElementById('viewer-share').addEventListener('click', (e) => {
-    e.stopPropagation();
-    sharePopover.classList.toggle('hidden');
-});
-
-// Dismiss share popover on outside click
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.share-btn-wrapper')) {
-        sharePopover.classList.add('hidden');
-    }
-});
-
-// Hide "Share..." option on platforms without native share
-if (!navigator.share) {
-    const shareOption = sharePopover.querySelector('[data-action="share"]');
-    if (shareOption) shareOption.classList.add('hidden');
-}
-
-// Share popover actions
-sharePopover.addEventListener('click', async (e) => {
-    const action = e.target.dataset.action;
-    if (!action) return;
-    sharePopover.classList.add('hidden');
-
-    const pgn = getGamePgn();
-    if (!pgn) return;
-
     if (action === 'copy-pgn') {
-        const moves = getGameMoves() || pgn;
-        try {
-            await navigator.clipboard.writeText(moves);
-            showToast('Moves copied!');
-        } catch { showToast('Could not copy to clipboard'); }
-
+        try { await navigator.clipboard.writeText(getGameMoves() || pgn); showToast('Moves copied!'); }
+        catch { showToast('Could not copy to clipboard'); }
     } else if (action === 'copy-link') {
         const gameId = getHeader(pgn, 'GameId');
-        const gameUrl = gameId
-            ? `https://tnmpairings.com?game=${gameId}`
-            : window.location.href.split('?')[0];
-        try {
-            await navigator.clipboard.writeText(gameUrl);
-            showToast('Link copied!');
-        } catch { showToast('Could not copy to clipboard'); }
-
+        const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
+        try { await navigator.clipboard.writeText(url); showToast('Link copied!'); }
+        catch { showToast('Could not copy to clipboard'); }
     } else if (action === 'download') {
-        const slug = tournamentSlug();
-        const white = getHeader(pgn, 'White')?.split(',')[0] || 'White';
-        const black = getHeader(pgn, 'Black')?.split(',')[0] || 'Black';
-        const round = getHeader(pgn, 'Round')?.split('.')[0];
-        let filename;
-        if (slug && round) {
-            filename = `${slug}-R${round}-${white}-${black}.pgn`;
-        } else {
-            const date = (getHeader(pgn, 'Date') || '').replace(/\./g, '');
-            filename = date ? `${white}-${black}-${date}.pgn` : `${white}-${black}.pgn`;
-        }
-        downloadPgn(pgn, filename);
-
+        const slug = getTournamentMeta().slug;
+        const w = getHeader(pgn, 'White')?.split(',')[0] || 'White';
+        const b = getHeader(pgn, 'Black')?.split(',')[0] || 'Black';
+        const r = getHeader(pgn, 'Round')?.split('.')[0];
+        let fn;
+        if (slug && r) fn = `${slug}-R${r}-${w}-${b}.pgn`;
+        else { const d = (getHeader(pgn, 'Date') || '').replace(/\./g, ''); fn = d ? `${w}-${b}-${d}.pgn` : `${w}-${b}.pgn`; }
+        downloadPgn(pgn, fn);
     } else if (action === 'share') {
-        const white = formatName(getHeader(pgn, 'White'));
-        const black = formatName(getHeader(pgn, 'Black'));
-        const result = getHeader(pgn, 'Result');
         const gameId = getHeader(pgn, 'GameId');
-        const title = `${white} vs ${black} — ${result}`;
-        const gameUrl = gameId
-            ? `https://tnmpairings.com?game=${gameId}`
-            : window.location.href.split('?')[0];
-        try { await navigator.share({ title, url: gameUrl }); } catch { /* user cancelled */ }
+        const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
+        try { await navigator.share({ title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`, url }); } catch { /* cancelled */ }
     }
-});
+}
 
-// Browser navigation in viewer header (event delegation for dynamically rendered buttons)
-document.getElementById('viewer-header').addEventListener('click', (e) => {
-    // Filter chip: click label → open browser with current filter
-    if (e.target.closest('#viewer-filter-link')) {
-        openBrowserWithCurrentFilter();
-        return;
-    }
-    // Filter chip: click × → clear filter, update nav in place
-    if (e.target.closest('#viewer-filter-clear')) {
-        const { prev, next } = clearFilter();
-        const chip = document.querySelector('.viewer-filter-chip');
-        if (chip) chip.remove();
-        updateNavArrows(prev, next);
-        return;
-    }
-    // Center label → open browser with current filter
-    if (e.target.closest('#viewer-back-to-browser')) {
-        openBrowserWithCurrentFilter();
-        return;
-    }
-    // Edit submission button — switch from viewer to editor in-place
-    const editBtn = e.target.closest('#viewer-edit-submission');
-    if (editBtn) {
-        switchToEditor(openEditor, {
-            pgn: getGamePgn(),
-            orientation: 'white',
-            submitMode: true,
-            round: Number(editBtn.dataset.round),
-            board: Number(editBtn.dataset.board),
-        });
-        return;
-    }
-    // Prev/Next game arrows
-    const arrow = e.target.closest('[data-browse-round]');
-    if (arrow) {
-        viewerNavigateGame(arrow.dataset.browseRound, arrow.dataset.browseBoard);
-    }
-});
-
-// "View Game" button in round detail (event delegation on pairing-info)
-document.getElementById('pairing-info').addEventListener('click', (e) => {
-    const btn = e.target.closest('.view-game-btn');
-    if (!btn) return;
-    if (CONFIG.playerName) {
-        openGameWithPlayerNav(CONFIG.playerName, btn.dataset.round, btn.dataset.board);
-    } else {
-        openGameViewer({ round: btn.dataset.round, board: btn.dataset.board });
-    }
-});
-
-// Debug panel
-document.getElementById('debug-panel').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-debug]');
-    if (!btn) return;
-    previewState(btn.dataset.debug, btn.dataset.variant);
-});
-
-// Debug: Game viewer with sample PGN
-document.getElementById('debug-game-viewer').addEventListener('click', () => {
-    const samplePgn = `[Event "2026 New Year TNM: 1600-1999"]
-[Site "San Francisco"]
-[Date "2026.01.27"]
-[Round "4.18"]
-[White "Ploquin, Phil"]
-[Black "Boyer, John"]
-[Result "0-1"]
-[ECO "B30"]
-[WhiteElo "1660"]
-[BlackElo "1740"]
-[WhiteFideId "-1"]
-[BlackFideId "-1"]
-[PlyCount "92"]
-[GameId "2271348633986755"]
-[EventDate "2026.01.27"]
-
-1. e4 c5 2. Nf3 Nc6 3. Nc3 e5 4. Bc4 g6 5. d3 h6 6. Be3 d6 7. h3 Bg7 8. Nd5 Nge7 9. c3 Nxd5 10. Bxd5 O-O 11. Qd2 Kh7 12. Nh2 f5 13. f3 f4 14. Bf2 Qg5 15. O-O-O Qxg2 16. Rdg1 Qxh3 17. Qd1 Qd7 18. Ng4 Qe8 19. Qf1 Bxg4 20. Rxg4 Ne7 21. Bb3 a5 22. Rgh4 Rh8 23. Qh3 Qf8 24. Rg4 a4 25. Bc2 b5 26. d4 cxd4 27. cxd4 b4 28. d5 Qc8 29. Kd2 b3 30. axb3 axb3 31. Bd3 Ra2 32. Rb1 h5 33. Ke2 Bh6 34. Rh4 Qxh3 35. Rxh3 Rc8 36. Be1 Ng8 37. Bb4 Bf8 38. Ba3 Ra8 39. Kd1 Rc8 40. Rc1 Rxc1+ 41. Kxc1 Ra1+ 42. Bb1 Nh6 43. Rh1 Nf7 44. Kd2 Ng5 45. Kc3 Nxf3 46. Kxb3 Rxb1 0-1`;
-    openGameViewer({ pgn: samplePgn, orientation: 'Black' });
-});
-
-// Debug: PGN Editor
-document.getElementById('debug-pgn-editor').addEventListener('click', () => {
-    openGameEditor(openEditor, {});
-});
-
-// --- Editor toolbar event handlers ---
-document.getElementById('editor-start').addEventListener('click', editorGoToStart);
-document.getElementById('editor-prev').addEventListener('click', editorGoToPrev);
-document.getElementById('editor-next').addEventListener('click', editorGoToNext);
-document.getElementById('editor-end').addEventListener('click', editorGoToEnd);
-document.getElementById('editor-flip').addEventListener('click', editorFlipBoard);
-document.getElementById('editor-import').addEventListener('click', showImportDialog);
-document.getElementById('editor-copy').addEventListener('click', copyPgn);
-document.getElementById('editor-submit').addEventListener('click', submitGame);
-document.getElementById('editor-comment-input').addEventListener('input', onCommentInput);
-document.getElementById('editor-comment-input').addEventListener('focus', onCommentFocus);
-document.getElementById('editor-comment-input').addEventListener('blur', onCommentBlur);
-document.getElementById('editor-import-ok').addEventListener('click', doImport);
-document.getElementById('editor-import-cancel').addEventListener('click', hideImportDialog);
-
-// NAG picker button delegation — stays open for multiple selections
-document.getElementById('editor-nag-picker').addEventListener('click', (e) => {
-    const btn = e.target.closest('.nag-btn');
-    if (!btn) return;
-    toggleNag(parseInt(btn.dataset.nag, 10));
-});
+function handleBrowserExport() {
+    const gameIds = getFilteredGames();
+    if (!gameIds.length) { showToast('No games to export'); return; }
+    const games = gameIds.map(id => getCachedGame(id)).filter(g => g?.pgn);
+    if (!games.length) { showToast('No PGN data available'); return; }
+    const slug = getTournamentMeta().slug;
+    const filter = getActiveFilter();
+    const prefix = slug || 'games';
+    let filename;
+    if (filter?.type === 'player') filename = `${prefix}-${filter.label.replace(/\s+/g, '-')}.pgn`;
+    else if (filter?.type === 'section') filename = `${prefix}-${filter.sections.map(sectionForFilename).join('-')}-R${games[0].round}.pgn`;
+    else filename = `${prefix}-R${games[0].round}.pgn`;
+    downloadPgn(games.map(g => g.pgn).join('\n\n'), filename);
+    showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`);
+}
 
 // --- Register service worker ---
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
 }
 
-// --- Clean up legacy SMS localStorage keys ---
-localStorage.removeItem('smsPhoneHash');
-localStorage.removeItem('smsSubscribed');
-localStorage.removeItem('smsPhone');
-
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
-    const hasVisited = localStorage.getItem('hasVisited');
-    if (!hasVisited) {
-        localStorage.setItem('hasVisited', 'true');
-        // Show About modal first; chain to Settings when closed
-        setTimeout(() => {
-            openAbout();
-            // Chain: when About is closed on first visit, open Settings
-            const closeBtn = document.getElementById('close-about-btn');
-            const onFirstClose = () => {
-                closeBtn.removeEventListener('click', onFirstClose);
-                if (!CONFIG.playerName) {
-                    setTimeout(() => openSettings(), 300);
-                }
-            };
-            closeBtn.addEventListener('click', onFirstClose);
-        }, 500);
+    // Hold-to-repeat for prev/next buttons
+    document.querySelectorAll('[data-hold]').forEach(btn => {
+        const action = ACTIONS[btn.dataset.action];
+        if (action) holdToRepeat(btn, action);
+    });
+
+    // Comments button starts active
+    document.querySelector('[data-action="viewer-comments"]')?.classList.add('active');
+
+    // Hide "Share..." on platforms without native share
+    if (!navigator.share) {
+        document.querySelector('[data-action="share-native"]')?.classList.add('hidden');
     }
 
+    // Player Profile init
+    import('./src/player-profile.js').then(m => m.initPlayerProfile());
+
+    // First-visit onboarding
+    if (!localStorage.getItem('hasVisited')) {
+        localStorage.setItem('hasVisited', 'true');
+        onModalClose('about-modal', () => {
+            onModalClose('about-modal', null);
+            if (!CONFIG.playerName) setTimeout(() => openSettings(), 300);
+        });
+        setTimeout(() => openModal('about-modal'), 500);
+    }
+
+    // App bootstrap
     wrappedCheckPairings();
     startCountdown(wrappedCheckPairings);
     syncPushSubscription();
     prefetchGames();
 
+    // URL params
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('debug') === 'true') {
         const debugPanel = document.getElementById('debug-panel');
-        if (debugPanel) {
-            debugPanel.style.display = 'block';
-        }
+        if (debugPanel) debugPanel.style.display = 'block';
     }
-
-    // Deep link: ?game=GAMEID opens the game viewer directly
     const gameId = urlParams.get('game');
     if (gameId && /^\d{10,20}$/.test(gameId)) {
-        handleGameDeepLink(gameId);
+        fetchGames({ gameId, include: 'pgn' }).then(() => {
+            const game = getCachedGame(gameId);
+            if (game) openGameViewer({ game });
+            window.history.replaceState({}, '', window.location.pathname);
+        }).catch(() => {});
     }
 });

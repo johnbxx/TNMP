@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { showToast } from './toast.js';
 import { clearRoundHistory } from './history.js';
 import { openModal, closeModal } from './modal.js';
-import { checkPushStatus, syncPushName } from './push.js';
+import { checkPushStatus, syncPushSubscription } from './push.js';
 
 // --- Settings modal ---
 
@@ -13,23 +13,19 @@ export function openSettings() {
     checkPushStatus();
 }
 
-export function closeSettings() {
-    closeModal('settings-modal');
-}
-
 export function saveSettings(checkPairings) {
     const input = document.getElementById('player-name-input');
     const newName = input.value.trim();
     const oldName = CONFIG.playerName;
 
     CONFIG.playerName = newName;
-    closeSettings();
+    closeModal('settings-modal');
 
     if (newName !== oldName) {
         // Clear stale round history built for the old player name
         clearRoundHistory();
         // Sync push subscription with new name
-        syncPushName();
+        syncPushSubscription();
         // Always re-check to rebuild pairing info and history for the new name
         checkPairings();
     }

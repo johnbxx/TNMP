@@ -1,5 +1,4 @@
-import { STATE } from './config.js';
-import { getCurrentState } from './state.js';
+import { STATE, getCurrentState } from './config.js';
 
 // Countdown timer internals
 let countdownSeconds = 60;

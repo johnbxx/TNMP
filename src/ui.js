@@ -1,8 +1,12 @@
-import { STATE, CONFIG, getTournamentMeta } from './config.js';
+import { STATE, CONFIG, getTournamentMeta, getLastRoundNumber } from './config.js';
 import { getRandomMeme } from './memes.js';
-import { getLastRoundNumber, getSelectedHistoryRound, setSelectedHistoryRound, getLivePairingHtml, setLivePairingHtml, getTrackerState } from './state.js';
 import { stopOffSeasonCountdown, startOffSeasonCountdown, updateCountdownDisplay } from './countdown.js';
 import { resultDisplay } from './utils.js';
+
+// --- Tracker state (module-private, only used within ui.js) ---
+let _selectedHistoryRound = null;
+let _livePairingHtml = null;
+let _trackerState = { roundHistory: null, currentRound: null, listening: false };
 
 const COLOR_ICONS = {
     White: 'pieces/wK.webp',
@@ -42,9 +46,9 @@ function renderPairingHtml(opts) {
     }
 
     const ratingText = opts.opponentRating ? ` (${opts.opponentRating})` : '';
-    const opponentDisplay = opts.opponentUrl
-        ? `<a href="${opts.opponentUrl}" target="_blank" class="opponent-link">${opts.opponent}</a>`
-        : (opts.opponent || 'Unknown');
+    const opponentDisplay = opts.opponent
+        ? `<button type="button" class="opponent-link opponent-profile-btn" data-opponent-name="${opts.opponent}">${opts.opponent}</button>`
+        : 'Unknown';
     const resultHtml = opts.result
         ? `<div class="pairing-result">${opts.result.emoji} ${opts.result.text}</div>` : '';
     const iconSrc = opts.colorIcon || COLOR_ICONS[opts.color] || '';
@@ -100,7 +104,7 @@ window.addEventListener('resize', fitAnswerText);
 export function updateTournamentLink() {
     const link = document.querySelector('.footer a[target="_blank"]');
     if (!link) return;
-    const url = getTournamentMeta().url || CONFIG.tournamentUrl;
+    const url = getTournamentMeta().url;
     if (url) {
         link.href = url;
     }
@@ -152,6 +156,9 @@ export function showState(state, info, pairingInfo = null) {
             memeEl.innerHTML = '';
         }
         pairingInfo = null;
+        // Clear round tracker — tournament is over
+        const tracker = document.getElementById('round-tracker');
+        if (tracker) tracker.innerHTML = '';
     } else {
         const meme = getRandomMeme(state);
         memeEl.innerHTML = `
@@ -188,8 +195,7 @@ export function showState(state, info, pairingInfo = null) {
     const btn = document.getElementById('check-btn');
     if (state === STATE.OFF_SEASON) {
         const linkUrl = getTournamentMeta().nextTournament?.url
-            || getTournamentMeta().url
-            || CONFIG.tournamentUrl;
+            || getTournamentMeta().url;
         if (linkUrl) {
             btn.textContent = 'View Tournament Info';
             btn.onclick = () => window.open(linkUrl, '_blank');
@@ -199,10 +205,10 @@ export function showState(state, info, pairingInfo = null) {
         }
     } else if (state === STATE.YES) {
         btn.textContent = 'View Pairings';
-        btn.onclick = () => window.open(CONFIG.tournamentUrl + '#Pairings', '_blank');
+        btn.onclick = () => window.open(getTournamentMeta().url + '#Pairings', '_blank');
     } else if (state === STATE.RESULTS) {
         btn.textContent = 'View Results';
-        btn.onclick = () => window.open(CONFIG.tournamentUrl + '#Standings', '_blank');
+        btn.onclick = () => window.open(getTournamentMeta().url + '#Standings', '_blank');
     } else {
         btn.textContent = 'Check Again';
         btn.onclick = null;
@@ -267,7 +273,7 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
         const round = roundHistory.rounds[i];
         const isCurrentRound = i === currentRound;
         const isInProgress = isCurrentRound && (currentState === STATE.IN_PROGRESS || currentState === STATE.YES);
-        const isSelected = getSelectedHistoryRound() === i;
+        const isSelected = _selectedHistoryRound === i;
 
         let className = 'tracker-round';
         let resultClass = '';
@@ -311,7 +317,7 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
     container.innerHTML = html;
 
     // Use event delegation — single listener on container, set up once
-    const ts = getTrackerState();
+    const ts = _trackerState;
     ts.roundHistory = roundHistory;
     ts.currentRound = currentRound;
     if (!ts.listening) {
@@ -320,7 +326,7 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
             const btn = e.target.closest('[data-clickable="true"]');
             if (!btn) return;
             const roundNum = parseInt(btn.dataset.round, 10);
-            const s = getTrackerState();
+            const s = _trackerState;
             showRoundDetail(roundNum, s.roundHistory, s.currentRound);
         });
     }
@@ -339,22 +345,22 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
     if (!pairingInfoEl) return;
 
     // Clicking the already-selected round does nothing
-    if (getSelectedHistoryRound() === roundNum) return;
+    if (_selectedHistoryRound === roundNum) return;
 
     // Clicking the current round restores live pairing (only if there is one)
-    if (roundNum === currentRound && getLivePairingHtml() !== null) {
-        setSelectedHistoryRound(null);
-        pairingInfoEl.innerHTML = getLivePairingHtml();
+    if (roundNum === currentRound && _livePairingHtml !== null) {
+        _selectedHistoryRound = null;
+        pairingInfoEl.innerHTML = _livePairingHtml;
         updateTrackerSelection();
         return;
     }
 
-    setSelectedHistoryRound(roundNum);
+    _selectedHistoryRound = roundNum;
     const round = roundHistory.rounds[roundNum];
     if (!round) return;
 
-    const viewGameHtml = (!round.isBye && round.board && round.result)
-        ? `<button class="view-game-btn" data-round="${roundNum}" data-board="${round.board}">View Game</button>`
+    const viewGameHtml = (!round.isBye && round.gameId && round.result)
+        ? `<button class="view-game-btn" data-game-id="${round.gameId}">View Game</button>`
         : '';
     pairingInfoEl.innerHTML = renderPairingHtml({
         round: roundNum,
@@ -380,7 +386,7 @@ function updateTrackerSelection() {
     if (!container) return;
     container.querySelectorAll('.tracker-round').forEach(btn => {
         const roundNum = parseInt(btn.dataset.round, 10);
-        btn.classList.toggle('tracker-selected', roundNum === getSelectedHistoryRound());
+        btn.classList.toggle('tracker-selected', roundNum === _selectedHistoryRound);
     });
 }
 
@@ -390,11 +396,11 @@ function updateTrackerSelection() {
 export function saveLivePairingHtml() {
     const pairingInfoEl = document.getElementById('pairing-info');
     if (pairingInfoEl && pairingInfoEl.innerHTML.trim()) {
-        setLivePairingHtml(pairingInfoEl.innerHTML);
+        _livePairingHtml = pairingInfoEl.innerHTML;
     } else {
-        setLivePairingHtml(null);
+        _livePairingHtml = null;
     }
-    setSelectedHistoryRound(null);
+    _selectedHistoryRound = null;
 }
 
 export function showError(message) {
@@ -410,3 +416,26 @@ export function showError(message) {
     `;
     document.getElementById('round-info').textContent = '';
 }
+
+// --- Pairing info delegation (opponent profile + View Game) ---
+// Uses dynamic imports to avoid circular dependency (ui → game-viewer → game-browser → ui)
+document.getElementById('pairing-info')?.addEventListener('click', (e) => {
+    const profileBtn = e.target.closest('.opponent-profile-btn');
+    if (profileBtn) {
+        e.preventDefault();
+        import('./player-profile.js').then(({ openPlayerProfile }) => {
+            openPlayerProfile(profileBtn.dataset.opponentName);
+        });
+        return;
+    }
+    const btn = e.target.closest('.view-game-btn');
+    if (!btn) return;
+    const gameId = btn.dataset.gameId;
+    if (!gameId) return;
+    import('./game-browser.js').then(({ getCachedGame, openGameWithPlayerNav }) => {
+        const game = getCachedGame(gameId);
+        if (!game) return;
+        if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
+        else import('./game-viewer.js').then(({ openGameViewer }) => openGameViewer({ game }));
+    });
+});

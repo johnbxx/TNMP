@@ -383,6 +383,13 @@ html.off-season .meme {
     color: var(--text-primary);
     text-decoration: underline;
     text-underline-offset: 2px;
+    background: none;
+    border: none;
+    font: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    cursor: pointer;
+    padding: 0;
 }
 
 .pairing-opponent .opponent-link:hover {
@@ -553,7 +560,7 @@ html.off-season .meme {
 
 .share-toast {
     position: fixed;
-    bottom: 2rem;
+    top: 2rem;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.8);
@@ -563,7 +570,7 @@ html.off-season .meme {
     font-size: 0.9rem;
     opacity: 0;
     transition: opacity var(--transition-medium);
-    z-index: 1000;
+    z-index: 9000;
     pointer-events: none;
 }
 
@@ -698,9 +705,30 @@ html.off-season .meme {
     font-size: 1.5rem;
 }
 
-#browser-title {
+#browser-title,
+#browser-title-panel {
     white-space: nowrap;
     text-align: center;
+    overflow: hidden;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.browser-title-select {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.35rem 0.5rem;
+    width: 100%;
+    max-width: 100%;
+    text-align: center;
+    cursor: pointer;
+    font-family: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .setting-group {
@@ -1147,15 +1175,6 @@ html.off-season .meme {
 }
 .viewer-edit-submission:hover {
     background: rgba(0, 200, 83, 0.2);
-}
-
-.viewer-browse-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-subtle);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0.15rem 0.4rem;
 }
 
 .viewer-browse-arrow {
@@ -2188,6 +2207,7 @@ html.off-season .meme {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
 }
 
 .browser-search {
@@ -2220,22 +2240,30 @@ html.off-season .meme {
 
 .browser-search-clear {
     position: absolute;
-    right: 0.4rem;
+    right: 1.2rem;
     top: 50%;
     transform: translateY(-50%);
     background: none;
     border: none;
     color: var(--text-subtle);
-    font-size: 1.1rem;
+    font-size: 1rem;
     line-height: 1;
     cursor: pointer;
-    padding: 0.2rem 0.3rem;
-    border-radius: var(--radius-sm);
-    transition: color var(--transition-fast);
+    width: 1.5rem;
+    height: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.browser-search-clear:not(.hidden) {
+    display: flex;
 }
 
 .browser-search-clear:hover {
     color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .browser-autocomplete {
@@ -2276,6 +2304,40 @@ html.off-season .meme {
 .browser-ac-item strong {
     color: var(--text-primary);
     font-weight: 700;
+}
+
+.browser-ac-profile {
+    color: var(--accent);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.78rem;
+}
+
+.browser-ac-profile:hover,
+.browser-ac-profile.browser-ac-focused {
+    background: rgba(0, 200, 83, 0.08);
+    color: var(--accent);
+}
+
+.browser-profile-link {
+    display: block;
+    width: 100%;
+    padding: 0.45rem 0.5rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--accent);
+    background: rgba(0, 200, 83, 0.06);
+    border: 1px solid rgba(0, 200, 83, 0.15);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: center;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.browser-profile-link:hover {
+    background: rgba(0, 200, 83, 0.12);
+    border-color: rgba(0, 200, 83, 0.3);
 }
 
 .browser-ac-empty {
@@ -2328,6 +2390,16 @@ html.off-season .meme {
 }
 
 .browser-sections.hidden {
+    display: none;
+}
+
+.browser-chips {
+    display: flex;
+    gap: 0.3rem;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+}
+.browser-chips.hidden {
     display: none;
 }
 
@@ -2584,5 +2656,397 @@ html.off-season .meme {
     .browser-round-btn {
         padding: 0.35rem 0.55rem;
         font-size: 0.75rem;
+    }
+}
+
+/* ==========================================================================
+   Player Profile Modal
+   ========================================================================== */
+
+.profile-modal-content {
+    max-width: 520px;
+    max-height: 85vh;
+}
+
+.profile-modal-content h2 {
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.profile-body {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.profile-loading,
+.profile-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+}
+
+.profile-error {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--status-error);
+}
+
+.profile-empty-small {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+}
+
+/* Tabs */
+.profile-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 1rem;
+}
+
+.profile-tab {
+    flex: 1;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-faint);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.profile-tab:hover {
+    color: var(--text-muted);
+}
+
+.profile-tab-active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+}
+
+/* Overview stat rows */
+.profile-stat-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    margin-bottom: 0.35rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    transition: background var(--transition-fast);
+}
+
+.profile-stat-row:hover {
+    background: var(--overlay-light);
+}
+
+.profile-stat-label-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.profile-stat-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.profile-stat-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-faint);
+}
+
+.profile-stat-divider {
+    color: rgba(255, 255, 255, 0.15);
+}
+
+/* Win/Loss/Draw bar */
+.profile-bar {
+    display: flex;
+    height: 1.4rem;
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+    margin: 0.35rem 0;
+}
+
+.profile-bar-win,
+.profile-bar-draw,
+.profile-bar-loss {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    border-bottom: 2px solid transparent;
+}
+
+.profile-bar-win span,
+.profile-bar-draw span,
+.profile-bar-loss span {
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.profile-bar-win {
+    background: rgba(0, 200, 83, 0.12);
+    border-bottom-color: var(--accent);
+}
+.profile-bar-win span { color: var(--accent); }
+
+.profile-bar-draw {
+    background: var(--overlay-light);
+    border-bottom-color: var(--text-subtle);
+}
+.profile-bar-draw span { color: var(--text-primary); }
+
+.profile-bar-loss {
+    background: rgba(255, 23, 68, 0.08);
+    border-bottom-color: var(--status-error);
+}
+.profile-bar-loss span { color: var(--status-error); }
+
+.profile-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-subtle);
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.profile-color-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    object-fit: contain;
+}
+
+/* Tournament list */
+.profile-tournament-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.profile-tournament-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0.6rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    width: 100%;
+}
+
+.profile-tournament-row:hover {
+    background: var(--overlay-light);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.profile-tournament-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-tournament-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.profile-tournament-record {
+    font-size: 0.75rem;
+    color: var(--text-subtle);
+    min-width: 5.5rem;
+}
+
+.profile-tournament-stats .profile-bar {
+    flex: 1;
+    margin: 0;
+    height: 1.1rem;
+}
+
+.profile-tournament-stats .profile-bar span {
+    font-size: 0.6rem;
+}
+
+.profile-tournament-pct {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 2rem;
+    text-align: right;
+}
+
+/* Opening list */
+.profile-opening-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.profile-opening-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0;
+}
+
+.profile-eco-code {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-subtle);
+    min-width: 2rem;
+}
+
+.profile-opening-name {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-opening-count {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-faint);
+    min-width: 1.5rem;
+    text-align: right;
+}
+
+.profile-opening-row .profile-bar {
+    width: 4.5rem;
+    flex-shrink: 0;
+    margin: 0;
+    height: 1.1rem;
+}
+
+.profile-opening-row .profile-bar span {
+    font-size: 0.6rem;
+}
+
+.profile-opening-pct {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 2rem;
+    text-align: right;
+}
+
+/* Opponent list */
+.profile-opponent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.profile-opponent-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    background: none;
+    border: none;
+    font-family: inherit;
+    color: inherit;
+    text-align: left;
+    width: 100%;
+}
+
+.profile-opponent-row:hover {
+    background: var(--overlay-light);
+}
+
+.profile-opponent-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-opponent-record {
+    font-size: 0.72rem;
+    color: var(--text-subtle);
+    min-width: 5rem;
+    text-align: right;
+}
+
+.profile-opponent-row .profile-bar {
+    width: 4.5rem;
+    flex-shrink: 0;
+    margin: 0;
+    height: 1.1rem;
+}
+
+.profile-opponent-row .profile-bar span {
+    font-size: 0.6rem;
+}
+
+.profile-opponent-pct {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 2rem;
+    text-align: right;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+    .profile-modal-content {
+        width: 98%;
+        padding: 1.25rem;
+    }
+    .profile-tab {
+        font-size: 0.7rem;
+        padding: 0.5rem 0.25rem;
+    }
+    .profile-opening-name {
+        max-width: 8rem;
     }
 }

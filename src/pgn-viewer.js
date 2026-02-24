@@ -1,17 +1,17 @@
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import '@chrisoakman/chessboard2/dist/chessboard2.min.css';
 import { formatName, resultClass, resultSymbol, getHeader } from './utils.js';
-import { parseMoveText, extractMoveText } from './pgn-parser.js';
+import { extractMoveText } from './pgn-parser.js';
 import {
-    getNodes, setNodes, getCurrentNodeId, setCurrentNodeId,
-    getMainLineEnd, getAnnotatedMoves, setAnnotatedMoves,
-    getStartingFen, setStartingFen, START_FEN,
-    isDesktop, recalcMainLineEnd, buildMoveTree, setResizeCallback,
-    getBoard, createBoard, destroyBoard, resetState,
+    getNodes, getCurrentNodeId,
+    getMainLineEnd, getStartingFen,
+    setResizeCallback, parsePgnToTree,
+    navigateToStart, navigateToPrev, navigateToEnd,
+    getBoard, createBoard, destroyBoard, resetState, cleanupBoardDOM,
     highlightSquares, clearHighlights, highlightCurrentMove,
     goToNode, updateNavigationButtons,
     syncDesktopLayout as syncDesktopLayoutCore,
-    renderMoveTable, renderAnnotatedMoves,
+    renderMoveList as renderMoveListCore,
 } from './board-core.js';
 
 const VIEWER_BTNS = { start: 'viewer-start', prev: 'viewer-prev', next: 'viewer-next', end: 'viewer-end' };
@@ -32,22 +32,7 @@ let rawPgn = null;       // Original PGN text for export
  */
 export function initViewer(pgn, playerColor, meta = {}) {
     rawPgn = pgn;
-
-    // Parse annotations from move text
-    const moveText = extractMoveText(pgn);
-    setAnnotatedMoves(parseMoveText(moveText));
-
-    // Extract starting FEN from headers (if any)
-    const fenHeader = getHeader(pgn, 'FEN');
-    setStartingFen(fenHeader || START_FEN);
-
-    // Build position-annotated tree (eagerly computes FEN for every node including variations)
-    setNodes(buildMoveTree(getAnnotatedMoves(), getStartingFen()));
-
-    // Cache last main-line node for goToEnd
-    recalcMainLineEnd();
-
-    setCurrentNodeId(0);
+    parsePgnToTree(pgn);
 
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
@@ -82,65 +67,21 @@ function goToMove(nodeId) {
     });
 }
 
-export function goToStart() {
-    stopAutoPlay(); updatePlayButton();
-    const nodes = getNodes();
-    const currentNodeId = getCurrentNodeId();
-    if (nodes[currentNodeId].isVariation) {
-        // In a variation — go to the branch point
-        let id = currentNodeId;
-        while (id > 0 && nodes[id].isVariation) id = nodes[id].parentId;
-        goToMove(id);
-    } else {
-        goToMove(0);
-    }
-}
-export function goToPrev() {
-    stopAutoPlay(); updatePlayButton();
-    dismissBranchPopover();
-    const parent = getNodes()[getCurrentNodeId()].parentId;
-    if (parent >= 0) goToMove(parent);
-}
+const stopAndUpdate = () => { stopAutoPlay(); updatePlayButton(); };
+
+export function goToStart() { navigateToStart(goToMove, stopAndUpdate); }
+export function goToPrev() { stopAndUpdate(); dismissBranchPopover(); navigateToPrev(goToMove); }
 export function goToNext() {
-    stopAutoPlay(); updatePlayButton();
-
-    // If branch popover is open, "next" selects the highlighted option
-    if (branchChoices.length > 0) {
-        branchPopoverNavigate('select');
-        return;
-    }
-
+    stopAndUpdate();
+    if (branchChoices.length > 0) { branchPopoverNavigate('select'); return; }
     const node = getNodes()[getCurrentNodeId()];
-    if (node.mainChild === null) return; // end of line — do nothing
-
-    // Branch mode: if the current node has multiple continuations, show popover
-    if (branchMode && node.children.length > 1) {
-        showBranchPopover(node);
-        return;
-    }
-
+    if (node.mainChild === null) return;
+    if (branchMode && node.children.length > 1) { showBranchPopover(node); return; }
     goToMove(node.mainChild);
 }
-export function goToEnd() {
-    stopAutoPlay(); updatePlayButton();
-    const nodes = getNodes();
-    const currentNodeId = getCurrentNodeId();
-    if (nodes[currentNodeId].isVariation) {
-        // In a variation — go to the end of this variation line
-        let id = currentNodeId;
-        while (nodes[id].mainChild !== null) id = nodes[id].mainChild;
-        goToMove(id);
-    } else {
-        goToMove(getMainLineEnd());
-    }
-}
+export function goToEnd() { navigateToEnd(goToMove, stopAndUpdate); }
 
-export function flipBoard() {
-    const board = getBoard();
-    if (board) {
-        board.orientation('flip');
-    }
-}
+export { flipBoard } from './board-core.js';
 
 let commentsHidden = false;
 
@@ -297,15 +238,10 @@ export function destroyViewer() {
     branchMode = false;
     dismissBranchPopover();
     clearHighlights();
+    cleanupBoardDOM();
 
     const headerEl = document.getElementById('viewer-header');
     if (headerEl) headerEl.innerHTML = '';
-    const movesEl = document.getElementById('viewer-moves');
-    if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
-    const modalEl = document.querySelector('.modal-content-viewer');
-    if (modalEl) modalEl.style.width = '';
-    const layoutEl = document.querySelector('.viewer-layout');
-    if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
 }
 
 // --- Auto-Play ---
@@ -383,36 +319,33 @@ function renderGameHeader(pgn, meta = {}) {
         </div>`;
     }
 
-    // Browser navigation bar (when opened from game browser)
-    let browserNavHtml = '';
-    if (meta.browserNav) {
-        const prev = meta.browserNav.prev;
-        const next = meta.browserNav.next;
-        const prevBtn = prev
-            ? `<button class="viewer-browse-arrow" data-browse-round="${prev.round}" data-browse-board="${prev.board}" aria-label="Previous game">\u2039</button>`
-            : `<span class="viewer-browse-arrow viewer-browse-disabled">\u2039</span>`;
-        const nextBtn = next
-            ? `<button class="viewer-browse-arrow" data-browse-round="${next.round}" data-browse-board="${next.board}" aria-label="Next game">\u203A</button>`
-            : `<span class="viewer-browse-arrow viewer-browse-disabled">\u203A</span>`;
+    // Round/Board label
+    const parts = [];
+    if (round) parts.push(`Round ${round}`);
+    if (boardNum) parts.push(`Board ${boardNum}`);
+    const roundBoardLabel = parts.join(' \u00B7 ');
 
-        const parts = [];
-        if (round) parts.push(`Round ${round}`);
-        if (boardNum) parts.push(`Board ${boardNum}`);
-        const label = parts.join(' \u00B7 ');
+    // Browser navigation bar — shown when caller provides onPrev/onNext callbacks
+    let browserNavHtml = '';
+    const hasNav = meta.onPrev || meta.onNext;
+    if (hasNav) {
+        const prevBtn = meta.onPrev
+            ? `<button class="viewer-browse-arrow" id="viewer-browse-prev" aria-label="Previous game">\u2039</button>`
+            : `<span class="viewer-browse-arrow viewer-browse-disabled">\u2039</span>`;
+        const nextBtn = meta.onNext
+            ? `<button class="viewer-browse-arrow" id="viewer-browse-next" aria-label="Next game">\u203A</button>`
+            : `<span class="viewer-browse-arrow viewer-browse-disabled">\u203A</span>`;
 
         browserNavHtml = `<div class="viewer-browser-nav">
             ${prevBtn}
-            <button class="viewer-browse-back" id="viewer-back-to-browser">${label}</button>
+            <button class="viewer-browse-back" id="viewer-back-to-browser">${roundBoardLabel}</button>
             ${nextBtn}
         </div>`;
     }
 
     let roundBoardHtml = '';
-    if (!meta.browserNav && (round || boardNum)) {
-        const parts = [];
-        if (round) parts.push(`Round ${round}`);
-        if (boardNum) parts.push(`Board ${boardNum}`);
-        roundBoardHtml = `<div class="viewer-round-info">${parts.join(' \u00B7 ')}</div>`;
+    if (!hasNav && roundBoardLabel) {
+        roundBoardHtml = `<div class="viewer-round-info">${roundBoardLabel}</div>`;
     }
 
     // ECO opening name — from server-provided metadata, or just the ECO code from the PGN header
@@ -431,7 +364,7 @@ function renderGameHeader(pgn, meta = {}) {
     // Edit button for community-submitted games
     let editBtnHtml = '';
     if (meta.isSubmission) {
-        editBtnHtml = `<button class="viewer-edit-submission" id="viewer-edit-submission" data-round="${round || ''}" data-board="${boardNum || ''}">Edit Submission</button>`;
+        editBtnHtml = `<button class="viewer-edit-submission" id="viewer-edit-submission" data-game-id="${meta.gameId || ''}">Edit Submission</button>`;
     }
 
     headerEl.innerHTML = `
@@ -470,23 +403,10 @@ export function syncDesktopLayout() {
 }
 
 function renderMoveList() {
-    const container = document.getElementById('viewer-moves');
-    if (!container) return;
-
-    if (isDesktop()) {
-        container.innerHTML = renderMoveTable({ hideComments: commentsHidden });
-    } else {
-        container.innerHTML = renderAnnotatedMoves(getAnnotatedMoves(), 0, false);
-    }
-
-    container.onclick = (e) => {
-        const moveEl = e.target.closest('[data-node-id]');
-        if (moveEl) {
-            stopAutoPlay();
-            updatePlayButton();
-            goToMove(parseInt(moveEl.dataset.nodeId, 10));
-        }
-    };
+    renderMoveListCore({
+        hideComments: commentsHidden,
+        onMoveClick: (nodeId) => { stopAutoPlay(); updatePlayButton(); goToMove(nodeId); },
+    });
 }
 
 

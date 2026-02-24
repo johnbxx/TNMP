@@ -1,5 +1,4 @@
-import { STATE } from './config.js';
-import { getLastRoundNumber } from './state.js';
+import { STATE, getLastRoundNumber } from './config.js';
 import { showState } from './ui.js';
 
 const MOCK_PAIRINGS = {

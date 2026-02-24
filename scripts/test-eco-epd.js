@@ -94,15 +94,10 @@ function getHeader(pgn, tag) {
 async function main() {
     const targetCount = parseInt(process.argv[2] || '50', 10);
 
-    // First fetch all available games via /games endpoint
-    const gamesRes = await fetch(`${WORKER_URL}/games`);
+    // Fetch all available games via /query endpoint
+    const gamesRes = await fetch(`${WORKER_URL}/query?include=pgn&limit=500`);
     const gamesData = await gamesRes.json();
-    const allGames = [];
-    for (const [round, games] of Object.entries(gamesData.rounds)) {
-        for (const game of games) {
-            allGames.push({ round: Number(round), board: game.board });
-        }
-    }
+    const allGames = gamesData.games.map(g => ({ round: g.round, board: g.board }));
 
     // Pick games spread across all rounds
     const step = Math.max(1, Math.floor(allGames.length / targetCount));
@@ -125,13 +120,13 @@ async function main() {
 
     for (const { round, board } of selected) {
         try {
-            const res = await fetch(`${WORKER_URL}/game?round=${round}&board=${board}`);
+            const res = await fetch(`${WORKER_URL}/query?round=${round}&board=${board}&include=pgn&limit=1`);
             if (!res.ok) {
                 results.error.push({ round, board, reason: `HTTP ${res.status}` });
                 continue;
             }
             const data = await res.json();
-            const pgn = data.pgn;
+            const pgn = data.games?.[0]?.pgn;
 
             const white = getHeader(pgn, 'White');
             const black = getHeader(pgn, 'Black');
