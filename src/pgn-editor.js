@@ -8,6 +8,7 @@
  */
 
 import { Chess } from 'chess.js';
+import { WORKER_URL } from './config.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import { serializePgn, NAG_INFO, splitPgn, pgnToGameObject } from './pgn-parser.js';
 import { setGamesData, getGamesData } from './browser-data.js';
