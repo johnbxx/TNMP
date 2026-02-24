@@ -14,7 +14,7 @@ let activeTab = 'overview';
  * @param {string} playerName - Display name (e.g., "John Boyer")
  * @param {object} [opts] - Optional: { uscfId, uscfUrl }
  */
-export async function openPlayerProfile(playerName, opts = {}) {
+export async function openPlayerProfile(playerName) {
     currentPlayer = playerName;
     cachedGames = null;
     activeTab = 'overview';

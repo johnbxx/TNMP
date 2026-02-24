@@ -168,7 +168,6 @@ function parseTokens(tokens, startIdx) {
             if (moves.length > 0 && pendingComment) {
                 moves[moves.length - 1].comment = (moves[moves.length - 1].comment || '') +
                     (moves[moves.length - 1].comment ? ' ' : '') + pendingComment;
-                pendingComment = null;
             }
             return { moves, nextIdx: i + 1 };
         }

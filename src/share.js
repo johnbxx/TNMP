@@ -7,7 +7,7 @@ function getShareText() {
     const state = getCurrentState();
     const pairing = getCurrentPairing();
 
-    let text = '';
+    let text;
     let pairingText = '';
 
     if (pairing && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
