@@ -1746,13 +1746,25 @@ html.off-season .meme {
         gap: 0.2rem;
         padding: 0.35rem 0.4rem;
     }
+    .viewer-toolbar {
+        gap: 0.1rem;
+        padding: 0.2rem;
+    }
+    .viewer-tool-btn {
+        width: 1.75rem;
+        height: 1.75rem;
+        padding: 0.3rem;
+    }
     .viewer-nav-btn {
-        width: 2.2rem;
-        height: 2.2rem;
+        width: 2rem;
+        height: 2rem;
     }
     #viewer-play {
-        width: 2.5rem;
-        height: 2.5rem;
+        width: 2.3rem;
+        height: 2.3rem;
+    }
+    .viewer-toolbar-sep {
+        margin: 0;
     }
     .viewer-round-info {
         font-size: 0.7rem;

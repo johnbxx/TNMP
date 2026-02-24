@@ -584,11 +584,11 @@ async function switchDataSource(value, currentSlug) {
     _sectionList = buildFilteredSectionList();
     _visibleSections = new Set(_sectionList);
 
-    if (roundNums.length === 0 && !isLocal) {
-        if (containerEl) containerEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
-        return;
-    }
     if (containerEl) renderBrowserContent(containerEl, roundNums);
+    if (roundNums.length === 0 && !isLocal) {
+        const gamesEl = containerEl?.querySelector('#browser-games');
+        if (gamesEl) gamesEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
+    }
 }
 
 /**

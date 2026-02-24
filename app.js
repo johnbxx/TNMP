@@ -250,6 +250,7 @@ const ACTIONS = {
 document.addEventListener('click', (e) => {
     const actionBtn = e.target.closest('[data-action]');
     if (actionBtn) {
+        if (actionBtn.hasAttribute('data-hold')) return; // handled by holdToRepeat
         const handler = ACTIONS[actionBtn.dataset.action];
         if (handler) { handler(e); return; }
     }
