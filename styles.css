@@ -1768,6 +1768,24 @@ html.off-season .meme {
     }
 }
 
+/* Mobile: toggle browser panel vs viewer via .browser-only */
+.viewer-browser-panel:not(.hidden) {
+    display: none; /* hidden by default on mobile */
+}
+.modal-content-viewer.browser-only .viewer-browser-panel:not(.hidden) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: 1rem;
+}
+.modal-content-viewer.browser-only .viewer-main {
+    display: none;
+}
+.modal-content-viewer.browser-only .viewer-close {
+    z-index: 2; /* above browser panel */
+}
+
 /* Desktop wide viewer — side-by-side board + moves */
 @media (min-width: 768px) {
     .modal-content-viewer {
@@ -1777,23 +1795,6 @@ html.off-season .meme {
         overflow: hidden;
         display: flex;
         flex-direction: column;
-    }
-    /* Combined browser + viewer layout */
-    .modal-content-viewer.has-browser {
-        flex-direction: row;
-        width: 95vw;
-        padding: 0;
-    }
-    .modal-content-viewer.has-browser .viewer-main {
-        padding: 2rem;
-    }
-    .viewer-browser-panel {
-        flex: 0 0 500px;
-        overflow: hidden;
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-        display: flex;
-        flex-direction: column;
-        padding: 2rem;
     }
     .viewer-browser-panel.hidden { display: none; }
     .viewer-main {
@@ -1848,7 +1849,31 @@ html.off-season .meme {
     }
 }
 
-/* Browser panel inside viewer (desktop combined layout) */
+/* Desktop combined layout: browser + viewer side-by-side */
+@media (min-width: 1000px) {
+    .modal-content-viewer.has-browser {
+        flex-direction: row;
+        width: 95vw;
+        padding: 0;
+    }
+    .modal-content-viewer.has-browser .viewer-main {
+        display: flex; /* override .browser-only hiding */
+        padding: 2rem;
+    }
+    .modal-content-viewer.browser-only .viewer-main {
+        display: flex; /* .browser-only is ignored on desktop */
+    }
+    .viewer-browser-panel:not(.hidden) {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 500px;
+        overflow: hidden;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 2rem;
+    }
+}
+
+/* Browser panel content styling */
 .viewer-browser-panel .browser-content {
     margin-top: 0;
     flex: 1;
@@ -2173,7 +2198,76 @@ html.off-season .meme {
     resize: vertical;
     box-sizing: border-box;
 }
-.editor-import-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; }
+.editor-import-text.drag-over {
+    border-color: var(--accent-color);
+    background: rgba(74, 144, 226, 0.1);
+}
+.editor-file-btn { cursor: pointer; }
+.editor-import-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
+
+/* Header editor popup */
+.editor-header-popup {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.5);
+    z-index: 25;
+}
+.editor-header-popup:not(.hidden) { display: flex; }
+.editor-header-inner {
+    background: rgba(30,30,30,0.97);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    width: min(340px, 90vw);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.editor-header-title {
+    margin: 0 0 0.85rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+}
+.editor-header-fields {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+}
+.editor-header-fields label {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    text-align: right;
+    white-space: nowrap;
+}
+.editor-header-input {
+    width: 100%;
+    min-width: 0;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 5px 8px;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.editor-header-input:focus {
+    border-color: rgba(255,255,255,0.3);
+    outline: none;
+}
+select.editor-header-input {
+    appearance: auto;
+}
+.editor-header-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
 
 /* Editor mobile overrides (when comment input is visible = editor mode) */
 @media (max-width: 767px) {
@@ -2191,15 +2285,7 @@ html.off-season .meme {
 /* Chessboard2 dragged piece: ensure it's visible above modal layers */
 .dragging-4a6c1 { z-index: 10000 !important; }
 
-/* Game Browser Modal */
-.modal-content-browser {
-    max-width: 560px;
-    width: 95%;
-    max-height: 85vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
+/* Game Browser (always inside viewer-browser-panel) */
 
 .browser-content {
     margin-top: 0.5rem;
@@ -2211,8 +2297,16 @@ html.off-season .meme {
 }
 
 .browser-search {
-    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     margin-bottom: 0.6rem;
+}
+
+.browser-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
 }
 
 .browser-search-input {
@@ -2240,7 +2334,7 @@ html.off-season .meme {
 
 .browser-search-clear {
     position: absolute;
-    right: 1.2rem;
+    right: 0.5rem;
     top: 50%;
     transform: translateY(-50%);
     background: none;
@@ -2428,12 +2522,25 @@ html.off-season .meme {
     opacity: 1;
 }
 
-.browser-download-btn {
+.browser-chip-select {
+    padding: 0.25rem 0.4rem;
+    font-size: 0.72rem;
+    font-family: inherit;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    max-width: 100%;
+}
+
+.browser-action-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 1.8rem;
     height: 1.8rem;
+    flex-shrink: 0;
     padding: 0;
     background: none;
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -2442,15 +2549,14 @@ html.off-season .meme {
     cursor: pointer;
     opacity: 0.5;
     transition: opacity var(--transition-fast);
-    margin-left: 0.2rem;
 }
 
-.browser-download-btn svg {
+.browser-action-btn svg {
     width: 14px;
     height: 14px;
 }
 
-.browser-download-btn:hover {
+.browser-action-btn:hover {
     opacity: 0.8;
 }
 
@@ -2482,11 +2588,6 @@ html.off-season .meme {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-
-/* Editor submit button */
-.editor-submit-btn { color: var(--accent) !important; }
-.editor-submit-btn:hover { background: rgba(0, 200, 83, 0.15) !important; }
-.editor-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .browser-games {
     display: flex;
@@ -2636,10 +2737,6 @@ html.off-season .meme {
 }
 
 @media (max-width: 600px) {
-    .modal-content-browser {
-        width: 98%;
-        padding: 1rem;
-    }
     .browser-game-row {
         padding: 0.3rem 0.3rem;
         gap: 0.25rem;

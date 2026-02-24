@@ -232,6 +232,7 @@
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-tool-group">
+                    <button id="viewer-edit" data-action="viewer-edit" class="viewer-tool-btn hidden" aria-label="Edit game" data-tooltip="Edit"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
                     <button data-action="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess" data-tooltip="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
                     <div class="share-btn-wrapper">
                         <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
@@ -255,9 +256,9 @@
                     <div class="viewer-toolbar-sep"></div>
                     <div class="viewer-tool-group">
                         <button data-action="editor-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
+                        <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg></button>
                         <button data-action="editor-import" class="viewer-tool-btn" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>
                         <button id="editor-copy" data-action="editor-copy" class="viewer-tool-btn" aria-label="Copy PGN" data-tooltip="Copy PGN"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
-                        <button id="editor-submit" data-action="editor-submit" class="viewer-tool-btn editor-submit-btn hidden" aria-label="Submit game" data-tooltip="Submit"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
                     </div>
                 </div>
             </div>
@@ -271,12 +272,58 @@
             <div id="editor-import-dialog" class="editor-import-dialog hidden">
                 <div class="editor-import-content">
                     <h3>Import PGN</h3>
-                    <textarea id="editor-import-text" class="editor-import-text" placeholder="Paste PGN text here..." rows="10"></textarea>
+                    <textarea id="editor-import-text" class="editor-import-text" placeholder="Paste PGN text here, or drag a .pgn file..." rows="10"></textarea>
                     <div class="editor-import-actions">
+                        <label class="editor-h-btn editor-h-btn-secondary editor-file-btn">Choose file<input type="file" id="editor-import-file" accept=".pgn,.txt" hidden></label>
+                        <span style="flex:1"></span>
                         <button data-action="editor-import-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
                         <button data-action="editor-import-ok" class="editor-h-btn">Import</button>
                     </div>
                 </div>
+            </div>
+            <div id="editor-header-popup" class="editor-header-popup hidden">
+                <div class="editor-header-inner">
+                    <h3 class="editor-header-title">Game Info</h3>
+                    <div class="editor-header-fields">
+                        <label for="header-white">White</label>
+                        <input type="text" id="header-white" class="editor-header-input" placeholder="First Last">
+                        <label for="header-black">Black</label>
+                        <input type="text" id="header-black" class="editor-header-input" placeholder="First Last">
+                        <label for="header-result">Result</label>
+                        <select id="header-result" class="editor-header-input">
+                            <option value="*">*</option>
+                            <option value="1-0">1-0</option>
+                            <option value="0-1">0-1</option>
+                            <option value="1/2-1/2">1/2-1/2</option>
+                        </select>
+                        <label for="header-date">Date</label>
+                        <input type="text" id="header-date" class="editor-header-input" placeholder="YYYY.MM.DD">
+                        <label for="header-white-elo">White Elo</label>
+                        <input type="text" id="header-white-elo" class="editor-header-input" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
+                        <label for="header-black-elo">Black Elo</label>
+                        <input type="text" id="header-black-elo" class="editor-header-input" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
+                        <label for="header-event">Event</label>
+                        <input type="text" id="header-event" class="editor-header-input" placeholder="Tournament name">
+                        <label for="header-round">Round</label>
+                        <input type="text" id="header-round" class="editor-header-input" placeholder="1 or 1.5">
+                    </div>
+                    <div class="editor-header-actions">
+                        <button type="button" data-action="header-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                        <button type="button" data-action="header-save" class="editor-h-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+            <div id="editor-dirty-dialog" class="editor-import-dialog hidden">
+                <div class="editor-import-content" style="max-width: 400px">
+                    <h3>Unsaved Changes</h3>
+                    <p style="color: var(--text-secondary); margin: 0.5rem 0 1rem">You have unsaved edits. What would you like to do?</p>
+                    <div class="editor-import-actions" style="flex-wrap: wrap">
+                        <button data-action="dirty-copy-leave" class="editor-h-btn">Copy PGN & Leave</button>
+                        <button data-action="dirty-discard" class="editor-h-btn editor-h-btn-secondary">Discard</button>
+                        <button data-action="dirty-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
             </div>
         </div>
         <!-- NAG picker popup (outside modal-content to avoid overflow clipping) -->
@@ -347,15 +394,6 @@
         <div class="modal-content modal-content-wide modal-content-scrollable profile-modal-content">
             <h2 id="profile-modal-title"><span id="profile-player-name"></span></h2>
             <div id="profile-body" class="profile-body"></div>
-        </div>
-    </div>
-
-    <!-- Game Browser Modal -->
-    <div id="browser-modal" class="modal hidden" role="dialog" aria-label="Tournament Games" aria-modal="true">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content modal-content-browser">
-            <h2 id="browser-title">Tournament Games</h2>
-            <div id="browser-content" class="browser-content"></div>
         </div>
     </div>
 

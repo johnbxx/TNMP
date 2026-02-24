@@ -7,11 +7,11 @@ import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/history.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown } from './src/game-viewer.js';
-import { editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, submitGame } from './src/pgn-editor.js';
+import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown, editCurrentGame, dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel } from './src/game-viewer.js';
+import { editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, showHeaderEditor, hideHeaderEditor, saveHeaderEditor } from './src/pgn-editor.js';
 import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
 import { showToast } from './src/toast.js';
-import { openGameBrowser, closeGameBrowser, prefetchGames, openBrowserWithFirstGame, getFilteredGames, getCachedGame, getActiveFilter } from './src/game-browser.js';
+import { prefetchGames, openBrowserWithFirstGame, getFilteredGames, getCachedGame, getActiveFilter } from './src/game-browser.js';
 import { fetchGames } from './src/browser-data.js';
 import { formatName, getHeader } from './src/utils.js';
 
@@ -154,7 +154,6 @@ const wrappedCheckPairings = async function() {
 
 // --- Modal close hooks (cleanup for complex modals) ---
 onModalClose('viewer-modal', closeGamePanel);
-onModalClose('browser-modal', closeGameBrowser);
 
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
@@ -162,14 +161,10 @@ document.addEventListener('keydown', (e) => {
     const aboutModal = document.getElementById('about-modal');
     const privacyModal = document.getElementById('privacy-modal');
     const viewerModal = document.getElementById('viewer-modal');
-    const browserModal = document.getElementById('browser-modal');
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
         handlePanelKeydown(e);
         if (e.key === 'Escape') { closeModal('viewer-modal'); }
-    } else if (!browserModal.classList.contains('hidden')) {
-        trapFocus(e, 'browser-modal');
-        if (e.key === 'Escape') { closeModal('browser-modal'); }
     } else if (!settingsModal.classList.contains('hidden')) {
         trapFocus(e, 'settings-modal');
         if (e.key === 'Enter' && !['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
@@ -199,7 +194,7 @@ const ACTIONS = {
     'disable-push': disablePush,
     'open-games': () => {
         if (window.matchMedia('(min-width: 1000px)').matches) openBrowserWithFirstGame();
-        else openGameBrowser();
+        else openGameViewer();
     },
     // Viewer
     'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
@@ -238,8 +233,12 @@ const ACTIONS = {
     'editor-start': editorGoToStart, 'editor-prev': editorGoToPrev,
     'editor-next': editorGoToNext, 'editor-end': editorGoToEnd,
     'editor-flip': editorFlipBoard, 'editor-import': showImportDialog,
-    'editor-copy': copyPgn, 'editor-submit': submitGame,
+    'editor-copy': copyPgn,
     'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
+    'browser-import': showImportDialog,
+    'viewer-edit': editCurrentGame,
+    'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': hideHeaderEditor,
+    'dirty-copy-leave': dirtyDialogCopyLeave, 'dirty-discard': dirtyDialogDiscard, 'dirty-cancel': dirtyDialogCancel,
     // Share popover
     'share-copy-pgn': () => handleShareAction('copy-pgn'),
     'share-copy-link': () => handleShareAction('copy-link'),

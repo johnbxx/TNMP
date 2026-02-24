@@ -404,7 +404,10 @@ export function initPlayerProfile() {
             const slug = tournamentRow.dataset.slug;
             const player = tournamentRow.dataset.player;
             closePlayerProfile();
-            const { openGameBrowser } = await import('./game-browser.js');
+            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
+                import('./game-browser.js'), import('./game-viewer.js')
+            ]);
+            await openGameViewer();
             openGameBrowser({ player, tournament: slug });
             return;
         }
@@ -421,7 +424,10 @@ export function initPlayerProfile() {
             const query = { player: currentPlayer, tournament: 'all' };
             if (action === 'white' || action === 'black') query.color = action;
             closePlayerProfile();
-            const { openGameBrowser } = await import('./game-browser.js');
+            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
+                import('./game-browser.js'), import('./game-viewer.js')
+            ]);
+            await openGameViewer();
             openGameBrowser(query);
         }
     });

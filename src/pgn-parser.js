@@ -5,6 +5,8 @@
  * Pure parsing logic with no DOM or board dependencies.
  */
 
+import { getHeader } from './utils.js';
+
 // NAG symbols for common codes
 const NAG_SYMBOLS = {
     1: '!', 2: '?', 3: '\u203C', 4: '\u2047', 5: '\u2049', 6: '\u2048',
@@ -264,18 +266,19 @@ export function buildCleanPgn(pgn, mainLineMoves) {
 export function serializePgn(moves, headers = {}, result) {
     const lines = [];
 
-    // Write headers
+    // Write headers (strip double quotes to prevent PGN injection)
+    const sanitize = v => String(v).replace(/"/g, '');
     const headerOrder = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
     const written = new Set();
     for (const key of headerOrder) {
         if (headers[key] != null) {
-            lines.push(`[${key} "${headers[key]}"]`);
+            lines.push(`[${key} "${sanitize(headers[key])}"]`);
             written.add(key);
         }
     }
     for (const [key, value] of Object.entries(headers)) {
         if (!written.has(key) && value != null) {
-            lines.push(`[${key} "${value}"]`);
+            lines.push(`[${key} "${sanitize(value)}"]`);
         }
     }
 
@@ -365,4 +368,82 @@ function wordWrap(text, width) {
     }
     if (line) lines.push(line);
     return lines.join('\n');
+}
+
+/**
+ * Split a multi-game PGN string into individual game strings.
+ * Splits on the PGN spec boundary: blank line(s) followed by a header tag.
+ * Games missing a result token get '*' appended.
+ */
+export function splitPgn(text) {
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const games = normalized.split(/\n\n+(?=\[)/).filter(s => s.trim());
+    return games.map(pgn => {
+        const trimmed = pgn.trim();
+        if (/(?:1-0|0-1|1\/2-1\/2|\*)\s*$/.test(trimmed)) return trimmed;
+        return trimmed + '\n*';
+    });
+}
+
+/**
+ * Convert a single PGN string into a browser-compatible game object.
+ * Generates a local-{index} gameId. Extracts standard headers.
+ */
+export function pgnToGameObject(pgn, index) {
+    const white = getHeader(pgn, 'White') || 'Unknown';
+    const black = getHeader(pgn, 'Black') || 'Unknown';
+    const result = getHeader(pgn, 'Result') || '*';
+    const event = getHeader(pgn, 'Event') || '';
+    const date = getHeader(pgn, 'Date') || '';
+    const roundStr = getHeader(pgn, 'Round') || '';
+    const whiteElo = getHeader(pgn, 'WhiteElo');
+    const blackElo = getHeader(pgn, 'BlackElo');
+    const eco = getHeader(pgn, 'ECO');
+    const openingName = getHeader(pgn, 'Opening') || '';
+    const sectionHeader = getHeader(pgn, 'Section') || '';
+
+    // Parse section from Event header (e.g., "2023 Spring TNM: Open" → section "Open")
+    let eventBase = event;
+    let eventSection = sectionHeader;
+    if (!eventSection && event.includes(': ')) {
+        const colonIdx = event.indexOf(': ');
+        eventBase = event.slice(0, colonIdx);
+        eventSection = event.slice(colonIdx + 2);
+    }
+
+    // Parse round.board format (e.g., "4.18" → round=4, board=18)
+    let round = null;
+    let board = null;
+    if (roundStr.includes('.')) {
+        const parts = roundStr.split('.');
+        round = parseInt(parts[0], 10) || null;
+        board = parseInt(parts[1], 10) || null;
+    } else if (roundStr && roundStr !== '-' && roundStr !== '?') {
+        round = parseInt(roundStr, 10) || null;
+    }
+
+    // Check if movetext has actual moves
+    const moveText = extractMoveText(pgn).trim();
+    const hasMoves = /[KQRBNP]?[a-h]?[1-8]?x?[a-h][1-8]|O-O/.test(moveText);
+
+    return {
+        gameId: `local-${index}`,
+        tournament: eventBase || null,
+        tournamentSlug: null,
+        shortCode: null,
+        round,
+        board: board || index + 1,
+        white,
+        black,
+        whiteElo: whiteElo || null,
+        blackElo: blackElo || null,
+        result,
+        eco: eco || null,
+        openingName: openingName || null,
+        section: eventSection || null,
+        date: date || null,
+        hasPgn: hasMoves,
+        pgn,
+        submission: null,
+    };
 }

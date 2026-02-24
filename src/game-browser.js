@@ -1,8 +1,7 @@
-import { openModal, closeModal } from './modal.js';
 import { openGameViewer, openGameEditor } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
-import { getGamesData, fetchGames, fetchTournamentList, buildPlayerList, buildSectionList, getRoundNumbers, getGamesForRound, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
+import { getGamesData, fetchGames, fetchTournamentList, buildPlayerList, getRoundNumbers, getGamesForRound, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
 import { getTournamentMeta } from './config.js';
 import { openPlayerProfile } from './player-profile.js';
 
@@ -11,19 +10,18 @@ export { prefetchGames, getCachedGame } from './browser-data.js';
 
 // --- Browser-local state (module-private) ---
 let _selectedPlayer = null;
-let _embeddedPanel = false;
 let _selectedRound = null;
 let _playerList = [];
 let _sectionList = [];
 let _visibleSections = new Set();
 let _filterTournament = null; // slug or null (null = all tournaments)
 let _filterColor = null;      // 'white' | 'black' | null
+let _filterEvent = null;      // event name filter for local imports (null = all events)
 
 // --- Exported accessors ---
 
 export function getSelectedPlayer() { return _selectedPlayer; }
 export function setSelectedPlayer(name) { _selectedPlayer = name; }
-export function isEmbeddedBrowser() { return _embeddedPanel; }
 
 export function getActiveFilter() {
     if (_selectedPlayer) {
@@ -43,6 +41,7 @@ export function clearFilter() {
     _selectedPlayer = null;
     _filterTournament = null;
     _filterColor = null;
+    _filterEvent = null;
     _visibleSections = new Set(_sectionList);
 }
 
@@ -59,23 +58,17 @@ function buildCurrentGameList() {
 /**
  * Open a game at a given index in a list, with closure-based prev/next callbacks.
  */
-function openGameAtIndex(gameList, idx, { fromBrowser = true, meta = {} } = {}) {
+function openGameAtIndex(gameList, idx, { meta = {} } = {}) {
     const game = getCachedGame(gameList[idx]);
     if (!game) return;
     const orientation = getOrientationForGame(game);
-    const filter = getActiveFilter();
-    const viewerMeta = { ...meta };
-    if (filter && !_embeddedPanel) {
-        viewerMeta.filterLabel = filter.label;
-    }
     openGameViewer({
         game, orientation,
-        onPrev: idx > 0 ? () => openGameAtIndex(gameList, idx - 1, { fromBrowser, meta }) : null,
-        onNext: idx < gameList.length - 1 ? () => openGameAtIndex(gameList, idx + 1, { fromBrowser, meta }) : null,
-        onClose: fromBrowser && !_embeddedPanel ? () => setTimeout(() => reopenBrowser(), 150) : null,
-        meta: viewerMeta,
+        onPrev: idx > 0 ? () => openGameAtIndex(gameList, idx - 1, { meta }) : null,
+        onNext: idx < gameList.length - 1 ? () => openGameAtIndex(gameList, idx + 1, { meta }) : null,
+        meta,
     });
-    if (_embeddedPanel) highlightActiveGame(gameList[idx]);
+    highlightActiveGame(gameList[idx]);
 }
 
 // --- Helpers ---
@@ -83,7 +76,7 @@ function openGameAtIndex(gameList, idx, { fromBrowser = true, meta = {} } = {}) 
 function ensureBrowserLists() {
     if (_playerList.length === 0) _playerList = buildPlayerList();
     if (_sectionList.length === 0) {
-        _sectionList = buildSectionList();
+        _sectionList = buildFilteredSectionList();
         _visibleSections = new Set(_sectionList);
     }
 }
@@ -93,6 +86,7 @@ function resetBrowserState() {
     _selectedRound = null;
     _filterTournament = null;
     _filterColor = null;
+    _filterEvent = null;
     _playerList = [];
     _sectionList = [];
     _visibleSections = new Set();
@@ -127,7 +121,9 @@ function getVisibleGames() {
             g.white.toLowerCase() === pLower || g.black.toLowerCase() === pLower
         );
         if (_filterTournament) {
-            games = games.filter(g => g.tournamentSlug === _filterTournament);
+            games = games.filter(g =>
+                (g.tournamentSlug || g.tournament) === _filterTournament
+            );
         }
         if (_filterColor) {
             games = games.filter(g =>
@@ -137,8 +133,14 @@ function getVisibleGames() {
             );
         }
     } else {
-        // Tournament mode: filter by selected round + visible sections
-        games = games.filter(g => g.round === _selectedRound);
+        // Filter by event (local imports with multiple events)
+        if (_filterEvent) {
+            games = games.filter(g => g.tournament === _filterEvent);
+        }
+        // Filter by selected round + visible sections
+        if (_selectedRound != null) {
+            games = games.filter(g => g.round === _selectedRound);
+        }
         if (_sectionList.length > 1) {
             games = games.filter(g => !g.section || _visibleSections.has(normalizeSection(g.section)));
         }
@@ -164,6 +166,29 @@ function groupGames(games) {
         return [...byTournament.values()];
     }
 
+    // Local mode: group by round (within event if multiple events)
+    if (getGamesData()?.query?.local) {
+        const multiEvent = new Set(games.map(g => g.tournament).filter(Boolean)).size > 1;
+        const groups = [];
+        const byKey = new Map();
+        for (const g of games) {
+            const event = g.tournament || 'Unknown';
+            const round = g.round;
+            const key = multiEvent
+                ? `${event} — Round ${round || '?'}`
+                : round ? `Round ${round}` : null;
+            if (!key) {
+                // No round info — flat list
+                if (!byKey.has('_flat')) { byKey.set('_flat', []); groups.push({ header: null, games: byKey.get('_flat') }); }
+                byKey.get('_flat').push(g);
+            } else {
+                if (!byKey.has(key)) { byKey.set(key, []); groups.push({ header: key, games: byKey.get(key) }); }
+                byKey.get(key).push(g);
+            }
+        }
+        return groups;
+    }
+
     // Tournament mode: group by section
     const sections = new Map();
     for (const s of _sectionList) sections.set(s, []);
@@ -182,6 +207,40 @@ function groupGames(games) {
     return groups;
 }
 
+/**
+ * Get the event-filtered game list (respects _filterEvent for local imports).
+ */
+function getEventFilteredGames() {
+    let games = getGamesData()?.games || [];
+    if (_filterEvent) games = games.filter(g => g.tournament === _filterEvent);
+    return games;
+}
+
+/**
+ * Build section list from event-filtered games (not the full dataset).
+ */
+function buildFilteredSectionList() {
+    const games = getEventFilteredGames();
+    const sections = new Set();
+    for (const g of games) {
+        if (g.section) sections.add(normalizeSection(g.section));
+    }
+    const order = (s) => {
+        if (/extra/i.test(s)) return 9999;
+        const m = s.match(/^(\d+)/);
+        return m ? -parseInt(m[1], 10) : 0;
+    };
+    return [...sections].sort((a, b) => order(a) - order(b));
+}
+
+/**
+ * Get round numbers, respecting _filterEvent for local imports.
+ */
+function getFilteredRoundNumbers() {
+    const rounds = new Set(getEventFilteredGames().map(g => g.round).filter(r => r != null));
+    return [...rounds].sort((a, b) => a - b);
+}
+
 function getOrientationForGame(game) {
     if (!_selectedPlayer || !game) return 'White';
     if (game.black.toLowerCase() === _selectedPlayer.toLowerCase()) return 'Black';
@@ -191,12 +250,14 @@ function getOrientationForGame(game) {
 // --- Browser open/close ---
 
 /**
- * Open the game browser modal.
+ * Open the game browser panel (always inside #viewer-browser-panel).
  * @param {object} [query] - Optional filter params (e.g. { player, tournament, color }).
  */
 export async function openGameBrowser(query = null) {
-    openModal('browser-modal');
-    const containerEl = document.getElementById('browser-content');
+    const panelEl = document.getElementById('viewer-browser-panel');
+    if (!panelEl) return;
+
+    const isLocal = !!getGamesData()?.query?.local;
 
     // Apply filter state from query (profile drilldown)
     if (query?.player) {
@@ -205,75 +266,82 @@ export async function openGameBrowser(query = null) {
         _filterColor = query.color || null;
     }
 
-    // Fetch data if needed
-    if (_selectedPlayer && !isPlayerDataLoaded(_selectedPlayer)) {
-        containerEl.innerHTML = '<p class="viewer-loading">Loading games...</p>';
-        try {
-            await fetchGames({ player: _selectedPlayer, tournament: 'all', include: 'pgn' });
-        } catch (err) {
-            containerEl.innerHTML = `<p class="viewer-error">Failed to load games: ${err.message}</p>`;
-            return;
-        }
-    } else if (!_selectedPlayer) {
-        // Tournament mode
-        let gamesData = getGamesData();
-        if (!gamesData?.games) {
-            containerEl.innerHTML = '<p class="viewer-loading">Loading games...</p>';
+    // Fetch data if needed (skip for local imports — data already loaded)
+    if (!isLocal) {
+        if (_selectedPlayer && !isPlayerDataLoaded(_selectedPlayer)) {
+            panelEl.innerHTML = '<p class="viewer-loading" style="padding:1rem">Loading games...</p>';
             try {
-                const slug = getActiveTournamentSlug();
-                await fetchGames(
-                    slug ? { tournament: slug, include: 'pgn,submissions' } : { include: 'pgn,submissions' },
-                    { cache: !slug },
-                );
+                await fetchGames({ player: _selectedPlayer, tournament: 'all', include: 'pgn' });
             } catch (err) {
-                containerEl.innerHTML = `<p class="viewer-error">Failed to load games: ${err.message}</p>`;
+                panelEl.innerHTML = `<p class="viewer-error" style="padding:1rem">Failed to load games: ${err.message}</p>`;
                 return;
+            }
+        } else if (!_selectedPlayer) {
+            let gamesData = getGamesData();
+            if (!gamesData?.games) {
+                panelEl.innerHTML = '<p class="viewer-loading" style="padding:1rem">Loading games...</p>';
+                try {
+                    const slug = getActiveTournamentSlug();
+                    await fetchGames(
+                        slug ? { tournament: slug, include: 'pgn,submissions' } : { include: 'pgn,submissions' },
+                        { cache: !slug },
+                    );
+                } catch (err) {
+                    panelEl.innerHTML = `<p class="viewer-error" style="padding:1rem">Failed to load games: ${err.message}</p>`;
+                    return;
+                }
             }
         }
     }
 
-    // Shared render setup
-    const roundNums = getRoundNumbers();
+    const roundNums = getFilteredRoundNumbers();
+
     if (_selectedPlayer) {
-        // Show player name as title instead of tournament dropdown
-        const titleEl = document.getElementById('browser-title-panel') || document.getElementById('browser-title');
-        if (titleEl) {
-            titleEl.textContent = `${_selectedPlayer}'s Games`;
-            fitTextToContainer(titleEl);
-        }
+        panelEl.innerHTML = `<h2 id="browser-title-panel">${_selectedPlayer}'s Games</h2><div class="browser-content"></div>`;
+        fitTextToContainer(document.getElementById('browser-title-panel'));
     } else {
-        if (roundNums.length === 0) {
-            containerEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
+        const tournamentName = getLocalTitle() || getGamesData()?.games?.[0]?.tournament || 'Tournament Games';
+        panelEl.innerHTML = `<h2 id="browser-title-panel">${tournamentName}</h2><div class="browser-content"></div>`;
+
+        if (roundNums.length === 0 && !isLocal) {
+            const containerEl = panelEl.querySelector('.browser-content');
+            renderBrowserContent(containerEl, []);
+            containerEl.querySelector('#browser-games').innerHTML = '<p class="viewer-error">No games available yet.</p>';
             await renderTournamentDropdown();
             return;
         }
-        if (!_selectedRound || !roundNums.includes(_selectedRound)) {
-            _selectedRound = roundNums[roundNums.length - 1];
+        if (isLocal) {
+            // Import mode: default to show all (null = no round filter)
+            if (_selectedRound && !roundNums.includes(_selectedRound)) _selectedRound = null;
+            renderLocalEventDropdown();
+        } else {
+            if (!_selectedRound || !roundNums.includes(_selectedRound)) {
+                _selectedRound = roundNums[roundNums.length - 1];
+            }
+            await renderTournamentDropdown();
         }
         ensureBrowserLists();
-        await renderTournamentDropdown();
     }
-    renderBrowser(containerEl, roundNums);
-}
 
-export function closeGameBrowser() {
-    closeModal('browser-modal');
-}
-
-function hideBrowser() {
-    closeModal('browser-modal');
-}
-
-/**
- * Re-open the browser modal (e.g., when returning from viewer).
- */
-export function reopenBrowser() {
-    openGameBrowser();
+    const containerEl = panelEl.querySelector('.browser-content');
+    renderBrowserContent(containerEl, roundNums);
 }
 
 // --- Editor/submission helpers ---
 
-function openEditorForGame(game) {
+export function openEditorForGame(game) {
+    const isLocal = !!getGamesData()?.query?.local;
+    const orientation = getOrientationForGame(game);
+
+    if (isLocal) {
+        openGameEditor({
+            pgn: game.pgn || '',
+            orientation: orientation.toLowerCase(),
+            gameId: game.gameId,
+        });
+        return;
+    }
+
     const meta = getTournamentMeta();
     const headers = {
         Event: meta.name || 'Tuesday Night Marathon',
@@ -286,82 +354,49 @@ function openEditorForGame(game) {
     };
     if (game.section) headers.Event += `: ${game.section}`;
 
-    const orientation = getOrientationForGame(game);
-    const editorOpts = {
+    openGameEditor({
         headers,
         orientation: orientation.toLowerCase(),
         submitMode: true,
         round: Number(game.round),
         board: Number(game.board),
         gameId: game.gameId,
-    };
-
-    if (isEmbeddedBrowser()) {
-        openGameEditor(editorOpts);
-    } else {
-        hideBrowser();
-        setTimeout(() => openGameEditor(editorOpts), 150);
-    }
+    });
 }
 
 function openViewerWithSubmission(game) {
-    if (!_embeddedPanel) hideBrowser();
     if (game.submission?.pgn) {
         const subGame = { ...game, pgn: game.submission.pgn };
         const orientation = getOrientationForGame(game);
         openGameViewer({
             game: subGame, orientation,
             meta: { isSubmission: true },
-            onClose: !_embeddedPanel ? () => setTimeout(() => reopenBrowser(), 150) : null,
         });
     } else {
         openEditorForGame(game);
     }
 }
 
-// --- Embedded browser panel (desktop) ---
+// --- Browser panel rendering ---
 
+/**
+ * Show the browser panel and render its contents.
+ * Called by game-viewer.js when opening the panel.
+ */
 export async function renderBrowserInPanel() {
     const panelEl = document.getElementById('viewer-browser-panel');
     if (!panelEl) return false;
 
-    _embeddedPanel = true;
     panelEl.classList.remove('hidden');
-
     const modalContent = panelEl.closest('.modal-content-viewer');
     if (modalContent) modalContent.classList.add('has-browser');
 
-    let gamesData = getGamesData();
-    if (!gamesData?.games) {
-        panelEl.innerHTML = '<p class="viewer-loading" style="padding:1rem">Loading games...</p>';
-        try {
-            gamesData = await fetchGames({ include: 'pgn,submissions' }, { cache: true });
-        } catch {
-            panelEl.innerHTML = '<p class="viewer-error" style="padding:1rem">Could not load games.</p>';
-            return false;
-        }
-    }
-
-    const roundNums = getRoundNumbers();
-    if (roundNums.length === 0) return false;
-
-    if (!_selectedRound || !roundNums.includes(_selectedRound)) {
-        _selectedRound = roundNums[roundNums.length - 1];
-    }
-    ensureBrowserLists();
-
-    const tournamentName = gamesData.games[0]?.tournament || 'Tournament Games';
-    panelEl.innerHTML = `<h2 id="browser-title-panel">${tournamentName}</h2><div class="browser-content"></div>`;
-    await renderTournamentDropdown();
-    const containerEl = panelEl.querySelector('.browser-content');
-    renderBrowser(containerEl, roundNums);
+    await openGameBrowser();
     return true;
 }
 
 export function highlightActiveGame(gameId) {
-    const panelEl = _embeddedPanel
-        ? document.getElementById('viewer-browser-panel')
-        : document.getElementById('browser-content');
+    const panelEl = document.getElementById('viewer-browser-panel');
     if (!panelEl || !gameId) return;
     panelEl.querySelectorAll('.browser-game-row').forEach(row => {
         row.classList.toggle('active', row.dataset.gameId === gameId);
@@ -369,7 +404,6 @@ export function highlightActiveGame(gameId) {
 }
 
 export function hideBrowserPanel() {
-    _embeddedPanel = false;
     const panelEl = document.getElementById('viewer-browser-panel');
     if (panelEl) {
         panelEl.classList.add('hidden');
@@ -377,6 +411,13 @@ export function hideBrowserPanel() {
     }
     const modalContent = document.querySelector('.modal-content-viewer');
     if (modalContent) modalContent.classList.remove('has-browser');
+
+    // If we were viewing local imports, clear that data so the next open
+    // doesn't think we're still in local mode
+    if (getGamesData()?.query?.local) {
+        clearGamesData();
+    }
+    resetBrowserState();
 }
 
 // --- Game opening from browser ---
@@ -385,12 +426,7 @@ function openGameFromBrowser(gameId) {
     const gameList = buildCurrentGameList();
     const idx = gameList.indexOf(gameId);
     if (idx === -1) return;
-    if (_embeddedPanel) {
-        openGameAtIndex(gameList, idx);
-    } else {
-        hideBrowser();
-        setTimeout(() => openGameAtIndex(gameList, idx), 150);
-    }
+    openGameAtIndex(gameList, idx);
 }
 
 /**
@@ -412,8 +448,8 @@ export function openBrowserWithCurrentFilter() {
 
 /**
  * Open the browser, auto-selecting the first game with PGN from the latest round.
- * Desktop: opens the viewer directly (embedded panel renders the browser inside).
- * Mobile: opens the browser modal.
+ * Opens directly into the viewer with browser panel alongside.
+ * Falls back to browser-only view if no games with PGN are found.
  */
 export async function openBrowserWithFirstGame() {
     let gamesData = getGamesData();
@@ -421,11 +457,11 @@ export async function openBrowserWithFirstGame() {
         try {
             gamesData = await fetchGames({ include: 'pgn,submissions' }, { cache: true });
         } catch {
-            return openGameBrowser();
+            return openGameViewer();
         }
     }
     const roundNums = getRoundNumbers();
-    if (roundNums.length === 0) return openGameBrowser();
+    if (roundNums.length === 0) return openGameViewer();
 
     // Find the latest round with at least one game with PGN
     let targetRound = null;
@@ -440,7 +476,7 @@ export async function openBrowserWithFirstGame() {
             break;
         }
     }
-    if (!first) return openGameBrowser();
+    if (!first) return openGameViewer();
 
     _selectedRound = targetRound;
     ensureBrowserLists();
@@ -451,10 +487,55 @@ export async function openBrowserWithFirstGame() {
     }
 }
 
-// --- Tournament Dropdown ---
+// --- Event/Tournament Dropdowns ---
+
+function renderLocalEventDropdown() {
+    const titleEl = document.getElementById('browser-title-panel');
+    if (!titleEl) return;
+
+    const games = getGamesData()?.games || [];
+    const events = [...new Set(games.map(g => g.tournament).filter(Boolean))];
+    if (events.length <= 1) return; // No dropdown needed for 0 or 1 events
+
+    const select = document.createElement('select');
+    select.id = 'browser-title-select';
+    select.className = 'browser-title-select';
+
+    // "All" option
+    const allOpt = document.createElement('option');
+    allOpt.value = '';
+    allOpt.textContent = `All Events (${games.length} games)`;
+    if (!_filterEvent) allOpt.selected = true;
+    select.appendChild(allOpt);
+
+    for (const event of events) {
+        const opt = document.createElement('option');
+        opt.value = event;
+        opt.textContent = event;
+        if (_filterEvent === event) opt.selected = true;
+        select.appendChild(opt);
+    }
+
+    titleEl.textContent = '';
+    titleEl.appendChild(select);
+    select.addEventListener('change', () => switchEvent(select.value || null));
+}
+
+function switchEvent(event) {
+    _filterEvent = event;
+    _selectedRound = null;
+    _playerList = buildPlayerList(); // Rebuild from full dataset (filtering is in getVisibleGames)
+    _sectionList = buildFilteredSectionList();
+    _visibleSections = new Set(_sectionList);
+
+    const roundNums = getFilteredRoundNumbers();
+    const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
+    if (containerEl) renderBrowserContent(containerEl, roundNums);
+}
+
 
 async function renderTournamentDropdown() {
-    const titleEl = document.getElementById('browser-title-panel') || document.getElementById('browser-title');
+    const titleEl = document.getElementById('browser-title-panel');
     if (!titleEl) return;
 
     const gamesData = getGamesData();
@@ -494,8 +575,7 @@ async function switchTournament(slug, currentSlug) {
     clearGamesData();
     resetBrowserState();
 
-    const containerEl = document.querySelector('#viewer-browser-panel .browser-content')
-        || document.getElementById('browser-content');
+    const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
     if (containerEl) containerEl.innerHTML = '<p class="viewer-loading">Loading games...</p>';
 
     try {
@@ -510,7 +590,7 @@ async function switchTournament(slug, currentSlug) {
 
         _selectedRound = roundNums[roundNums.length - 1];
         _playerList = buildPlayerList();
-        _sectionList = buildSectionList();
+        _sectionList = buildFilteredSectionList();
         _visibleSections = new Set(_sectionList);
 
         // Preserve player filter if the player exists in the new tournament
@@ -518,42 +598,61 @@ async function switchTournament(slug, currentSlug) {
             _selectedPlayer = previousPlayer;
         }
 
-        if (containerEl) renderBrowser(containerEl, roundNums);
+        if (containerEl) renderBrowserContent(containerEl, roundNums);
     } catch (err) {
         if (containerEl) containerEl.innerHTML = `<p class="viewer-error">Failed to load games: ${err.message}</p>`;
     }
 }
 
+/**
+ * Compute a display title for locally imported games.
+ * Returns null if not in local mode.
+ */
+function getLocalTitle() {
+    const data = getGamesData();
+    if (!data?.query?.local) return null;
+    const games = data.games || [];
+    const events = new Set(games.map(g => g.tournament).filter(Boolean));
+    if (events.size === 1) return [...events][0];
+    return `Imported Games (${games.length})`;
+}
+
 // --- Browser rendering ---
 
-function renderBrowser(containerEl, roundNumbers) {
-    const embedded = _embeddedPanel;
+function renderBrowserContent(containerEl, roundNumbers) {
     const playerMode = !!_selectedPlayer;
+
+    const importBtn = '<button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>';
+    const downloadBtn = '<button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>';
 
     const searchHtml = `
         <div class="browser-search" id="browser-search">
-            <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false">
-            <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
-            <div id="browser-autocomplete" class="browser-autocomplete hidden"></div>
+            <div class="browser-search-wrap">
+                <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false">
+                <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
+                <div id="browser-autocomplete" class="browser-autocomplete hidden"></div>
+            </div>
+            ${importBtn}${downloadBtn}
         </div>`;
 
     // Chips container (populated by renderChips when player is selected)
     const chipsHtml = '<div class="browser-chips hidden" id="browser-chips"></div>';
 
-    // Round tabs (only in tournament mode)
+    // Round tabs (hide in player mode; hide in local "All Events" mode — rounds aren't comparable across events)
+    const isLocal = !!getGamesData()?.query?.local;
+    const showRounds = !playerMode && roundNumbers.length > 0 && (!isLocal || _filterEvent);
     let tabsHtml = '';
-    if (!playerMode) {
+    if (showRounds) {
         tabsHtml = '<div class="browser-rounds" id="browser-rounds">';
         for (const r of roundNumbers) {
             const active = r === _selectedRound ? ' browser-round-active' : '';
-            const label = embedded ? `R${r}` : `Round ${r}`;
+            const label = `R${r}`;
             tabsHtml += `<button class="browser-round-btn${active}" data-round="${r}">${label}</button>`;
         }
         tabsHtml += '</div>';
     }
 
     // Section filters (only in tournament mode with multiple sections)
-    const downloadBtn = '<button type="button" id="browser-export" class="browser-download-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>';
     let sectionsHtml = '';
     if (!playerMode && _sectionList.length > 1) {
         sectionsHtml = '<div class="browser-sections" id="browser-sections">';
@@ -561,7 +660,6 @@ function renderBrowser(containerEl, roundNumbers) {
             const active = _visibleSections.has(s) ? ' browser-section-active' : '';
             sectionsHtml += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
         }
-        sectionsHtml += downloadBtn;
         sectionsHtml += '</div>';
     }
 
@@ -603,7 +701,7 @@ function renderBrowser(containerEl, roundNumbers) {
                 `<button type="button" class="browser-ac-item" data-player="${name}">${highlightMatch(name, query)}</button>`
             ).join('');
             const exactMatch = matches.find(n => n.toLowerCase() === query);
-            if (matches.length === 1 || exactMatch) {
+            if (!getGamesData()?.query?.local && (matches.length === 1 || exactMatch)) {
                 const profileName = exactMatch || matches[0];
                 autocomplete.insertAdjacentHTML('afterbegin',
                     `<button type="button" class="browser-ac-item browser-ac-profile" data-profile="${profileName}">View <strong>${profileName}</strong> profile</button>`
@@ -691,9 +789,11 @@ function renderBrowser(containerEl, roundNumbers) {
             const roundBtn = e.target.closest('.browser-round-btn[data-round]');
             if (roundBtn) {
                 const r = parseInt(roundBtn.dataset.round, 10);
-                _selectedRound = r;
+                const isLocal = !!getGamesData()?.query?.local;
+                // Import mode: toggle (click again to deselect). TNM mode: always select.
+                _selectedRound = (isLocal && _selectedRound === r) ? null : r;
                 containerEl.querySelectorAll('.browser-round-btn').forEach(b =>
-                    b.classList.toggle('browser-round-active', parseInt(b.dataset.round) === r)
+                    b.classList.toggle('browser-round-active', parseInt(b.dataset.round) === _selectedRound)
                 );
                 renderGamesList();
                 return;
@@ -752,36 +852,52 @@ async function clearPlayerMode() {
     _filterTournament = null;
     _filterColor = null;
 
-    // Reload tournament data
-    clearGamesData();
-    const slug = getActiveTournamentSlug();
-    try {
-        await fetchGames(
-            slug ? { tournament: slug, include: 'pgn,submissions' } : { include: 'pgn,submissions' },
-            { cache: !slug },
-        );
-    } catch { /* ignore */ }
+    const isLocal = !!getGamesData()?.query?.local;
 
-    const roundNums = getRoundNumbers();
-    if (!_selectedRound || !roundNums.includes(_selectedRound)) {
+    // Reload tournament data (skip for local imports — data already loaded)
+    if (!isLocal) {
+        clearGamesData();
+        const slug = getActiveTournamentSlug();
+        try {
+            await fetchGames(
+                slug ? { tournament: slug, include: 'pgn,submissions' } : { include: 'pgn,submissions' },
+                { cache: !slug },
+            );
+        } catch { /* ignore */ }
+    }
+
+    const roundNums = getFilteredRoundNumbers();
+    if (isLocal) {
+        _selectedRound = null;
+    } else if (!_selectedRound || !roundNums.includes(_selectedRound)) {
         _selectedRound = roundNums[roundNums.length - 1];
     }
     _playerList = buildPlayerList();
-    _sectionList = buildSectionList();
+    _sectionList = buildFilteredSectionList();
     _visibleSections = new Set(_sectionList);
 
-    // Re-render the full browser in-place
-    const containerEl = document.querySelector('#viewer-browser-panel .browser-content')
-        || document.getElementById('browser-content');
-    if (containerEl) {
-        await renderTournamentDropdown();
-        renderBrowser(containerEl, roundNums);
+    // Restore title and dropdown
+    const titleEl = document.getElementById('browser-title-panel');
+    if (titleEl) {
+        const title = getLocalTitle() || getGamesData()?.games?.[0]?.tournament || 'Tournament Games';
+        titleEl.textContent = title;
+        fitTextToContainer(titleEl);
     }
+    if (isLocal) {
+        renderLocalEventDropdown();
+    } else {
+        await renderTournamentDropdown();
+    }
+
+    // Re-render
+    const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
+    if (containerEl) renderBrowserContent(containerEl, roundNums);
 }
 
 async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
+    const isLocal = !!getGamesData()?.query?.local;
     _selectedPlayer = name;
-    _filterTournament = getCurrentTournamentSlug();
+    _filterTournament = isLocal ? null : getCurrentTournamentSlug();
     _filterColor = null;
     searchInput.value = name;
     searchInput.blur();
@@ -791,14 +907,14 @@ async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
     document.getElementById('browser-sections')?.classList.add('hidden');
 
     // Replace tournament dropdown with player name
-    const titleEl = document.getElementById('browser-title-panel') || document.getElementById('browser-title');
+    const titleEl = document.getElementById('browser-title-panel');
     if (titleEl) {
         titleEl.textContent = `${name}'s Games`;
         fitTextToContainer(titleEl);
     }
 
-    // Fetch all-tournament data for this player
-    if (!isPlayerDataLoaded(name)) {
+    // Fetch all-tournament data for this player (skip for local imports)
+    if (!isLocal && !isPlayerDataLoaded(name)) {
         const gamesEl = document.getElementById('browser-games');
         if (gamesEl) gamesEl.innerHTML = '<p class="viewer-loading">Loading...</p>';
         await fetchGames({ player: name, tournament: 'all', include: 'pgn' });
@@ -809,31 +925,64 @@ async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
 }
 
 /**
- * Render or update filter chips (tournament, color) when a player is selected.
+ * Render or update filter chips (tournament/event dropdown + color) when a player is selected.
  */
 function renderChips() {
     const container = document.getElementById('browser-chips');
-    if (!container) return;
-    if (!_selectedPlayer) {
-        container.classList.add('hidden');
+    if (!container || !_selectedPlayer) {
+        if (container) container.classList.add('hidden');
         return;
     }
     container.classList.remove('hidden');
 
-    // Get tournament name for the chip label
-    const slug = getCurrentTournamentSlug();
-    let tournamentName = slug;
     const data = getGamesData();
-    if (slug && data?.games) {
-        const match = data.games.find(g => g.tournamentSlug === slug);
-        if (match) tournamentName = match.tournament;
+    const isLocal = !!data?.query?.local;
+    const pLower = _selectedPlayer.toLowerCase();
+    const playerGames = (data?.games || []).filter(g =>
+        g.white.toLowerCase() === pLower || g.black.toLowerCase() === pLower
+    );
+
+    // Build event/tournament options from the player's games
+    let eventDropdown = '';
+    if (isLocal) {
+        const events = [...new Set(playerGames.map(g => g.tournament).filter(Boolean))];
+        if (events.length > 1) {
+            const options = events.map(e =>
+                `<option value="${e}"${_filterTournament === e ? ' selected' : ''}>${e}</option>`
+            ).join('');
+            eventDropdown = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">All Events</option>${options}</select>`;
+        }
+    } else {
+        const tournaments = new Map();
+        for (const g of playerGames) {
+            const key = g.tournamentSlug || g.tournament;
+            if (key && !tournaments.has(key)) tournaments.set(key, g.tournament || key);
+        }
+        if (tournaments.size > 1) {
+            const options = [...tournaments].map(([slug, name]) =>
+                `<option value="${slug}"${_filterTournament === slug ? ' selected' : ''}>${name}</option>`
+            ).join('');
+            eventDropdown = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">All Tournaments</option>${options}</select>`;
+        } else if (tournaments.size === 1) {
+            const [slug, name] = [...tournaments][0];
+            eventDropdown = `<button type="button" class="browser-section-btn${_filterTournament ? ' browser-section-active' : ''}" data-chip="tournament" data-value="${slug}">${name}</button>`;
+        }
     }
 
     container.innerHTML = `
-        ${slug ? `<button type="button" class="browser-section-btn${_filterTournament ? ' browser-section-active' : ''}" data-chip="tournament" data-value="${slug}">${tournamentName}</button>` : ''}
+        ${eventDropdown}
         <button type="button" class="browser-section-btn${_filterColor === 'white' ? ' browser-section-active' : ''}" data-chip="color" data-value="white">White</button>
         <button type="button" class="browser-section-btn${_filterColor === 'black' ? ' browser-section-active' : ''}" data-chip="color" data-value="black">Black</button>
     `;
+
+    // Wire dropdown change
+    const select = container.querySelector('[data-chip="tournament-select"]');
+    if (select) {
+        select.addEventListener('change', () => {
+            _filterTournament = select.value || null;
+            renderGamesList();
+        });
+    }
 }
 
 function highlightMatch(name, query) {
@@ -860,8 +1009,8 @@ function renderGamesList() {
 
     let html = '';
 
-    // Profile link when viewing a player across all tournaments
-    if (_selectedPlayer && !_filterTournament) {
+    // Profile link when viewing a player across all tournaments (not for local imports)
+    if (_selectedPlayer && !_filterTournament && !getGamesData()?.query?.local) {
         html += `<button type="button" class="browser-profile-link" id="browser-profile-btn" data-profile-player="${_selectedPlayer}">View all-time profile</button>`;
     }
 

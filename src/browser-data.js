@@ -23,6 +23,15 @@ export function getActiveTournamentSlug() { return activeTournamentSlug; }
 export function setActiveTournamentSlug(slug) { activeTournamentSlug = slug; }
 export function clearGamesData() { gamesData = null; }
 
+/**
+ * Directly inject game data (e.g., from PGN import), bypassing fetchGames().
+ * Bumps fetchGeneration so any in-flight fetches won't overwrite this data.
+ */
+export function setGamesData(data) {
+    fetchGeneration++;
+    gamesData = data;
+}
+
 // --- Fetching ---
 
 /**

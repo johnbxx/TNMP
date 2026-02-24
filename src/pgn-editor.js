@@ -9,11 +9,10 @@
 
 import { Chess } from 'chess.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
-import { serializePgn, NAG_INFO } from './pgn-parser.js';
-import { WORKER_URL, CONFIG } from './config.js';
-import { showToast } from './toast.js';
-import { refreshGamesData } from './browser-data.js';
-import { closeGamePanel } from './game-viewer.js';
+import { serializePgn, NAG_INFO, splitPgn, pgnToGameObject } from './pgn-parser.js';
+import { setGamesData, getGamesData } from './browser-data.js';
+import { openImportedGames } from './game-viewer.js';
+import { openGameBrowser, highlightActiveGame } from './game-browser.js';
 import {
     getNodes, setNodes, getCurrentNodeId, setCurrentNodeId,
     setAnnotatedMoves,
@@ -35,7 +34,7 @@ const EDITOR_BTNS = { start: 'editor-start', prev: 'editor-prev', next: 'editor-
 let headers = {};         // PGN headers
 let undoStack = [];       // For undo: snapshots of {nodes, currentNodeId, headers}
 let orientation = 'white';
-let submitContext = null; // { round, board } when in submit mode
+let editorGameId = null;  // gameId of the game being edited (for cache updates)
 
 const UNDO_LIMIT = 50;
 
@@ -107,11 +106,7 @@ export function openEditor(options = {}) {
     orientation = options.orientation || 'white';
     headers = options.headers || {};
     undoStack = [];
-    submitContext = options.submitMode ? { round: options.round, board: options.board } : null;
-
-    // Show/hide submit button
-    const submitBtn = document.getElementById('editor-submit');
-    if (submitBtn) submitBtn.classList.toggle('hidden', !submitContext);
+    editorGameId = options.gameId || null;
 
     if (options.pgn) {
         importPgnIntoEditor(options.pgn);
@@ -154,38 +149,6 @@ export function closeEditor() {
 function getEditorPgn() {
     const moves = treeToMoveList(getNodes(), 0);
     return serializePgn(moves, headers);
-}
-
-export async function submitGame() {
-    if (!submitContext) return;
-    const pgn = getEditorPgn();
-    const submitBtn = document.getElementById('editor-submit');
-    try {
-        if (submitBtn) { submitBtn.disabled = true; submitBtn.setAttribute('data-tooltip', 'Submitting...'); }
-        const response = await fetch(`${WORKER_URL}/submit-game`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                pgn,
-                round: submitContext.round,
-                board: submitContext.board,
-                submittedBy: CONFIG.playerName || null,
-            }),
-        });
-        const data = await response.json();
-        if (response.ok && data.success) {
-            showToast('Game submitted for review!');
-            destroyEditor();
-            closeGamePanel();
-            refreshGamesData();
-        } else {
-            showToast(data.error || 'Submission failed');
-        }
-    } catch (err) {
-        showToast('Network error: ' + err.message);
-    } finally {
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.setAttribute('data-tooltip', 'Submit'); }
-    }
 }
 
 // --- Board Setup (adds draggable on top of shared board element) ---
@@ -923,15 +886,57 @@ function setupNagPickerDismiss() {
                 hideContextMenu();
             }
         }
+
+        // Header popup: close if click is on the backdrop (not the inner content)
+        const headerPopup = document.getElementById('editor-header-popup');
+        if (headerPopup && !headerPopup.classList.contains('hidden')) {
+            if (e.target === headerPopup) hideHeaderEditor();
+        }
     });
 }
 
 // --- Import/Export ---
 
+let _importWired = false;
+
+function wireImportDialog() {
+    if (_importWired) return;
+    _importWired = true;
+
+    const textarea = document.getElementById('editor-import-text');
+    const fileInput = document.getElementById('editor-import-file');
+
+    // File input → populate textarea
+    fileInput?.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        file.text().then(text => { textarea.value = text; });
+        fileInput.value = ''; // reset so same file can be re-selected
+    });
+
+    // Drag-and-drop on textarea
+    textarea?.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        textarea.classList.add('drag-over');
+    });
+    textarea?.addEventListener('dragleave', () => {
+        textarea.classList.remove('drag-over');
+    });
+    textarea?.addEventListener('drop', (e) => {
+        e.preventDefault();
+        textarea.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            file.text().then(text => { textarea.value = text; });
+        }
+    });
+}
+
 export function showImportDialog() {
     const dialog = document.getElementById('editor-import-dialog');
     const textarea = document.getElementById('editor-import-text');
     if (!dialog || !textarea) return;
+    wireImportDialog();
     textarea.value = '';
     dialog.classList.remove('hidden');
     textarea.focus();
@@ -945,18 +950,19 @@ export function hideImportDialog() {
 export function doImport() {
     const textarea = document.getElementById('editor-import-text');
     if (!textarea) return;
-    const pgn = textarea.value.trim();
-    if (!pgn) return;
-    pushUndo();
-    importPgnIntoEditor(pgn);
-    hideImportDialog();
-    const board = getBoard();
-    if (board) board.position(getNodes()[getCurrentNodeId()].fen, false);
-    renderMoveList();
-    updateCommentBox();
+    const text = textarea.value.trim();
+    if (!text) return;
 
-    updateNavigationButtons(EDITOR_BTNS);
-    syncDesktopLayout();
+    const pgnStrings = splitPgn(text);
+    if (pgnStrings.length === 0) return;
+
+    const games = pgnStrings.map((pgn, i) => pgnToGameObject(pgn, i));
+
+    hideImportDialog();
+
+    // Inject into browser-data and open viewer+browser
+    setGamesData({ games, query: { local: true } });
+    openImportedGames(games);
 }
 
 function importPgnIntoEditor(pgn) {
@@ -989,6 +995,113 @@ export async function copyPgn() {
         btn.setAttribute('data-tooltip', 'Copied!');
         setTimeout(() => btn.setAttribute('data-tooltip', prev || 'Copy PGN'), 1500);
     }
+}
+
+// --- Header Editor ---
+
+/**
+ * Display "Last, First" as "First Last" for editing; pass through other formats.
+ */
+function nameForDisplay(name) {
+    if (!name || name === '?') return '';
+    const m = name.match(/^([^,]+),\s*(.+)$/);
+    return m ? `${m[2]} ${m[1]}` : name;
+}
+
+/**
+ * Convert "First Last" → "Last, First" for PGN storage.
+ * If already "Last, First" format (has comma), keep as-is.
+ */
+function nameForPgn(name) {
+    if (!name) return '?';
+    if (name.includes(',')) return name; // already PGN format
+    const parts = name.trim().split(/\s+/);
+    if (parts.length < 2) return name;
+    const last = parts.pop();
+    return `${last}, ${parts.join(' ')}`;
+}
+
+/**
+ * Normalize date to PGN format (YYYY.MM.DD).
+ * Accepts YYYY-MM-DD, YYYY/MM/DD, MM/DD/YYYY, DD.MM.YYYY, etc.
+ */
+function normalizeDate(raw) {
+    if (!raw) return '';
+    // Already PGN format
+    if (/^\d{4}\.\d{2}\.\d{2}$/.test(raw)) return raw;
+    // YYYY-MM-DD or YYYY/MM/DD
+    const isoMatch = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (isoMatch) return `${isoMatch[1]}.${isoMatch[2].padStart(2, '0')}.${isoMatch[3].padStart(2, '0')}`;
+    // MM/DD/YYYY or M/D/YYYY
+    const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (usMatch) return `${usMatch[3]}.${usMatch[1].padStart(2, '0')}.${usMatch[2].padStart(2, '0')}`;
+    return raw; // can't parse, keep as-is
+}
+
+export function showHeaderEditor() {
+    const popup = document.getElementById('editor-header-popup');
+    if (!popup) return;
+
+    document.getElementById('header-white').value = nameForDisplay(headers.White);
+    document.getElementById('header-black').value = nameForDisplay(headers.Black);
+    document.getElementById('header-result').value = headers.Result || '*';
+    document.getElementById('header-date').value = headers.Date || new Date().toISOString().split('T')[0].replace(/-/g, '.');
+    document.getElementById('header-white-elo').value = headers.WhiteElo || '';
+    document.getElementById('header-black-elo').value = headers.BlackElo || '';
+    document.getElementById('header-event').value = headers.Event || '';
+    document.getElementById('header-round').value = headers.Round || '';
+
+    popup.classList.remove('hidden');
+    document.getElementById('header-white').focus();
+}
+
+export function hideHeaderEditor() {
+    const popup = document.getElementById('editor-header-popup');
+    if (popup) popup.classList.add('hidden');
+}
+
+export function saveHeaderEditor() {
+    pushUndo();
+
+    headers.White = nameForPgn(document.getElementById('header-white').value.trim()) || '?';
+    headers.Black = nameForPgn(document.getElementById('header-black').value.trim()) || '?';
+    headers.Result = document.getElementById('header-result').value;
+
+    const date = normalizeDate(document.getElementById('header-date').value.trim());
+    const whiteElo = document.getElementById('header-white-elo').value.replace(/\D/g, '');
+    const blackElo = document.getElementById('header-black-elo').value.replace(/\D/g, '');
+    const event = document.getElementById('header-event').value.trim();
+    const round = document.getElementById('header-round').value.trim();
+
+    if (date) headers.Date = date; else delete headers.Date;
+    if (whiteElo) headers.WhiteElo = whiteElo; else delete headers.WhiteElo;
+    if (blackElo) headers.BlackElo = blackElo; else delete headers.BlackElo;
+    if (event) headers.Event = event; else delete headers.Event;
+    if (round) headers.Round = round; else delete headers.Round;
+
+    // Sync changes to cached game object and re-render browser
+    if (editorGameId) {
+        const game = getGamesData()?.games?.find(g => g.gameId === editorGameId);
+        if (game) {
+            game.white = nameForDisplay(headers.White);
+            game.black = nameForDisplay(headers.Black);
+            game.result = headers.Result || '*';
+            game.whiteElo = headers.WhiteElo || null;
+            game.blackElo = headers.BlackElo || null;
+            game.date = headers.Date || null;
+            game.tournament = headers.Event || game.tournament;
+        }
+        openGameBrowser();
+        highlightActiveGame(editorGameId);
+    }
+
+    hideHeaderEditor();
+}
+
+// --- Dirty Check ---
+
+export function isEditorDirty() {
+    return undoStack.length > 0;
 }
 
 // Close handler is now managed by game-viewer.js closeGamePanel()

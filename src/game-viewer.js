@@ -1,8 +1,8 @@
 import { openModal, closeModal } from './modal.js';
-import { initViewer, destroyViewer, syncDesktopLayout, getGamePgn, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
-import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere } from './pgn-editor.js';
+import { initViewer, destroyViewer, syncDesktopLayout, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
+import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, isEditorDirty, copyPgn } from './pgn-editor.js';
 import { loadRoundHistory } from './history.js';
-import { isEmbeddedBrowser, renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, clearFilter, getCachedGame } from './game-browser.js';
+import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, clearFilter, getCachedGame, openEditorForGame } from './game-browser.js';
 
 const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
 
@@ -11,6 +11,41 @@ let _onPrev = null;
 let _onNext = null;
 let _onClose = null;
 
+// --- Dirty editor warning ---
+let _pendingAction = null;
+
+function checkDirtyAndProceed(action) {
+    if (panelMode === 'editor' && isEditorDirty()) {
+        _pendingAction = action;
+        document.getElementById('editor-dirty-dialog')?.classList.remove('hidden');
+        return false;
+    }
+    action();
+    return true;
+}
+
+function hideDirtyDialog() {
+    document.getElementById('editor-dirty-dialog')?.classList.add('hidden');
+}
+
+export function dirtyDialogCopyLeave() {
+    copyPgn();
+    hideDirtyDialog();
+    _pendingAction?.();
+    _pendingAction = null;
+}
+
+export function dirtyDialogDiscard() {
+    hideDirtyDialog();
+    _pendingAction?.();
+    _pendingAction = null;
+}
+
+export function dirtyDialogCancel() {
+    hideDirtyDialog();
+    _pendingAction = null;
+}
+
 // --- Viewer header delegation (wired once) ---
 let _viewerHeaderWired = false;
 function wireViewerHeader() {
@@ -18,7 +53,7 @@ function wireViewerHeader() {
     _viewerHeaderWired = true;
     document.getElementById('viewer-header').addEventListener('click', (e) => {
         if (e.target.closest('#viewer-filter-link') || e.target.closest('#viewer-back-to-browser')) {
-            openBrowserWithCurrentFilter(); return;
+            showBrowser(); return;
         }
         if (e.target.closest('#viewer-filter-clear')) {
             clearFilter();
@@ -29,12 +64,7 @@ function wireViewerHeader() {
         const editBtn = e.target.closest('#viewer-edit-submission');
         if (editBtn) {
             const game = getCachedGame(editBtn.dataset.gameId);
-            switchToEditor({
-                pgn: getGamePgn(), orientation: 'white', submitMode: true,
-                round: game ? Number(game.round) : undefined,
-                board: game ? Number(game.board) : undefined,
-            });
-            return;
+            if (game) { openEditorForGame(game); return; }
         }
         if (e.target.closest('#viewer-browse-prev')) { _onPrev?.(); return; }
         if (e.target.closest('#viewer-browse-next')) { _onNext?.(); return; }
@@ -66,14 +96,69 @@ function setMode(mode) {
     }
 }
 
-// Sync embedded browser panel with window width
+/**
+ * On mobile, show the browser panel and hide the viewer.
+ * On desktop, this is a no-op (both are always visible).
+ */
+function showBrowser() {
+    const modal = document.querySelector('.modal-content-viewer');
+    if (modal) modal.classList.add('browser-only');
+    openBrowserWithCurrentFilter();
+}
+
+/**
+ * On mobile, show the viewer and hide the browser panel.
+ * On desktop, this is a no-op (both are always visible).
+ */
+function showViewer() {
+    const modal = document.querySelector('.modal-content-viewer');
+    if (modal) modal.classList.remove('browser-only');
+}
+
+/**
+ * Open the viewer+browser with imported local games.
+ * Opens the first game and sets up prev/next navigation.
+ */
+export async function openImportedGames(games) {
+    if (!games || games.length === 0) return;
+    const first = games[0];
+    const gameList = games.map(g => g.gameId);
+    await openGameViewer({
+        game: first,
+        orientation: 'White',
+        onPrev: null,
+        onNext: gameList.length > 1 ? () => openLocalGameAtIndex(games, gameList, 1) : null,
+        meta: { isLocal: true },
+    });
+    // Re-render browser panel with local games data
+    await openGameBrowser();
+    highlightActiveGame(first.gameId);
+}
+
+function openLocalGameAtIndex(games, gameList, idx) {
+    const game = games.find(g => g.gameId === gameList[idx]);
+    if (!game) return;
+    openGameViewer({
+        game,
+        orientation: 'White',
+        onPrev: idx > 0 ? () => openLocalGameAtIndex(games, gameList, idx - 1) : null,
+        onNext: idx < gameList.length - 1 ? () => openLocalGameAtIndex(games, gameList, idx + 1) : null,
+        meta: { isLocal: true },
+    });
+    highlightActiveGame(gameList[idx]);
+}
+
+// Sync browser panel layout on resize
 window.addEventListener('resize', () => {
     const viewerModal = document.getElementById('viewer-modal');
     const modalOpen = viewerModal && !viewerModal.classList.contains('hidden');
     if (!modalOpen) return;
 
-    if (isEmbeddedBrowser() && !isCombinedWidth()) {
-        hideBrowserPanel();
+    const panelEl = document.getElementById('viewer-browser-panel');
+    const hasBrowser = panelEl && !panelEl.classList.contains('hidden');
+
+    if (hasBrowser && !isCombinedWidth()) {
+        // Shrinking to mobile — clear inline styles, keep panel rendered
         const modalEl = document.querySelector('.modal-content-viewer');
         const boardEl = document.getElementById('viewer-board');
         const movesEl = document.getElementById('viewer-moves');
@@ -81,10 +166,8 @@ window.addEventListener('resize', () => {
         if (boardEl) boardEl.style.width = '';
         if (movesEl) movesEl.style.maxHeight = '';
         syncDesktopLayout();
-    } else if (!isEmbeddedBrowser() && isCombinedWidth()) {
-        const modalEl = document.querySelector('.modal-content-viewer');
-        if (modalEl) modalEl.style.width = '';
-        renderBrowserInPanel().then(() => syncDesktopLayout());
+    } else if (hasBrowser && isCombinedWidth()) {
+        syncDesktopLayout();
     }
 });
 
@@ -98,6 +181,17 @@ window.addEventListener('resize', () => {
  * @param {object}        [opts.meta]        - Additional meta: { eco, openingName, isSubmission, ... }
  */
 export async function openGameViewer(opts = {}) {
+    // Check dirty editor state before switching games
+    if (panelMode === 'editor' && isEditorDirty()) {
+        return new Promise(resolve => {
+            checkDirtyAndProceed(() => {
+                closeEditor();
+                panelMode = 'viewer';
+                openGameViewer(opts).then(resolve);
+            });
+        });
+    }
+
     wireViewerHeader();
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
@@ -106,9 +200,10 @@ export async function openGameViewer(opts = {}) {
         openModal('viewer-modal');
     }
 
-    // Desktop: show embedded browser panel (async — provides reflow gap)
+    // Show browser panel (renders if needed)
     let hadAsyncGap = false;
-    if (isCombinedWidth() && !isEmbeddedBrowser()) {
+    const panelEl = document.getElementById('viewer-browser-panel');
+    if (panelEl && panelEl.classList.contains('hidden')) {
         await renderBrowserInPanel();
         hadAsyncGap = true;
     }
@@ -116,9 +211,15 @@ export async function openGameViewer(opts = {}) {
     const game = opts.game;
     const gameId = game?.gameId;
 
-    if (isEmbeddedBrowser() && gameId) {
-        highlightActiveGame(gameId);
+    // On mobile: show viewer if we have a game, otherwise stay on browser
+    if (game) {
+        showViewer();
+    } else if (!isCombinedWidth()) {
+        const modal = document.querySelector('.modal-content-viewer');
+        if (modal) modal.classList.add('browser-only');
     }
+
+    if (gameId) highlightActiveGame(gameId);
 
     // Ensure browser has reflowed after modal becomes visible.
     if (!hadAsyncGap && !alreadyOpen) {
@@ -144,6 +245,7 @@ export async function openGameViewer(opts = {}) {
         if (!meta.eco) meta.eco = game.eco;
         if (!meta.openingName) meta.openingName = game.openingName;
         if (game.gameId) meta.gameId = game.gameId;
+        if (game.hasPgn != null) meta.hasPgn = game.hasPgn;
     }
 
     // Navigation callbacks — passed through to viewer header rendering
@@ -152,18 +254,21 @@ export async function openGameViewer(opts = {}) {
     _onClose = opts.onClose || null;
     meta.onPrev = _onPrev;
     meta.onNext = _onNext;
-    if (opts.meta?.filterLabel && !isEmbeddedBrowser()) {
-        meta.filterLabel = opts.meta.filterLabel;
-    }
 
-    // PGN: from game object or direct opts.pgn (debug)
-    const pgn = game?.pgn || opts.pgn;
-    if (pgn) {
-        initViewer(pgn, playerColor, meta);
-    } else {
-        const headerEl = document.getElementById('viewer-header');
-        headerEl.innerHTML = '<p class="viewer-error">No PGN available.</p>';
-    }
+    // PGN: from game object, direct opts.pgn, or starting position fallback
+    const pgn = game?.pgn || opts.pgn || '*';
+    initViewer(pgn, playerColor, meta);
+}
+
+/**
+ * Edit the current game — triggered by the viewer toolbar edit button.
+ * Routes through openEditorForGame which handles local vs TNM logic.
+ */
+export function editCurrentGame() {
+    const btn = document.getElementById('viewer-edit');
+    const gameId = btn?.dataset.gameId;
+    const game = gameId ? getCachedGame(gameId) : null;
+    if (game) openEditorForGame(game);
 }
 
 /**
@@ -179,30 +284,27 @@ export async function openGameEditor(options = {}) {
     }
 
     let hadAsyncGap = false;
-    if (isCombinedWidth() && !isEmbeddedBrowser()) {
+    const panelEl = document.getElementById('viewer-browser-panel');
+    if (panelEl && panelEl.classList.contains('hidden')) {
         await renderBrowserInPanel();
         hadAsyncGap = true;
     }
-    if (isEmbeddedBrowser() && options.gameId) {
-        highlightActiveGame(options.gameId);
-    }
+
+    showViewer();
+
+    if (options.gameId) highlightActiveGame(options.gameId);
 
     if (!hadAsyncGap && !alreadyOpen) {
         await new Promise(resolve => requestAnimationFrame(resolve));
     }
 
+    // Clean up viewer if switching from viewer to editor
+    if (panelMode === 'viewer') destroyViewer();
+
     setMode('editor');
     openEditor(options);
 }
 
-/**
- * Switch from viewer to editor mode within an already-open panel.
- */
-function switchToEditor(options = {}) {
-    destroyViewer();
-    setMode('editor');
-    openEditor(options);
-}
 
 /**
  * Handle keyboard shortcuts for the viewer/editor panel.
@@ -249,7 +351,14 @@ export function handlePanelKeydown(e) {
  * Close the game panel (works for both viewer and editor mode).
  */
 export function closeGamePanel() {
-    const embedded = isEmbeddedBrowser();
+    if (panelMode === 'editor' && isEditorDirty()) {
+        checkDirtyAndProceed(() => forceCloseGamePanel());
+        return;
+    }
+    forceCloseGamePanel();
+}
+
+function forceCloseGamePanel() {
     const onCloseCallback = _onClose;
 
     if (panelMode === 'editor') {
@@ -262,7 +371,9 @@ export function closeGamePanel() {
     _onPrev = null;
     _onNext = null;
     _onClose = null;
-    if (embedded) hideBrowserPanel();
+    hideBrowserPanel();
     closeModal('viewer-modal');
     onCloseCallback?.();
 }
+
+

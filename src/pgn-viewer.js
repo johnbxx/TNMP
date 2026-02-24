@@ -367,6 +367,15 @@ function renderGameHeader(pgn, meta = {}) {
         editBtnHtml = `<button class="viewer-edit-submission" id="viewer-edit-submission" data-game-id="${meta.gameId || ''}">Edit Submission</button>`;
     }
 
+    // Show/hide viewer toolbar edit button
+    const editBtn = document.getElementById('viewer-edit');
+    if (editBtn) {
+        const gameId = meta.gameId || '';
+        const canEdit = gameId && (meta.isLocal || !meta.hasPgn);
+        editBtn.classList.toggle('hidden', !canEdit);
+        editBtn.dataset.gameId = gameId;
+    }
+
     headerEl.innerHTML = `
         ${filterChipHtml}
         ${browserNavHtml}
