@@ -127,8 +127,10 @@ export async function handleQuery(request, env) {
     const conditions = [];
     const params = [];
 
-    // Tournament filter
-    if (tournament && tournament !== 'all') {
+    // Tournament filter (skip when gameId is specified — gameId is globally unique)
+    if (gameId) {
+        // No tournament scoping needed
+    } else if (tournament && tournament !== 'all') {
         conditions.push('g.tournament_slug = ?');
         params.push(tournament);
     } else if (!tournament) {

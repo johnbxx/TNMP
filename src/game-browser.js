@@ -1,4 +1,4 @@
-import { openGameViewer, openGameEditor, showExplorer, refreshExplorer, isExplorerMode } from './game-viewer.js';
+import { openGameViewer, openGameEditor, showExplorer, refreshExplorer, isExplorerMode, getSavedExplorerMoves } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
 import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
@@ -113,13 +113,6 @@ function isPlayerDataLoaded(playerName) {
     if (!data?.games?.length) return false;
     return data.query?.player?.toLowerCase() === playerName.toLowerCase()
         && data.query?.tournament === 'all';
-}
-
-/**
- * Get the current tournament slug (active override or config default).
- */
-function getCurrentTournamentSlug() {
-    return getActiveTournamentSlug() || getTournamentMeta().slug || null;
 }
 
 /**
@@ -616,6 +609,7 @@ function getDefaultTitle() {
 function renderBrowserContent(containerEl, roundNumbers) {
     const playerMode = !!_selectedPlayer;
 
+    const exploreBtn = '<button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/></svg></button>';
     const importBtn = '<button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>';
     const downloadBtn = '<button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>';
 
@@ -626,7 +620,7 @@ function renderBrowserContent(containerEl, roundNumbers) {
                 <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
                 <div id="browser-autocomplete" class="browser-autocomplete hidden"></div>
             </div>
-            ${importBtn}${downloadBtn}
+            ${exploreBtn}${importBtn}${downloadBtn}
         </div>`;
 
     // Chips container (populated by renderChips when player is selected)
@@ -1053,13 +1047,33 @@ function syncExplorer() {
 }
 
 /**
+ * Launch the opening explorer from the browser.
+ * On mobile, switches from browser-only view to explorer view.
+ */
+export function launchExplorer() {
+    // Remove browser-only so the viewer area is visible
+    const modal = document.querySelector('.modal-content-viewer');
+    if (modal) modal.classList.remove('browser-only');
+
+    // If explorer is already active (just hidden by browser-only), just reveal it
+    if (isExplorerMode()) return;
+
+    _explorerGameIds = null;
+    const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
+    showExplorer(gamesWithPgn, { onNavigate: onExplorerNavigate });
+}
+
+/**
  * Start (or restart) the explorer from the current visible games.
  * Called when returning to the explorer from a game on desktop.
  */
 export function restoreExplorer() {
     _explorerGameIds = null;
     const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
-    showExplorer(gamesWithPgn, { onNavigate: onExplorerNavigate });
+    showExplorer(gamesWithPgn, {
+        onNavigate: onExplorerNavigate,
+        restoreMoves: getSavedExplorerMoves(),
+    });
 }
 
 /**

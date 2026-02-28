@@ -10,7 +10,6 @@ import {
     getBoard, createBoard, destroyBoard, resetState, cleanupBoardDOM,
     highlightSquares, clearHighlights, highlightCurrentMove,
     goToNode, updateNavigationButtons,
-    syncDesktopLayout as syncDesktopLayoutCore,
     renderMoveList as renderMoveListCore,
 } from './board-core.js';
 
@@ -408,7 +407,8 @@ function extractBoardFromPgn(pgn) {
 }
 
 export function syncDesktopLayout() {
-    syncDesktopLayoutCore({ includeHeader: true, allowStacked: true });
+    const board = getBoard();
+    if (board && board.resize) board.resize();
 }
 
 function renderMoveList() {

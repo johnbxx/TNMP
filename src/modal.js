@@ -103,7 +103,7 @@ export function trapFocus(e, modalId) {
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-backdrop')) {
         const modal = e.target.closest('.modal');
-        if (modal) closeModal(modal.id);
+        if (modal && !modal.hasAttribute('data-manual-close')) closeModal(modal.id);
         return;
     }
 

@@ -25,7 +25,6 @@ import {
     getBoard, createBoard, destroyBoard, resetState, cleanupBoardDOM,
     highlightSquares, clearHighlights, highlightCurrentMove,
     goToNode, updateNavigationButtons,
-    syncDesktopLayout as syncDesktopLayoutCore,
     renderMoveList as renderMoveListCore,
 } from './board-core.js';
 
@@ -41,7 +40,8 @@ let editorGameId = null;  // gameId of the game being edited (for cache updates)
 const UNDO_LIMIT = 50;
 
 function syncDesktopLayout() {
-    syncDesktopLayoutCore({ commentElId: 'editor-comment-input', maxModalWidth: 950, maxBoardRatio: 0.8 });
+    const board = getBoard();
+    if (board && board.resize) board.resize();
 }
 
 /**

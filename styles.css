@@ -1064,7 +1064,8 @@ html.off-season .meme {
 .modal-content-viewer {
     max-width: 560px;
     width: 95%;
-    max-height: 90vh;
+    max-height: 98vh;
+    max-height: 98dvh;
     overflow: hidden;
     animation: none;
     display: flex;
@@ -1115,6 +1116,10 @@ html.off-season .meme {
 
 .viewer-header {
     margin-bottom: 0.75rem;
+}
+
+.explorer-active .viewer-header {
+    margin-bottom: 0.25rem;
 }
 
 .viewer-loading,
@@ -1875,6 +1880,46 @@ html.off-season .meme {
     }
 }
 
+/* Below 1000px: consistent stacked column layout at all mobile sizes */
+@media (max-width: 999px) {
+    .modal-content-viewer {
+        height: 98vh;
+        height: 98dvh;
+        max-width: 560px;
+        width: 95%;
+    }
+    .viewer-layout {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .viewer-board {
+        max-width: 100%;
+        min-width: 0;
+    }
+    .viewer-moves {
+        flex: 1;
+        height: auto;
+        min-width: 0;
+        width: 100%;
+    }
+    /* Override 600px viewer shrinks — consistent sizing at all mobile widths */
+    .viewer-toolbar {
+        gap: 0.25rem;
+        padding: 0.25rem;
+    }
+    .viewer-tool-btn {
+        width: 2rem;
+        height: 2rem;
+        padding: 0.35rem;
+    }
+    .viewer-nav-btn {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+}
+
 /* Desktop combined layout: browser + viewer side-by-side */
 @media (min-width: 1000px) {
     .modal-content-viewer.has-browser {
@@ -1889,6 +1934,8 @@ html.off-season .meme {
     .modal-content-viewer.browser-only .viewer-main {
         display: flex; /* .browser-only is ignored on desktop */
     }
+    /* Explorer back button is only useful on mobile (desktop shows both panels) */
+    [data-action="explorer-back"] { display: none; }
     .viewer-browser-panel:not(.hidden) {
         display: flex;
         flex-direction: column;
@@ -1896,6 +1943,37 @@ html.off-season .meme {
         overflow: hidden;
         border-right: 1px solid rgba(255, 255, 255, 0.1);
         padding: 2rem;
+    }
+}
+
+/* 1000-1599px: stacked column layout inside browser panel (same as mobile, just wider) */
+@media (min-width: 1000px) and (max-width: 1599px) {
+    .modal-content-viewer.has-browser {
+        height: 90vh;
+        max-width: 1000px;
+    }
+    .has-browser .viewer-layout {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .has-browser .viewer-board {
+        max-width: 100%;
+        min-width: 0;
+    }
+    .has-browser .viewer-moves {
+        flex: 1;
+        height: auto;
+        min-width: 0;
+        width: 100%;
+    }
+}
+
+/* >=1600px: side-by-side grid, board fills available height */
+@media (min-width: 1600px) {
+    .viewer-board {
+        width: calc(90vh - 10rem);
     }
 }
 
@@ -2569,12 +2647,11 @@ select.editor-header-input {
     flex-shrink: 0;
     padding: 0;
     background: none;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: var(--radius-sm);
     color: var(--text-faint);
     cursor: pointer;
-    opacity: 0.5;
-    transition: opacity var(--transition-fast);
+    transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .browser-action-btn svg {
@@ -2583,7 +2660,8 @@ select.editor-header-input {
 }
 
 .browser-action-btn:hover {
-    opacity: 0.8;
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* PGN submission status icons in game rows */
@@ -3384,3 +3462,4 @@ select.editor-header-input {
         min-width: 2rem;
     }
 }
+

@@ -7,12 +7,12 @@ import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/history.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown, editCurrentGame, dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel } from './src/game-viewer.js';
+import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown, editCurrentGame, editorBackToViewer, explorerBackToBrowser, dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel, explorerGoToStart, explorerGoBack, explorerGoForward } from './src/game-viewer.js';
 import { editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, showHeaderEditor, hideHeaderEditor, saveHeaderEditor } from './src/pgn-editor.js';
 import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
 import { getCurrentNodeId, getNodes } from './src/board-core.js';
 import { showToast } from './src/toast.js';
-import { prefetchGames, getFilteredGames, getCachedGame, getActiveFilter } from './src/game-browser.js';
+import { prefetchGames, getFilteredGames, getCachedGame, getActiveFilter, launchExplorer } from './src/game-browser.js';
 import { fetchGames } from './src/browser-data.js';
 import { formatName, getHeader } from './src/utils.js';
 
@@ -153,8 +153,9 @@ const wrappedCheckPairings = async function() {
     await checkPairings();
 };
 
-// --- Modal close hooks (cleanup for complex modals) ---
-onModalClose('viewer-modal', closeGamePanel);
+// --- Modal close routing ---
+// Viewer-modal close paths (X, Escape, backdrop) all route through closeGamePanel()
+// so dirty-state checks happen BEFORE the modal hides. No onModalClose hook needed.
 
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
@@ -165,7 +166,7 @@ document.addEventListener('keydown', (e) => {
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
         handlePanelKeydown(e);
-        if (e.key === 'Escape') { closeModal('viewer-modal'); }
+        if (e.key === 'Escape') { closeGamePanel(); }
     } else if (!settingsModal.classList.contains('hidden')) {
         trapFocus(e, 'settings-modal');
         if (e.key === 'Enter' && !['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
@@ -230,7 +231,14 @@ const ACTIONS = {
         e.stopPropagation();
         document.getElementById('share-popover').classList.toggle('hidden');
     },
+    // Explorer
+    'explorer-start': explorerGoToStart, 'explorer-prev': explorerGoBack,
+    'explorer-next': explorerGoForward, 'explorer-flip': flipBoard,
+    'explorer-back': explorerBackToBrowser,
+    // Browser
+    'browser-explore': launchExplorer,
     // Editor
+    'editor-back': editorBackToViewer,
     'editor-start': editorGoToStart, 'editor-prev': editorGoToPrev,
     'editor-next': editorGoToNext, 'editor-end': editorGoToEnd,
     'editor-flip': editorFlipBoard, 'editor-import': showImportDialog,
@@ -245,6 +253,7 @@ const ACTIONS = {
     'share-copy-link': () => handleShareAction('copy-link'),
     'share-download': () => handleShareAction('download'),
     'share-native': () => handleShareAction('share'),
+    'close-panel': closeGamePanel,
 };
 
 // Single delegated click listener
@@ -254,6 +263,12 @@ document.addEventListener('click', (e) => {
         if (actionBtn.hasAttribute('data-hold')) return; // handled by holdToRepeat
         const handler = ACTIONS[actionBtn.dataset.action];
         if (handler) { handler(e); return; }
+    }
+
+    // Viewer-modal backdrop → route through closeGamePanel for dirty-state check
+    if (e.target.classList.contains('modal-backdrop') && e.target.closest('#viewer-modal')) {
+        closeGamePanel();
+        return;
     }
 
     // Dismiss share popover on outside click

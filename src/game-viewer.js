@@ -1,5 +1,5 @@
 import { openModal, closeModal } from './modal.js';
-import { initViewer, destroyViewer, syncDesktopLayout, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
+import { initViewer, destroyViewer, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
 import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, isEditorDirty, copyPgn } from './pgn-editor.js';
 import { loadRoundHistory } from './history.js';
 import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, openGameFromBrowser, clearFilter, getCachedGame, openEditorForGame, restoreExplorer } from './game-browser.js';
@@ -7,7 +7,7 @@ import { buildExplorerTree, buildExplorerTree1, getPositionStats, scorePercent }
 import { classifyFen as classifyEco, loadEcoData } from './eco.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import { Chess } from 'chess.js';
-import { START_FEN, destroyBoard, createBoard, getBoard, setResizeCallback, syncDesktopLayout as syncDesktopLayoutCore, clearHighlights } from './board-core.js';
+import { START_FEN, destroyBoard, createBoard, getBoard, setResizeCallback, clearHighlights } from './board-core.js';
 
 const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
 
@@ -19,6 +19,7 @@ let _explorerSelectedRow = 0;  // highlighted row in move table
 let _onExplorerNavigate = null; // callback(gameIds) when explorer position changes
 let _explorerLastEco = null;   // last known ECO classification (sticky)
 let _explorerBuildId = 0;      // incremented on each build to cancel stale background passes
+let _savedExplorerMoves = null; // stashed move history when switching to viewer (for back button)
 
 function destroyExplorer() {
     if (panelMode === 'explorer') {
@@ -54,17 +55,7 @@ export function showExplorer(games, opts = {}) {
     if (panelMode === 'editor') closeEditor();
     if (panelMode === 'explorer') destroyExplorer();
 
-    panelMode = 'explorer';
-
-    // Hide viewer/editor toolbars, show header
-    const viewerToolbar = document.getElementById('viewer-toolbar');
-    const editorToolbar = document.getElementById('editor-toolbar');
-    const viewerHeader = document.getElementById('viewer-header');
-    const commentInput = document.getElementById('editor-comment-input');
-    viewerToolbar?.classList.add('hidden');
-    editorToolbar?.classList.add('hidden');
-    viewerHeader?.classList.remove('hidden');
-    commentInput?.classList.add('hidden');
+    setMode('explorer');
 
     _explorerChess = new Chess();
     _explorerMoveHistory = [];
@@ -72,11 +63,14 @@ export function showExplorer(games, opts = {}) {
     _explorerLastEco = null;
     _onExplorerNavigate = opts.onNavigate || null;
 
+    // Replay saved moves if restoring explorer position
+    const restoreMoves = opts.restoreMoves || null;
+
     // Clear navigation callbacks
     _onPrev = null;
     _onNext = null;
 
-    // Create board at starting position
+    // Create board at starting position (will be updated after restore)
     createBoard(Chessboard2, {
         position: START_FEN,
         orientation: 'white',
@@ -101,6 +95,21 @@ export function showExplorer(games, opts = {}) {
     function runPass(tree, cb) {
         if (panelMode !== 'explorer' || buildId !== _explorerBuildId) return;
         _explorerTree = tree;
+        // Replay saved moves as far as the current tree supports
+        if (restoreMoves && restoreMoves.length > 0) {
+            _explorerChess = new Chess();
+            _explorerMoveHistory = [];
+            _explorerLastEco = null;
+            for (const san of restoreMoves) {
+                const stats = getPositionStats(tree, _explorerChess.fen());
+                if (!stats || !stats.moves.some(m => m.san === san)) break;
+                try { _explorerChess.move(san); } catch { break; }
+                _explorerMoveHistory.push(san);
+            }
+            _explorerSelectedRow = 0;
+            const board = getBoard();
+            if (board) board.position(_explorerChess.fen(), false);
+        }
         renderExplorer();
         cb?.();
     }
@@ -108,7 +117,7 @@ export function showExplorer(games, opts = {}) {
     // Pass 1: instant — show first-move stats immediately
     runPass(buildExplorerTree1(games), () => {
         syncExplorerLayout();
-        _onExplorerNavigate?.(null);
+        notifyExplorerPosition();
     });
 
     // Pass 2 + 3: after paint
@@ -180,6 +189,10 @@ export function isExplorerMode() {
     return panelMode === 'explorer';
 }
 
+export function getSavedExplorerMoves() {
+    return _savedExplorerMoves;
+}
+
 /**
  * Render the explorer header and move table for the current position.
  */
@@ -222,42 +235,46 @@ function renderExplorer() {
 
     // Move table
     if (movesEl) {
-        if (!stats || stats.moves.length === 0) {
-            movesEl.innerHTML = _explorerMoveHistory.length > 0
+        const hasMoves = stats && stats.moves.length > 0;
+        let html = '';
+
+        if (!hasMoves) {
+            html += _explorerMoveHistory.length > 0
                 ? '<div class="explorer-empty">No more continuations</div>'
                 : '<div class="explorer-empty">No games with PGN data</div>';
-            movesEl.onclick = null;
-            return;
+        } else {
+            // Clamp selected row
+            if (_explorerSelectedRow >= stats.moves.length) _explorerSelectedRow = stats.moves.length - 1;
+
+            html += '<div class="explorer-table">';
+            html += '<div class="explorer-table-header"><span class="explorer-col-move">Move</span><span class="explorer-col-games">Games</span><span class="explorer-col-bar">Result</span><span class="explorer-col-score">Score</span></div>';
+
+            for (let i = 0; i < stats.moves.length; i++) {
+                const m = stats.moves[i];
+                const pct = scorePercent(m.whiteWins, m.draws, m.blackWins);
+                const wPct = m.total > 0 ? (m.whiteWins / m.total * 100) : 0;
+                const dPct = m.total > 0 ? (m.draws / m.total * 100) : 0;
+                const bPct = m.total > 0 ? (m.blackWins / m.total * 100) : 0;
+                const selected = i === _explorerSelectedRow ? ' explorer-row-selected' : '';
+
+                html += `<button class="explorer-row${selected}" data-explorer-move="${m.san}" data-explorer-idx="${i}">`;
+                html += `<span class="explorer-col-move explorer-san">${m.san}</span>`;
+                html += `<span class="explorer-col-games">${m.total}</span>`;
+                html += `<span class="explorer-col-bar"><span class="explorer-bar"><span class="explorer-bar-w" style="width:${wPct}%"></span><span class="explorer-bar-d" style="width:${dPct}%"></span><span class="explorer-bar-b" style="width:${bPct}%"></span></span></span>`;
+                html += `<span class="explorer-col-score">${pct}%</span>`;
+                html += '</button>';
+            }
+            html += '</div>';
         }
 
-        // Clamp selected row
-        if (_explorerSelectedRow >= stats.moves.length) _explorerSelectedRow = stats.moves.length - 1;
-
-        let html = '<div class="explorer-table">';
-        html += '<div class="explorer-table-header"><span class="explorer-col-move">Move</span><span class="explorer-col-games">Games</span><span class="explorer-col-bar">Result</span><span class="explorer-col-score">Score</span></div>';
-
-        for (let i = 0; i < stats.moves.length; i++) {
-            const m = stats.moves[i];
-            const pct = scorePercent(m.whiteWins, m.draws, m.blackWins);
-            const wPct = m.total > 0 ? (m.whiteWins / m.total * 100) : 0;
-            const dPct = m.total > 0 ? (m.draws / m.total * 100) : 0;
-            const bPct = m.total > 0 ? (m.blackWins / m.total * 100) : 0;
-            const selected = i === _explorerSelectedRow ? ' explorer-row-selected' : '';
-
-            html += `<button class="explorer-row${selected}" data-explorer-move="${m.san}" data-explorer-idx="${i}">`;
-            html += `<span class="explorer-col-move explorer-san">${m.san}</span>`;
-            html += `<span class="explorer-col-games">${m.total}</span>`;
-            html += `<span class="explorer-col-bar"><span class="explorer-bar"><span class="explorer-bar-w" style="width:${wPct}%"></span><span class="explorer-bar-d" style="width:${dPct}%"></span><span class="explorer-bar-b" style="width:${bPct}%"></span></span></span>`;
-            html += `<span class="explorer-col-score">${pct}%</span>`;
-            html += '</button>';
-        }
-        html += '</div>';
         movesEl.innerHTML = html;
 
         movesEl.onclick = (e) => {
             const row = e.target.closest('[data-explorer-move]');
             if (row) explorerPlayMove(row.dataset.explorerMove);
         };
+
+        updateExplorerToolbarState(stats);
     }
 }
 
@@ -293,7 +310,7 @@ function explorerPlayMove(san) {
 /**
  * Go back one move in the explorer.
  */
-function explorerGoBack() {
+export function explorerGoBack() {
     if (_explorerMoveHistory.length === 0) return;
     _explorerMoveHistory.pop();
     _explorerChess = new Chess();
@@ -310,7 +327,7 @@ function explorerGoBack() {
 /**
  * Go to starting position in the explorer.
  */
-function explorerGoToStart() {
+export function explorerGoToStart() {
     if (_explorerMoveHistory.length === 0) return;
     _explorerMoveHistory = [];
     _explorerChess = new Chess();
@@ -326,7 +343,7 @@ function explorerGoToStart() {
 /**
  * Play the most popular continuation (first row).
  */
-function explorerGoForward() {
+export function explorerGoForward() {
     const stats = getPositionStats(_explorerTree, _explorerChess.fen());
     if (!stats || stats.moves.length === 0) return;
     explorerPlayMove(stats.moves[_explorerSelectedRow].san);
@@ -377,8 +394,54 @@ function explorerOnDrop(dropEvt) {
 }
 
 function syncExplorerLayout() {
-    syncDesktopLayoutCore({ includeHeader: true, allowStacked: true });
+    const board = getBoard();
+    if (board && board.resize) board.resize();
 }
+
+/**
+ * Render explorer-specific toolbar buttons into #viewer-toolbar.
+ * Called once from setMode('explorer'), then updated by renderExplorer().
+ */
+function renderExplorerToolbar() {
+    const toolbar = document.getElementById('viewer-toolbar');
+    if (!toolbar) return;
+    toolbar.innerHTML = `
+        <div class="viewer-tool-group">
+            <button data-action="explorer-back" class="viewer-tool-btn" aria-label="Back to browser" data-tooltip="Browse"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></button>
+            <button data-action="explorer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
+        </div>
+        <div class="viewer-toolbar-sep"></div>
+        <div class="viewer-nav-group">
+            <button data-action="explorer-start" class="viewer-nav-btn" aria-label="Go to start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
+            <button data-action="explorer-prev" class="viewer-nav-btn" aria-label="Previous move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
+            <button data-action="explorer-next" class="viewer-nav-btn" aria-label="Next move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></svg></button>
+        </div>
+        <div class="viewer-toolbar-sep"></div>
+        <div class="viewer-tool-group"></div>
+    `;
+    updateExplorerToolbarState();
+}
+
+/**
+ * Update disabled states on explorer toolbar buttons without re-rendering.
+ */
+function updateExplorerToolbarState(stats) {
+    const toolbar = document.getElementById('viewer-toolbar');
+    if (!toolbar) return;
+    const atStart = _explorerMoveHistory.length === 0;
+    if (stats === undefined) stats = _explorerTree ? getPositionStats(_explorerTree, _explorerChess?.fen()) : null;
+    const atEnd = !stats || stats.moves.length === 0;
+    const startBtn = toolbar.querySelector('[data-action="explorer-start"]');
+    const prevBtn = toolbar.querySelector('[data-action="explorer-prev"]');
+    const nextBtn = toolbar.querySelector('[data-action="explorer-next"]');
+    if (startBtn) startBtn.disabled = atStart;
+    if (prevBtn) prevBtn.disabled = atStart;
+    if (nextBtn) nextBtn.disabled = atEnd;
+}
+
+
+// --- Current game tracking (for editor → viewer back navigation) ---
+let _currentGameId = null;
 
 // --- Navigation callbacks (set by caller, reset on close) ---
 let _onPrev = null;
@@ -448,6 +511,20 @@ function wireViewerHeader() {
 // --- Panel mode (viewer vs editor) ---
 let panelMode = 'viewer';
 
+// Cache original viewer toolbar HTML so we can restore it after explorer mode
+let _originalViewerToolbar = null;
+
+function cacheViewerToolbar() {
+    if (_originalViewerToolbar) return;
+    const toolbar = document.getElementById('viewer-toolbar');
+    if (toolbar) _originalViewerToolbar = toolbar.innerHTML;
+}
+
+function restoreViewerToolbar() {
+    const toolbar = document.getElementById('viewer-toolbar');
+    if (toolbar && _originalViewerToolbar) toolbar.innerHTML = _originalViewerToolbar;
+}
+
 function setMode(mode) {
     // Clean up explorer if switching away from it
     if (panelMode === 'explorer' && mode !== 'explorer') destroyExplorer();
@@ -458,18 +535,31 @@ function setMode(mode) {
     const viewerHeader = document.getElementById('viewer-header');
     const editorEco = document.getElementById('editor-eco');
     const commentInput = document.getElementById('editor-comment-input');
+    const modalEl = document.querySelector('.modal-content-viewer');
 
-    if (mode === 'editor') {
+    if (mode === 'explorer') {
+        viewerToolbar?.classList.remove('hidden');
+        editorToolbar?.classList.add('hidden');
+        viewerHeader?.classList.remove('hidden');
+        editorEco?.classList.add('hidden');
+        commentInput?.classList.add('hidden');
+        modalEl?.classList.add('explorer-active');
+        renderExplorerToolbar();
+    } else if (mode === 'editor') {
         viewerToolbar?.classList.add('hidden');
         editorToolbar?.classList.remove('hidden');
         viewerHeader?.classList.add('hidden');
         commentInput?.classList.remove('hidden');
+        modalEl?.classList.remove('explorer-active');
+        restoreViewerToolbar();
     } else {
         viewerToolbar?.classList.remove('hidden');
         editorToolbar?.classList.add('hidden');
         viewerHeader?.classList.remove('hidden');
         editorEco?.classList.add('hidden');
         commentInput?.classList.add('hidden');
+        modalEl?.classList.remove('explorer-active');
+        restoreViewerToolbar();
     }
 }
 
@@ -517,29 +607,6 @@ export async function openImportedGames(games) {
     }
 }
 
-// Sync browser panel layout on resize
-window.addEventListener('resize', () => {
-    const viewerModal = document.getElementById('viewer-modal');
-    const modalOpen = viewerModal && !viewerModal.classList.contains('hidden');
-    if (!modalOpen) return;
-
-    const panelEl = document.getElementById('viewer-browser-panel');
-    const hasBrowser = panelEl && !panelEl.classList.contains('hidden');
-
-    const syncFn = panelMode === 'explorer' ? syncExplorerLayout : syncDesktopLayout;
-    if (hasBrowser && !isCombinedWidth()) {
-        // Shrinking to mobile — clear inline styles, keep panel rendered
-        const modalEl = document.querySelector('.modal-content-viewer');
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        if (modalEl) modalEl.style.width = '';
-        if (boardEl) boardEl.style.width = '';
-        if (movesEl) movesEl.style.maxHeight = '';
-        syncFn();
-    } else if (hasBrowser && isCombinedWidth()) {
-        syncFn();
-    }
-});
 
 /**
  * Ensure the viewer modal and browser panel are open and ready.
@@ -549,6 +616,7 @@ window.addEventListener('resize', () => {
  */
 async function ensurePanelOpen(gameId) {
     wireViewerHeader();
+    cacheViewerToolbar();
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
 
@@ -594,11 +662,13 @@ export async function openGameViewer(opts = {}) {
 
     // Clean up explorer if switching from it to view a specific game
     if (panelMode === 'explorer' && opts.game) {
+        _savedExplorerMoves = [..._explorerMoveHistory];
         destroyExplorer();
         panelMode = 'viewer';
     }
 
     const game = opts.game;
+    _currentGameId = game?.gameId || null;
 
     await ensurePanelOpen(game?.gameId);
 
@@ -654,6 +724,43 @@ export function editCurrentGame() {
     const gameId = btn?.dataset.gameId;
     const game = gameId ? getCachedGame(gameId) : null;
     if (game) openEditorForGame(game);
+}
+
+/**
+ * Leave explorer and return to browser view (mobile).
+ * On desktop, this is a no-op since both are always visible.
+ */
+export function explorerBackToBrowser() {
+    showBrowser();
+}
+
+/**
+ * Leave editor and return to viewer for the same game.
+ * Routes through dirty check if there are unsaved edits.
+ */
+export function editorBackToViewer() {
+    if (panelMode !== 'editor') return;
+    checkDirtyAndProceed(() => {
+        closeEditor();
+        const game = _currentGameId ? getCachedGame(_currentGameId) : null;
+        if (game) {
+            setMode('viewer');
+            const meta = {
+                gameId: game.gameId,
+                round: game.round != null ? Number(game.round) : undefined,
+                board: game.board != null ? Number(game.board) : undefined,
+                eco: game.eco,
+                openingName: game.openingName,
+                hasPgn: game.hasPgn,
+                onPrev: _onPrev,
+                onNext: _onNext,
+            };
+            initViewer(game.pgn || '*', undefined, meta);
+        } else {
+            // No game to return to — just close the panel
+            forceCloseGamePanel();
+        }
+    });
 }
 
 /**
@@ -760,9 +867,12 @@ function forceCloseGamePanel() {
     }
 
     panelMode = 'viewer';
+    document.querySelector('.modal-content-viewer')?.classList.remove('explorer-active');
+    restoreViewerToolbar();
     _onPrev = null;
     _onNext = null;
     _onClose = null;
+    _savedExplorerMoves = null;
     hideBrowserPanel();
     closeModal('viewer-modal');
     onCloseCallback?.();

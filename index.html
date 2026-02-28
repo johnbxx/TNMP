@@ -208,10 +208,10 @@
     </div>
 
     <!-- Unified Game Panel (viewer + editor modes) -->
-    <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true">
+    <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true" data-manual-close>
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-viewer">
-            <button class="viewer-close" data-close-modal aria-label="Close">&times;</button>
+            <button class="viewer-close" data-action="close-panel" aria-label="Close">&times;</button>
             <div id="viewer-browser-panel" class="viewer-browser-panel hidden"></div>
             <div class="viewer-main">
                 <div id="viewer-header" class="viewer-header"></div>
@@ -253,6 +253,10 @@
                 </div>
                 <!-- Editor toolbar (hidden by default, visible in editor mode) -->
                 <div id="editor-toolbar" class="viewer-toolbar hidden">
+                    <div class="viewer-tool-group">
+                        <button data-action="editor-back" class="viewer-tool-btn" aria-label="Back to viewer" data-tooltip="Back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></button>
+                    </div>
+                    <div class="viewer-toolbar-sep"></div>
                     <div class="viewer-nav-group">
                         <button data-action="editor-start" class="viewer-nav-btn" aria-label="Go to start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
                         <button data-action="editor-prev" class="viewer-nav-btn" aria-label="Previous move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
