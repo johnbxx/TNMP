@@ -16,6 +16,8 @@ let _sectionList = [];
 let _visibleSections = new Set();
 let _filterTournament = null; // slug or null (null = all tournaments)
 let _filterColor = null;      // 'white' | 'black' | null
+let _filterEco = null;        // Set of ECO codes or null
+let _filterOpponent = null;   // opponent name or null (for head-to-head)
 let _filterEvent = null;      // event name filter for local imports (null = all events)
 
 // --- Exported accessors ---
@@ -38,6 +40,8 @@ export function clearFilter() {
     _selectedPlayer = null;
     _filterTournament = null;
     _filterColor = null;
+    _filterEco = null;
+    _filterOpponent = null;
     _filterEvent = null;
     _visibleSections = new Set(_sectionList);
 }
@@ -90,6 +94,8 @@ function resetBrowserState() {
     _selectedRound = null;
     _filterTournament = null;
     _filterColor = null;
+    _filterEco = null;
+    _filterOpponent = null;
     _filterEvent = null;
     _playerList = [];
     _sectionList = [];
@@ -134,6 +140,15 @@ function getVisibleGames() {
                 _filterColor === 'white'
                     ? g.white.toLowerCase() === pLower
                     : g.black.toLowerCase() === pLower
+            );
+        }
+        if (_filterEco) {
+            games = games.filter(g => g.eco && _filterEco.has(g.eco));
+        }
+        if (_filterOpponent) {
+            const oLower = _filterOpponent.toLowerCase();
+            games = games.filter(g =>
+                g.white.toLowerCase() === oLower || g.black.toLowerCase() === oLower
             );
         }
     } else {
@@ -268,6 +283,8 @@ export async function openGameBrowser(query = null) {
         _selectedPlayer = query.player;
         _filterTournament = (!query.tournament || query.tournament === 'all') ? null : query.tournament;
         _filterColor = query.color || null;
+        _filterEco = query.eco ? new Set(query.eco) : null;
+        _filterOpponent = query.opponent || null;
     }
 
     // Fetch data if needed (skip for local imports — data already loaded)
@@ -301,13 +318,16 @@ export async function openGameBrowser(query = null) {
     const roundNums = getFilteredRoundNumbers();
 
     if (_selectedPlayer) {
-        panelEl.innerHTML = `<h2 id="browser-title-panel">${_selectedPlayer}'s Games</h2><div class="browser-content"></div>`;
+        const titleSuffix = query?.ecoLabel ? ` — ${query.ecoLabel}`
+            : query?.opponent ? ` vs ${query.opponent}` : '';
+        panelEl.innerHTML = `<h2 id="browser-title-panel">${_selectedPlayer}'s Games${titleSuffix}</h2><div class="browser-content"></div>`;
         fitTextToContainer(document.getElementById('browser-title-panel'));
     } else {
         panelEl.innerHTML = `<h2 id="browser-title-panel">${getDefaultTitle()}</h2><div class="browser-content"></div>`;
 
         if (roundNums.length === 0 && !isLocal) {
             const containerEl = panelEl.querySelector('.browser-content');
+            await ensureBrowserLists();
             renderBrowserContent(containerEl, []);
             containerEl.querySelector('#browser-games').innerHTML = '<p class="viewer-error">No games available yet.</p>';
             await renderDataSourceDropdown();
@@ -686,6 +706,17 @@ function renderBrowserContent(containerEl, roundNumbers) {
     });
 
     searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const focused = autocomplete.querySelector('.browser-ac-focused');
+            const name = focused?.dataset.player || searchInput.value.trim();
+            if (name) selectPlayer(name, searchInput, autocomplete, clearBtn);
+            return;
+        }
+        if (e.key === 'Escape') {
+            autocomplete.classList.add('hidden');
+            return;
+        }
         if (autocomplete.classList.contains('hidden')) return;
         const items = autocomplete.querySelectorAll('.browser-ac-item');
         if (items.length === 0) return;
@@ -702,13 +733,6 @@ function renderBrowserContent(containerEl, roundNumbers) {
             if (focused) focused.classList.remove('browser-ac-focused');
             idx = idx > 0 ? idx - 1 : items.length - 1;
             items[idx].classList.add('browser-ac-focused');
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (focused) {
-                selectPlayer(focused.dataset.player, searchInput, autocomplete, clearBtn);
-            }
-        } else if (e.key === 'Escape') {
-            autocomplete.classList.add('hidden');
         }
     });
 
@@ -834,7 +858,11 @@ async function clearPlayerMode() {
     } else if (!_selectedRound || !roundNums.includes(_selectedRound)) {
         _selectedRound = roundNums[roundNums.length - 1];
     }
-    _playerList = buildPlayerList();
+    if (isLocal) {
+        _playerList = buildPlayerList();
+    } else {
+        try { _playerList = await fetchPlayerList(); } catch { _playerList = buildPlayerList(); }
+    }
     _sectionList = buildFilteredSectionList();
     _visibleSections = new Set(_sectionList);
 
@@ -854,7 +882,7 @@ async function clearPlayerMode() {
 async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
     const isLocal = !!getGamesData()?.query?.local;
     _selectedPlayer = name;
-    _filterTournament = isLocal ? null : getCurrentTournamentSlug();
+    _filterTournament = null;
     _filterColor = null;
     searchInput.value = name;
     searchInput.blur();

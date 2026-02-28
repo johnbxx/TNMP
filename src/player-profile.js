@@ -194,7 +194,6 @@ function renderTabs(body) {
     body.innerHTML = `
         <div class="profile-tabs" id="profile-tabs">
             <button class="profile-tab profile-tab-active" data-tab="overview">Overview</button>
-            <button class="profile-tab" data-tab="tournaments">Tournaments</button>
             <button class="profile-tab" data-tab="openings">Openings</button>
             <button class="profile-tab" data-tab="opponents">Opponents</button>
         </div>
@@ -221,7 +220,6 @@ function renderTab(tabName) {
 
     switch (tabName) {
         case 'overview': return renderOverview(container, stats);
-        case 'tournaments': return renderTournaments(container, stats);
         case 'openings': return renderOpenings(container, stats);
         case 'opponents': return renderOpponents(container, stats);
     }
@@ -258,17 +256,8 @@ function statRow(label, icon, wins, losses, draws, total, action) {
 }
 
 function renderOverview(container, stats) {
-    container.innerHTML = `
-        ${statRow('All Games', null, stats.wins, stats.losses, stats.draws, stats.total, 'all')}
-        ${statRow('As White', 'wK.webp', stats.whiteWins, stats.whiteLosses, stats.whiteDraws, stats.whiteGames, 'white')}
-        ${statRow('As Black', 'bK.webp', stats.blackWins, stats.blackLosses, stats.blackDraws, stats.blackGames, 'black')}
-    `;
-}
-
-function renderTournaments(container, stats) {
-    // Sort tournaments by first game date (most recent first) — we approximate with game order
+    // Sort tournaments by first game date (most recent first)
     const entries = [...stats.tournaments.entries()];
-    // Games come sorted date DESC from the API, so first occurrence in cachedGames = most recent
     const slugOrder = [];
     const seen = new Set();
     for (const g of cachedGames) {
@@ -279,11 +268,11 @@ function renderTournaments(container, stats) {
     }
     entries.sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
 
-    let html = '<div class="profile-tournament-list">';
+    let tournamentHtml = '<div class="profile-tournament-list">';
     for (const [slug, t] of entries) {
         const total = t.wins + t.losses + t.draws;
         const sp = scorePct(t.wins, t.draws, total);
-        html += `
+        tournamentHtml += `
             <button class="profile-tournament-row" data-slug="${slug}" data-player="${currentPlayer}">
                 <div class="profile-tournament-name">${t.name}</div>
                 <div class="profile-tournament-stats">
@@ -293,22 +282,61 @@ function renderTournaments(container, stats) {
                 </div>
             </button>`;
     }
-    html += '</div>';
-    container.innerHTML = html;
+    tournamentHtml += '</div>';
+
+    container.innerHTML = `
+        ${statRow('All Games', null, stats.wins, stats.losses, stats.draws, stats.total, 'all')}
+        ${statRow('As White', 'wK.webp', stats.whiteWins, stats.whiteLosses, stats.whiteDraws, stats.whiteGames, 'white')}
+        ${statRow('As Black', 'bK.webp', stats.blackWins, stats.blackLosses, stats.blackDraws, stats.blackGames, 'black')}
+        <div class="profile-section-title">Tournaments</div>
+        ${tournamentHtml}
+    `;
+}
+
+/**
+ * Extract the opening family name (text before the first ":").
+ * "Sicilian Defense: Najdorf Variation" → "Sicilian Defense"
+ * "Italian Game" → "Italian Game"
+ */
+function openingFamily(name) {
+    const colon = name.indexOf(':');
+    return colon > 0 ? name.slice(0, colon).trim() : name;
+}
+
+/**
+ * Group ECO entries by opening family and aggregate stats for a given side.
+ * Returns sorted array of { family, codes[], wins, losses, draws, total }.
+ */
+function groupByFamily(entries, side) {
+    const wKey = side === 'white' ? 'whiteWins' : 'blackWins';
+    const lKey = side === 'white' ? 'whiteLosses' : 'blackLosses';
+    const dKey = side === 'white' ? 'whiteDraws' : 'blackDraws';
+    const gKey = side === 'white' ? 'whiteGames' : 'blackGames';
+
+    const families = new Map();
+    for (const [code, e] of entries) {
+        if (e[gKey] === 0) continue;
+        const family = openingFamily(e.name);
+        if (!families.has(family)) {
+            families.set(family, { codes: [], wins: 0, losses: 0, draws: 0, total: 0 });
+        }
+        const f = families.get(family);
+        f.codes.push(code);
+        f.wins += e[wKey];
+        f.losses += e[lKey];
+        f.draws += e[dKey];
+        f.total += e[gKey];
+    }
+
+    return [...families.entries()]
+        .map(([family, f]) => ({ family, ...f }))
+        .sort((a, b) => b.total - a.total);
 }
 
 function renderOpenings(container, stats) {
     const entries = [...stats.ecos.entries()];
-
-    // Separate into white and black openings
-    const asWhite = entries
-        .filter(([, e]) => e.whiteGames > 0)
-        .sort((a, b) => b[1].whiteGames - a[1].whiteGames)
-        .slice(0, 10);
-    const asBlack = entries
-        .filter(([, e]) => e.blackGames > 0)
-        .sort((a, b) => b[1].blackGames - a[1].blackGames)
-        .slice(0, 10);
+    const asWhite = groupByFamily(entries, 'white');
+    const asBlack = groupByFamily(entries, 'black');
 
     let html = '';
 
@@ -317,17 +345,15 @@ function renderOpenings(container, stats) {
         html += '<p class="profile-empty-small">No games with ECO data.</p>';
     } else {
         html += '<div class="profile-opening-list">';
-        for (const [code, e] of asWhite) {
-            const total = e.whiteGames;
-            const wp = scorePct(e.whiteWins, e.whiteDraws, total);
+        for (const f of asWhite) {
+            const wp = scorePct(f.wins, f.draws, f.total);
             html += `
-                <div class="profile-opening-row">
-                    <span class="profile-eco-code">${code}</span>
-                    <span class="profile-opening-name">${e.name}</span>
-                    <span class="profile-opening-count">${total}</span>
-                    ${winBar(e.whiteWins, e.whiteLosses, e.whiteDraws, total)}
+                <button class="profile-opening-row" data-eco="${f.codes.join(',')}" data-color="white" data-family="${f.family}">
+                    <span class="profile-opening-name">${f.family}</span>
+                    <span class="profile-opening-count">${f.total}</span>
+                    ${winBar(f.wins, f.losses, f.draws, f.total)}
                     <span class="profile-opening-pct">${wp}%</span>
-                </div>`;
+                </button>`;
         }
         html += '</div>';
     }
@@ -337,17 +363,15 @@ function renderOpenings(container, stats) {
         html += '<p class="profile-empty-small">No games with ECO data.</p>';
     } else {
         html += '<div class="profile-opening-list">';
-        for (const [code, e] of asBlack) {
-            const total = e.blackGames;
-            const wp = scorePct(e.blackWins, e.blackDraws, total);
+        for (const f of asBlack) {
+            const wp = scorePct(f.wins, f.draws, f.total);
             html += `
-                <div class="profile-opening-row">
-                    <span class="profile-eco-code">${code}</span>
-                    <span class="profile-opening-name">${e.name}</span>
-                    <span class="profile-opening-count">${total}</span>
-                    ${winBar(e.blackWins, e.blackLosses, e.blackDraws, total)}
+                <button class="profile-opening-row" data-eco="${f.codes.join(',')}" data-color="black" data-family="${f.family}">
+                    <span class="profile-opening-name">${f.family}</span>
+                    <span class="profile-opening-count">${f.total}</span>
+                    ${winBar(f.wins, f.losses, f.draws, f.total)}
                     <span class="profile-opening-pct">${wp}%</span>
-                </div>`;
+                </button>`;
         }
         html += '</div>';
     }
@@ -356,30 +380,56 @@ function renderOpenings(container, stats) {
 }
 
 function renderOpponents(container, stats) {
-    const entries = [...stats.opponents.entries()]
+    const allEntries = [...stats.opponents.entries()]
         .map(([name, o]) => ({ name, ...o, total: o.wins + o.losses + o.draws }))
-        .filter(o => o.total >= 2)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 20);
+        .sort((a, b) => b.total - a.total);
 
-    if (entries.length === 0) {
-        container.innerHTML = '<p class="profile-empty-small">No repeat opponents found.</p>';
+    if (allEntries.length === 0) {
+        container.innerHTML = '<p class="profile-empty-small">No opponents found.</p>';
         return;
     }
 
-    let html = '<div class="profile-opponent-list">';
-    for (const o of entries) {
-        const wp = scorePct(o.wins, o.draws, o.total);
-        html += `
-            <button class="profile-opponent-row" data-opponent="${o.name}">
-                <span class="profile-opponent-name">${o.name}</span>
-                <span class="profile-opponent-record">${o.wins}W-${o.losses}L-${o.draws}D</span>
-                ${winBar(o.wins, o.losses, o.draws, o.total)}
-                <span class="profile-opponent-pct">${wp}%</span>
-            </button>`;
+    container.innerHTML = `
+        <div class="profile-opponent-search">
+            <input type="text" class="profile-opponent-input" placeholder="Search opponents..." id="profile-opponent-search">
+        </div>
+        <div class="profile-opponent-list" id="profile-opponent-list"></div>
+    `;
+
+    const listEl = document.getElementById('profile-opponent-list');
+    const searchInput = document.getElementById('profile-opponent-search');
+
+    function renderOpponentList(filter = '') {
+        const fLower = filter.toLowerCase();
+        const filtered = fLower
+            ? allEntries.filter(o => o.name.toLowerCase().includes(fLower))
+            : allEntries;
+
+        if (filtered.length === 0) {
+            listEl.innerHTML = '<p class="profile-empty-small">No matching opponents.</p>';
+            return;
+        }
+
+        let html = '';
+        for (const o of filtered) {
+            const wp = scorePct(o.wins, o.draws, o.total);
+            html += `
+                <div class="profile-opponent-row">
+                    <button class="profile-opponent-profile" data-opponent="${o.name}" title="View ${o.name}'s profile">
+                        <span class="profile-opponent-name">${o.name}</span>
+                    </button>
+                    <button class="profile-opponent-h2h" data-h2h="${o.name}" title="Head-to-head games">
+                        <span class="profile-opponent-record">${o.wins}W-${o.losses}L-${o.draws}D</span>
+                        ${winBar(o.wins, o.losses, o.draws, o.total)}
+                        <span class="profile-opponent-pct">${wp}%</span>
+                    </button>
+                </div>`;
+        }
+        listEl.innerHTML = html;
     }
-    html += '</div>';
-    container.innerHTML = html;
+
+    renderOpponentList();
+    searchInput.addEventListener('input', () => renderOpponentList(searchInput.value.trim()));
 }
 
 // --- Init ---
@@ -409,6 +459,34 @@ export function initPlayerProfile() {
             ]);
             await openGameViewer();
             openGameBrowser({ player, tournament: slug });
+            return;
+        }
+
+        const openingRow = e.target.closest('[data-eco]');
+        if (openingRow && currentPlayer) {
+            const player = currentPlayer;
+            const eco = openingRow.dataset.eco.split(',');
+            const color = openingRow.dataset.color;
+            const family = openingRow.dataset.family;
+            closePlayerProfile();
+            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
+                import('./game-browser.js'), import('./game-viewer.js')
+            ]);
+            await openGameViewer();
+            openGameBrowser({ player, eco, color, ecoLabel: family });
+            return;
+        }
+
+        const h2hBtn = e.target.closest('[data-h2h]');
+        if (h2hBtn && currentPlayer) {
+            const player = currentPlayer;
+            const opponent = h2hBtn.dataset.h2h;
+            closePlayerProfile();
+            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
+                import('./game-browser.js'), import('./game-viewer.js')
+            ]);
+            await openGameViewer();
+            openGameBrowser({ player, opponent });
             return;
         }
 

@@ -3048,14 +3048,20 @@ select.editor-header-input {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.3rem 0;
+    padding: 0.35rem 0.4rem;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    background: none;
+    border: none;
+    font-family: inherit;
+    color: inherit;
+    text-align: left;
+    width: 100%;
 }
 
-.profile-eco-code {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--text-subtle);
-    min-width: 2rem;
+.profile-opening-row:hover {
+    background: var(--overlay-light);
 }
 
 .profile-opening-name {
@@ -3095,6 +3101,32 @@ select.editor-header-input {
     text-align: right;
 }
 
+/* Opponent search */
+.profile-opponent-search {
+    margin-bottom: 0.5rem;
+}
+
+.profile-opponent-input {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.profile-opponent-input:focus {
+    border-color: var(--accent);
+}
+
+.profile-opponent-input::placeholder {
+    color: var(--text-faint);
+}
+
 /* Opponent list */
 .profile-opponent-list {
     display: flex;
@@ -3105,29 +3137,43 @@ select.editor-header-input {
 .profile-opponent-row {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.4rem;
     border-radius: var(--radius-xs);
-    cursor: pointer;
-    transition: background var(--transition-fast);
+    overflow: hidden;
+}
+
+.profile-opponent-profile,
+.profile-opponent-h2h {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0.4rem;
     background: none;
     border: none;
     font-family: inherit;
     color: inherit;
+    cursor: pointer;
+    transition: background var(--transition-fast);
     text-align: left;
-    width: 100%;
 }
 
-.profile-opponent-row:hover {
+.profile-opponent-profile:hover,
+.profile-opponent-h2h:hover {
     background: var(--overlay-light);
+}
+
+.profile-opponent-profile {
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-opponent-h2h {
+    gap: 0.4rem;
+    flex-shrink: 0;
 }
 
 .profile-opponent-name {
     font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
-    flex: 1;
-    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3140,14 +3186,14 @@ select.editor-header-input {
     text-align: right;
 }
 
-.profile-opponent-row .profile-bar {
+.profile-opponent-h2h .profile-bar {
     width: 4.5rem;
     flex-shrink: 0;
     margin: 0;
     height: 1.1rem;
 }
 
-.profile-opponent-row .profile-bar span {
+.profile-opponent-h2h .profile-bar span {
     font-size: 0.6rem;
 }
 
