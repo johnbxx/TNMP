@@ -142,6 +142,7 @@ const RATE_LIMITS = {
     '/og-game-image': 30,
     '/query': 30,
     '/tournaments': 60,
+    '/players': 60,
     '/health': 30,
     '/push-subscribe': 10,
     '/push-unsubscribe': 5,

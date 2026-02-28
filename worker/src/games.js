@@ -266,6 +266,17 @@ export async function handleTournaments(request, env) {
     }, 200, env, request);
 }
 
+// --- Players Endpoint ---
+
+export async function handlePlayers(request, env) {
+    const result = await env.DB.prepare(
+        'SELECT DISTINCT name FROM (SELECT white AS name FROM games UNION SELECT black AS name FROM games) ORDER BY name'
+    ).all();
+    return corsResponse({
+        players: result.results.map(r => formatPlayerName(r.name)),
+    }, 200, env, request);
+}
+
 // --- Player History ---
 
 export async function handlePlayerHistory(request, env) {

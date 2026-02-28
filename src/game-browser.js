@@ -1,7 +1,7 @@
 import { openGameViewer, openGameEditor } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
-import { getGamesData, fetchGames, fetchTournamentList, buildPlayerList, getRoundNumbers, getGamesForRound, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
+import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
 import { getTournamentMeta } from './config.js';
 import { openPlayerProfile } from './player-profile.js';
 
@@ -19,9 +19,6 @@ let _filterColor = null;      // 'white' | 'black' | null
 let _filterEvent = null;      // event name filter for local imports (null = all events)
 
 // --- Exported accessors ---
-
-export function getSelectedPlayer() { return _selectedPlayer; }
-export function setSelectedPlayer(name) { _selectedPlayer = name; }
 
 export function getActiveFilter() {
     if (_selectedPlayer) {
@@ -73,8 +70,15 @@ function openGameAtIndex(gameList, idx, { meta = {} } = {}) {
 
 // --- Helpers ---
 
-function ensureBrowserLists() {
-    if (_playerList.length === 0) _playerList = buildPlayerList();
+async function ensureBrowserLists() {
+    if (_playerList.length === 0) {
+        const isLocal = !!getGamesData()?.query?.local;
+        if (isLocal) {
+            _playerList = buildPlayerList();
+        } else {
+            try { _playerList = await fetchPlayerList(); } catch { _playerList = buildPlayerList(); }
+        }
+    }
     if (_sectionList.length === 0) {
         _sectionList = buildFilteredSectionList();
         _visibleSections = new Set(_sectionList);
@@ -318,7 +322,7 @@ export async function openGameBrowser(query = null) {
             }
         }
         await renderDataSourceDropdown();
-        ensureBrowserLists();
+        await ensureBrowserLists();
     }
 
     const containerEl = panelEl.querySelector('.browser-content');
@@ -368,7 +372,7 @@ function openViewerWithSubmission(game) {
  * Show the browser panel and render its contents.
  * Called by game-viewer.js when opening the panel.
  */
-export async function renderBrowserInPanel() {
+export async function renderBrowserInPanel({ autoSelect = false } = {}) {
     const panelEl = document.getElementById('viewer-browser-panel');
     if (!panelEl) return false;
 
@@ -377,6 +381,13 @@ export async function renderBrowserInPanel() {
     if (modalContent) modalContent.classList.add('has-browser');
 
     await openGameBrowser();
+
+    // On desktop, auto-open the first game with PGN
+    if (autoSelect && window.matchMedia('(min-width: 1000px)').matches) {
+        const first = getVisibleGames().find(g => g.hasPgn && g.gameId);
+        if (first) openGameFromBrowser(first.gameId);
+    }
+
     return true;
 }
 
@@ -429,47 +440,6 @@ export function openGameWithPlayerNav(playerName, gameId) {
 
 export function openBrowserWithCurrentFilter() {
     openGameBrowser();
-}
-
-/**
- * Open the browser, auto-selecting the first game with PGN from the latest round.
- * Opens directly into the viewer with browser panel alongside.
- * Falls back to browser-only view if no games with PGN are found.
- */
-export async function openBrowserWithFirstGame() {
-    let gamesData = getGamesData();
-    if (!gamesData?.games) {
-        try {
-            gamesData = await fetchGames({ include: 'pgn,submissions' }, { cache: true });
-        } catch {
-            return openGameViewer();
-        }
-    }
-    const roundNums = getRoundNumbers();
-    if (roundNums.length === 0) return openGameViewer();
-
-    // Find the latest round with at least one game with PGN
-    let targetRound = null;
-    let first = null;
-    for (let i = roundNums.length - 1; i >= 0; i--) {
-        const games = getGamesForRound(roundNums[i]);
-        const sorted = [...games].sort((a, b) => (a.board || 999) - (b.board || 999));
-        const withPgn = sorted.find(g => g.hasPgn && g.gameId);
-        if (withPgn) {
-            targetRound = roundNums[i];
-            first = withPgn;
-            break;
-        }
-    }
-    if (!first) return openGameViewer();
-
-    _selectedRound = targetRound;
-    ensureBrowserLists();
-    const gameList = buildCurrentGameList();
-    const idx = gameList.indexOf(first.gameId);
-    if (idx !== -1) {
-        openGameAtIndex(gameList, idx);
-    }
 }
 
 // --- Title Dropdown ---
@@ -580,7 +550,11 @@ async function switchDataSource(value, currentSlug) {
     // Shared: reset derived state and re-render
     const roundNums = getFilteredRoundNumbers();
     _selectedRound = isLocal ? null : (roundNums.length ? roundNums[roundNums.length - 1] : null);
-    _playerList = buildPlayerList();
+    if (isLocal) {
+        _playerList = buildPlayerList();
+    } else {
+        try { _playerList = await fetchPlayerList(); } catch { _playerList = buildPlayerList(); }
+    }
     _sectionList = buildFilteredSectionList();
     _visibleSections = new Set(_sectionList);
 
