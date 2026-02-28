@@ -10,8 +10,9 @@ import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
 import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown, editCurrentGame, dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel } from './src/game-viewer.js';
 import { editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, showHeaderEditor, hideHeaderEditor, saveHeaderEditor } from './src/pgn-editor.js';
 import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
+import { getCurrentNodeId, getNodes } from './src/board-core.js';
 import { showToast } from './src/toast.js';
-import { prefetchGames, openBrowserWithFirstGame, getFilteredGames, getCachedGame, getActiveFilter } from './src/game-browser.js';
+import { prefetchGames, getFilteredGames, getCachedGame, getActiveFilter } from './src/game-browser.js';
 import { fetchGames } from './src/browser-data.js';
 import { formatName, getHeader } from './src/utils.js';
 
@@ -192,10 +193,7 @@ const ACTIONS = {
     'save-settings': () => saveSettings(wrappedCheckPairings),
     'enable-push': enablePush,
     'disable-push': disablePush,
-    'open-games': () => {
-        if (window.matchMedia('(min-width: 1000px)').matches) openBrowserWithFirstGame();
-        else openGameViewer();
-    },
+    'open-games': () => openGameViewer(),
     // Viewer
     'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
     'viewer-next': goToNext, 'viewer-end': goToEnd, 'viewer-flip': flipBoard,
@@ -210,6 +208,9 @@ const ACTIONS = {
     'viewer-analysis': async () => {
         const pgn = getGamePgn();
         if (!pgn) return;
+        const nodes = getNodes();
+        const ply = nodes[getCurrentNodeId()]?.ply || 0;
+        const hash = ply > 0 ? '#' + ply : '';
         const tab = window.open('about:blank', '_blank');
         try {
             const res = await fetch('https://lichess.org/api/import', {
@@ -219,7 +220,7 @@ const ACTIONS = {
             });
             if (res.ok) {
                 const data = await res.json();
-                if (data.url) { if (tab) tab.location.href = data.url; else window.open(data.url, '_blank'); return; }
+                if (data.url) { if (tab) tab.location.href = data.url + hash; else window.open(data.url + hash, '_blank'); return; }
             }
         } catch { /* network error */ }
         if (tab) tab.location.href = 'https://lichess.org/paste';

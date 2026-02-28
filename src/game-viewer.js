@@ -170,7 +170,7 @@ async function ensurePanelOpen(gameId) {
     let hadAsyncGap = false;
     const panelEl = document.getElementById('viewer-browser-panel');
     if (panelEl && panelEl.classList.contains('hidden')) {
-        await renderBrowserInPanel();
+        await renderBrowserInPanel({ autoSelect: !gameId });
         hadAsyncGap = true;
     }
 

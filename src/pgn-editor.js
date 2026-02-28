@@ -9,6 +9,7 @@
 
 import { Chess } from 'chess.js';
 import { WORKER_URL } from './config.js';
+import { showToast } from './toast.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import { serializePgn, NAG_INFO, splitPgn, pgnToGameObject } from './pgn-parser.js';
 import { setGamesData, getGamesData } from './browser-data.js';
@@ -907,12 +908,13 @@ function wireImportDialog() {
     const textarea = document.getElementById('editor-import-text');
     const fileInput = document.getElementById('editor-import-file');
 
-    // File input → populate textarea
-    fileInput?.addEventListener('change', () => {
-        const file = fileInput.files[0];
-        if (!file) return;
-        file.text().then(text => { textarea.value = text; });
-        fileInput.value = ''; // reset so same file can be re-selected
+    // File input → populate textarea (supports multiple files)
+    fileInput?.addEventListener('change', async () => {
+        const files = [...fileInput.files];
+        if (!files.length) return;
+        const texts = await Promise.all(files.map(f => f.text()));
+        textarea.value = texts.join('\n\n');
+        fileInput.value = ''; // reset so same files can be re-selected
     });
 
     // Drag-and-drop on textarea
@@ -923,13 +925,13 @@ function wireImportDialog() {
     textarea?.addEventListener('dragleave', () => {
         textarea.classList.remove('drag-over');
     });
-    textarea?.addEventListener('drop', (e) => {
+    textarea?.addEventListener('drop', async (e) => {
         e.preventDefault();
         textarea.classList.remove('drag-over');
-        const file = e.dataTransfer.files[0];
-        if (file) {
-            file.text().then(text => { textarea.value = text; });
-        }
+        const files = [...e.dataTransfer.files];
+        if (!files.length) return;
+        const texts = await Promise.all(files.map(f => f.text()));
+        textarea.value = texts.join('\n\n');
     });
 }
 
@@ -964,6 +966,7 @@ export function doImport() {
     // Inject into browser-data and open viewer+browser
     setGamesData({ games, query: { local: true } });
     openImportedGames(games);
+    showToast(`Imported ${games.length} game${games.length === 1 ? '' : 's'}`);
 }
 
 function importPgnIntoEditor(pgn) {

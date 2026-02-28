@@ -76,10 +76,6 @@ export const NAG_INFO = {
     146: ['N',      'Novelty',                      'other'],
 };
 
-export function nagToSymbol(nag) {
-    return NAG_SYMBOLS[nag] || `$${nag}`;
-}
-
 export function nagToHtml(nag) {
     const sym = NAG_SYMBOLS[nag] || `$${nag}`;
     return `<span data-nag="${nag}">${sym}</span>`;

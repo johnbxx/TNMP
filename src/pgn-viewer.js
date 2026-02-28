@@ -417,5 +417,3 @@ function renderMoveList() {
         onMoveClick: (nodeId) => { stopAutoPlay(); updatePlayButton(); goToMove(nodeId); },
     });
 }
-
-

@@ -223,30 +223,7 @@ export function showState(state, info, pairingInfo = null) {
     updateCountdownDisplay();
 }
 
-function formatTimeAgo(date) {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    const days = Math.floor(hours / 24);
-    return `${days} day${days > 1 ? 's' : ''} ago`;
-}
 
-export function showOfflineBanner(fetchedAt) {
-    let banner = document.getElementById('offline-banner');
-    if (!banner) {
-        banner = document.createElement('div');
-        banner.id = 'offline-banner';
-        banner.setAttribute('role', 'status');
-        banner.setAttribute('aria-live', 'polite');
-        document.body.prepend(banner);
-    }
-    const ago = formatTimeAgo(new Date(fetchedAt));
-    banner.textContent = `Offline \u2014 showing data from ${ago}`;
-    banner.classList.add('show');
-}
 
 export function hideOfflineBanner() {
     const banner = document.getElementById('offline-banner');

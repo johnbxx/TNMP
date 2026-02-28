@@ -28,7 +28,6 @@ export function setCurrentNodeId(id) { _currentNodeId = id; }
 export function getMainLineEnd() { return _mainLineEnd; }
 
 
-export function getAnnotatedMoves() { return _annotatedMoves; }
 export function setAnnotatedMoves(m) { _annotatedMoves = m; }
 
 export function getStartingFen() { return _startingFen; }
