@@ -8,3 +8,4 @@ pgn-export/
 pgn-export-bare/
 *.pgn
 *.png
+.gitnexus/

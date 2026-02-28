@@ -85,6 +85,9 @@ export function prefetchGames() {
     }
     // Refresh from network in the background
     fetchGames({ include: 'pgn,submissions' }, { cache: true }).catch(() => {});
+    // Also prefetch tournament list and player list so the browser opens instantly
+    fetchTournamentList().catch(() => {});
+    fetchPlayerList().catch(() => {});
 }
 
 /**

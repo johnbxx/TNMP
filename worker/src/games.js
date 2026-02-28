@@ -5,8 +5,9 @@
  *          /player-history, /eco-classify, /submit-game
  */
 
-import { corsResponse, normalizePlayerName, formatPlayerName, slugifyTournament, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId } from './helpers.js';
+import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, slugifyTournament, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId } from './helpers.js';
 import { classifyOpening, replayToFen, classifyFen } from './eco.js';
+import ecoEpd from './eco-epd.json';
 import { generateBoardSvg } from './og-board.js';
 
 // --- OG Game Endpoints ---
@@ -371,6 +372,17 @@ export async function handleEcoClassify(request, env) {
     const fen = url.searchParams.get('fen');
     if (!fen) return corsResponse({ error: 'fen parameter is required' }, 400, env, request);
     return corsResponse(classifyFen(fen) || {}, 200, env, request);
+}
+
+export function handleEcoData(request, env) {
+    const json = JSON.stringify(ecoEpd);
+    return new Response(json, {
+        headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=604800',
+            ...corsHeaders(env, request),
+        },
+    });
 }
 
 // --- Game Submission ---

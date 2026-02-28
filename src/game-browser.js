@@ -1,4 +1,4 @@
-import { openGameViewer, openGameEditor } from './game-viewer.js';
+import { openGameViewer, openGameEditor, showExplorer, refreshExplorer, isExplorerMode } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
 import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
@@ -19,6 +19,7 @@ let _filterColor = null;      // 'white' | 'black' | null
 let _filterEco = null;        // Set of ECO codes or null
 let _filterOpponent = null;   // opponent name or null (for head-to-head)
 let _filterEvent = null;      // event name filter for local imports (null = all events)
+let _explorerGameIds = null;  // Set of gameIds at current explorer position (null = no filter)
 
 // --- Exported accessors ---
 
@@ -43,6 +44,7 @@ export function clearFilter() {
     _filterEco = null;
     _filterOpponent = null;
     _filterEvent = null;
+    _explorerGameIds = null;
     _visibleSections = new Set(_sectionList);
 }
 
@@ -97,6 +99,7 @@ function resetBrowserState() {
     _filterEco = null;
     _filterOpponent = null;
     _filterEvent = null;
+    _explorerGameIds = null;
     _playerList = [];
     _sectionList = [];
     _visibleSections = new Set();
@@ -164,6 +167,11 @@ function getVisibleGames() {
             games = games.filter(g => !g.section || _visibleSections.has(normalizeSection(g.section)));
         }
         games = [...games].sort((a, b) => (a.board || 999) - (b.board || 999));
+    }
+
+    // Explorer position filter — narrows to games that reached the current position
+    if (_explorerGameIds) {
+        games = games.filter(g => g.gameId && _explorerGameIds.has(g.gameId));
     }
 
     return games;
@@ -402,10 +410,10 @@ export async function renderBrowserInPanel({ autoSelect = false } = {}) {
 
     await openGameBrowser();
 
-    // On desktop, auto-open the first game with PGN
+    // On desktop, show the opening explorer (even if no games yet — will show empty state)
     if (autoSelect && window.matchMedia('(min-width: 1000px)').matches) {
-        const first = getVisibleGames().find(g => g.hasPgn && g.gameId);
-        if (first) openGameFromBrowser(first.gameId);
+        const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
+        showExplorer(gamesWithPgn, { onNavigate: onExplorerNavigate });
     }
 
     return true;
@@ -583,6 +591,10 @@ async function switchDataSource(value, currentSlug) {
         const gamesEl = containerEl?.querySelector('#browser-games');
         if (gamesEl) gamesEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
     }
+
+    // Refresh explorer with new data
+    _explorerGameIds = null;
+    syncExplorer();
 }
 
 /**
@@ -767,7 +779,9 @@ function renderBrowserContent(containerEl, roundNumbers) {
                         c.classList.toggle('browser-section-active', c.dataset.value === _filterColor)
                     );
                 }
+                _explorerGameIds = null;
                 renderGamesList();
+                syncExplorer();
                 return;
             }
 
@@ -781,7 +795,9 @@ function renderBrowserContent(containerEl, roundNumbers) {
                 containerEl.querySelectorAll('.browser-round-btn').forEach(b =>
                     b.classList.toggle('browser-round-active', parseInt(b.dataset.round) === _selectedRound)
                 );
+                _explorerGameIds = null;
                 renderGamesList();
+                syncExplorer();
                 return;
             }
 
@@ -804,7 +820,9 @@ function renderBrowserContent(containerEl, roundNumbers) {
                 containerEl.querySelectorAll('.browser-section-btn[data-section]').forEach(b =>
                     b.classList.toggle('browser-section-active', _visibleSections.has(b.dataset.section))
                 );
+                _explorerGameIds = null;
                 renderGamesList();
+                syncExplorer();
                 return;
             }
 
@@ -877,6 +895,9 @@ async function clearPlayerMode() {
     // Re-render
     const containerEl = document.querySelector('#viewer-browser-panel .browser-content');
     if (containerEl) renderBrowserContent(containerEl, roundNums);
+
+    _explorerGameIds = null;
+    syncExplorer();
 }
 
 async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
@@ -957,7 +978,9 @@ function renderChips() {
     if (select) {
         select.addEventListener('change', () => {
             _filterTournament = select.value || null;
+            _explorerGameIds = null;
             renderGamesList();
+            syncExplorer();
         });
     }
 }
@@ -980,7 +1003,10 @@ function renderGamesList() {
     const games = getVisibleGames();
 
     if (games.length === 0) {
-        gamesEl.innerHTML = '<p class="browser-empty">No games found.</p>';
+        const msg = _explorerGameIds
+            ? '<p class="browser-empty">No games reached this position.</p>'
+            : '<p class="browser-empty">No games found.</p>';
+        gamesEl.innerHTML = msg;
         return;
     }
 
@@ -1005,6 +1031,35 @@ function renderGamesList() {
     document.getElementById('browser-profile-btn')?.addEventListener('click', () => {
         openPlayerProfile(_selectedPlayer);
     });
+}
+
+/**
+ * Called by the explorer when the user navigates to a new position.
+ * Filters the browser game list to show only games that reached that position.
+ * @param {string[]|null} gameIds - null = show all (starting position), [] = no games
+ */
+function onExplorerNavigate(gameIds) {
+    _explorerGameIds = gameIds ? new Set(gameIds) : null;
+    renderGamesList();
+}
+
+/**
+ * Refresh the explorer with the current visible games (after filter changes).
+ */
+function syncExplorer() {
+    if (!isExplorerMode()) return;
+    const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
+    refreshExplorer(gamesWithPgn);
+}
+
+/**
+ * Start (or restart) the explorer from the current visible games.
+ * Called when returning to the explorer from a game on desktop.
+ */
+export function restoreExplorer() {
+    _explorerGameIds = null;
+    const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
+    showExplorer(gamesWithPgn, { onNavigate: onExplorerNavigate });
 }
 
 /**

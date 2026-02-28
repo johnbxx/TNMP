@@ -8,7 +8,7 @@
  */
 
 import { Chess } from 'chess.js';
-import { WORKER_URL } from './config.js';
+import { classifyFen as classifyEco, loadEcoData } from './eco.js';
 import { showToast } from './toast.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import { serializePgn, NAG_INFO, splitPgn, pgnToGameObject } from './pgn-parser.js';
@@ -50,34 +50,22 @@ function syncDesktopLayout() {
  */
 // --- ECO Live Display ---
 
-let ecoDebounce = null;
-
 function updateEcoDisplay() {
-    clearTimeout(ecoDebounce);
-    ecoDebounce = setTimeout(async () => {
-        const ecoEl = document.getElementById('editor-eco');
-        if (!ecoEl) return;
-        // Walk up to the main line — ECO should reflect the main line, not variations
-        let ecoNodeId = getCurrentNodeId();
-        const nodes = getNodes();
-        while (ecoNodeId > 0 && nodes[ecoNodeId]?.isVariation) {
-            ecoNodeId = nodes[ecoNodeId].parentId;
-        }
-        const fen = nodes[ecoNodeId]?.fen;
-        if (!fen) return; // keep last known ECO visible
-        try {
-            const response = await fetch(`${WORKER_URL}/eco-classify?fen=${encodeURIComponent(fen)}`);
-            if (!response.ok) return;
-            const data = await response.json();
-            if (data.eco) {
-                ecoEl.textContent = `${data.eco}: ${data.name}`;
-                ecoEl.classList.remove('hidden');
-            }
-            // If no match, keep showing the last known ECO
-        } catch {
-            // Network error — keep last known ECO visible
-        }
-    }, 300);
+    const ecoEl = document.getElementById('editor-eco');
+    if (!ecoEl) return;
+    // Walk up to the main line — ECO should reflect the main line, not variations
+    let ecoNodeId = getCurrentNodeId();
+    const nodes = getNodes();
+    while (ecoNodeId > 0 && nodes[ecoNodeId]?.isVariation) {
+        ecoNodeId = nodes[ecoNodeId].parentId;
+    }
+    const fen = nodes[ecoNodeId]?.fen;
+    if (!fen) return;
+    const eco = classifyEco(fen);
+    if (eco) {
+        ecoEl.textContent = `${eco.eco}: ${eco.name}`;
+        ecoEl.classList.remove('hidden');
+    }
 }
 
 function syncCommentElastic() {
@@ -97,6 +85,7 @@ let contextMenuInitialized = false;
 let _commentWired = false;
 
 export function openEditor(options = {}) {
+    loadEcoData().then(() => updateEcoDisplay());
     if (!_commentWired) {
         _commentWired = true;
         const commentEl = document.getElementById('editor-comment-input');

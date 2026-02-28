@@ -11,7 +11,7 @@
 
 import { corsHeaders, corsResponse, checkRateLimit } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
-import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handlePlayerHistory, handleEcoClassify, handleSubmitGame, handleBackfillEco } from './games.js';
+import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handlePlayerHistory, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest } from './push.js';
 import { handleScheduled } from './cron.js';
 
@@ -48,6 +48,7 @@ export default {
             if (path === '/og-game' && request.method === 'GET') return await handleOgGame(request, env);
             if (path === '/og-game-image' && request.method === 'GET') return await handleOgGameImage(request, env);
             if (path === '/eco-classify' && request.method === 'GET') return await handleEcoClassify(request, env);
+            if (path === '/eco-data' && request.method === 'GET') return handleEcoData(request, env);
 
             // Game submissions
             if (path === '/submit-game' && request.method === 'POST') return await handleSubmitGame(request, env);
