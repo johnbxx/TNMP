@@ -270,8 +270,10 @@ export async function handleTournamentHtml(request, env) {
 }
 
 export async function handleTournamentState(request, env) {
-    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
-    const meta = await getMetaOrResolve(env);
+    const [cached, meta] = await Promise.all([
+        env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
+        getMetaOrResolve(env),
+    ]);
     const slug = meta?.name ? slugifyTournament(meta.name) : null;
     const appState = computeAppState(cached, meta);
 
@@ -295,8 +297,10 @@ export async function handleTournamentState(request, env) {
 }
 
 export async function handleOgState(request, env) {
-    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
-    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
+    const [cached, meta] = await Promise.all([
+        env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
+        env.SUBSCRIBERS.get('cache:tournamentMeta', 'json'),
+    ]);
     const appState = computeAppState(cached, meta);
     const ogConfig = OG_STATE_CONFIG[appState.state] || OG_STATE_CONFIG.no;
     const title = appState.state === 'in_progress' && appState.round

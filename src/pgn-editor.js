@@ -26,7 +26,10 @@ import {
     highlightSquares, clearHighlights, highlightCurrentMove,
     goToNode, updateNavigationButtons,
     renderMoveList as renderMoveListCore,
+    resetSquareOpacity,
+    resizeBoard,
 } from './board-core.js';
+import { formatName } from './utils.js';
 
 const EDITOR_BTNS = { start: 'editor-start', prev: 'editor-prev', next: 'editor-next', end: 'editor-end' };
 
@@ -39,10 +42,6 @@ let editorGameId = null;  // gameId of the game being edited (for cache updates)
 
 const UNDO_LIMIT = 50;
 
-function syncDesktopLayout() {
-    const board = getBoard();
-    if (board && board.resize) board.resize();
-}
 
 /**
  * Sync the comment textarea height to its content (elastic sizing).
@@ -116,7 +115,7 @@ export function openEditor(options = {}) {
     setResizeCallback(() => {
         if (!getBoard()) return;
         renderMoveList();
-        syncDesktopLayout();
+        resizeBoard();
     });
 
     renderMoveList();
@@ -124,7 +123,7 @@ export function openEditor(options = {}) {
     updateEcoDisplay();
 
     updateNavigationButtons(EDITOR_BTNS);
-    syncDesktopLayout();
+    resizeBoard();
 
     if (!contextMenuInitialized) {
         setupMoveContextMenu();
@@ -209,10 +208,6 @@ function onDragStart(evt) {
     const el = document.getElementById('viewer-board');
     const sq = el?.querySelector(`[data-square-coord="${evt.square}"]`);
     if (sq) sq.style.opacity = 0.999;
-}
-
-function resetSquareOpacity() {
-    document.querySelectorAll('#viewer-board [data-square-coord]').forEach(sq => sq.style.opacity = 1);
 }
 
 function onDrop(evt) {
@@ -351,7 +346,7 @@ function executeMove(from, to, promotion) {
     updateCommentBox();
 
     updateNavigationButtons(EDITOR_BTNS);
-    syncDesktopLayout();
+    resizeBoard();
     return true;
 }
 
@@ -431,7 +426,7 @@ export function deleteFromHere() {
     updateCommentBox();
 
     updateNavigationButtons(EDITOR_BTNS);
-    syncDesktopLayout();
+    resizeBoard();
 }
 
 function markDeleted(nodeId) {
@@ -556,7 +551,7 @@ export function undo() {
     updateCommentBox();
 
     updateNavigationButtons(EDITOR_BTNS);
-    syncDesktopLayout();
+    resizeBoard();
 }
 
 // --- Navigation ---
@@ -992,13 +987,10 @@ export async function copyPgn() {
 
 // --- Header Editor ---
 
-/**
- * Display "Last, First" as "First Last" for editing; pass through other formats.
- */
+/** Convert PGN name to display format, returning '' for unknown/empty. */
 function nameForDisplay(name) {
     if (!name || name === '?') return '';
-    const m = name.match(/^([^,]+),\s*(.+)$/);
-    return m ? `${m[2]} ${m[1]}` : name;
+    return formatName(name);
 }
 
 /**

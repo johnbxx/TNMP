@@ -5,20 +5,17 @@
  *          /player-history, /eco-classify, /submit-game
  */
 
-import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, slugifyTournament, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId } from './helpers.js';
+import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId } from './helpers.js';
 import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import ecoEpd from './eco-epd.json';
 import { generateBoardSvg } from './og-board.js';
 
 // --- OG Game Endpoints ---
 
-const GAME_DETAIL_SQL = `SELECT g.white, g.black, g.white_elo, g.black_elo, g.result,
-    g.round, g.board, g.eco, g.opening_name, t.name as tournament_name
-    FROM games g JOIN tournaments t ON g.tournament_slug = t.slug WHERE g.game_id = ?`;
-
-const GAME_FULL_SQL = `SELECT g.pgn, g.white, g.black, g.white_elo, g.black_elo, g.result,
-    g.round, g.board, g.eco, g.opening_name, t.name as tournament_name
-    FROM games g JOIN tournaments t ON g.tournament_slug = t.slug WHERE g.game_id = ?`;
+const GAME_COLS = 'g.white, g.black, g.white_elo, g.black_elo, g.result, g.round, g.board, g.eco, g.opening_name, t.name as tournament_name';
+const GAME_JOIN = 'FROM games g JOIN tournaments t ON g.tournament_slug = t.slug WHERE g.game_id = ?';
+const GAME_DETAIL_SQL = `SELECT ${GAME_COLS} ${GAME_JOIN}`;
+const GAME_FULL_SQL = `SELECT g.pgn, ${GAME_COLS} ${GAME_JOIN}`;
 
 export async function handleOgGame(request, env) {
     const url = new URL(request.url);
@@ -50,7 +47,15 @@ export async function handleOgGameImage(request, env) {
         });
     }
 
-    const row = await env.DB.prepare(GAME_FULL_SQL).bind(gameId).first();
+    // Fetch game data and font in parallel
+    const FONT_URL = 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2';
+    const [row, fontBuffer] = await Promise.all([
+        env.DB.prepare(GAME_FULL_SQL).bind(gameId).first(),
+        fetch(FONT_URL).then(async r => new Uint8Array(await r.arrayBuffer())).catch(err => {
+            console.error('Font fetch failed:', err);
+            return null;
+        }),
+    ]);
     if (!row) return new Response('Game not found', { status: 404 });
 
     const svg = generateBoardSvg({
@@ -60,16 +65,6 @@ export async function handleOgGameImage(request, env) {
         eco: row.eco, openingName: row.opening_name,
         tournamentName: row.tournament_name, round: row.round, board: row.board,
     });
-
-    // Fetch font for text rendering
-    const FONT_URL = 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2';
-    let fontBuffer;
-    try {
-        const fontRes = await fetch(FONT_URL);
-        fontBuffer = new Uint8Array(await fontRes.arrayBuffer());
-    } catch (err) {
-        console.error('Font fetch failed:', err);
-    }
 
     // Convert SVG to PNG via resvg
     let pngBuffer;
@@ -141,8 +136,8 @@ export async function handleQuery(request, env) {
     }
 
     // Player filter
-    if (player) {
-        const norm = normalizePlayerName(player);
+    const norm = player ? normalizePlayerName(player) : null;
+    if (norm) {
         if (color === 'white') { conditions.push('g.white_norm = ?'); params.push(norm); }
         else if (color === 'black') { conditions.push('g.black_norm = ?'); params.push(norm); }
         else { conditions.push('(g.white_norm = ? OR g.black_norm = ?)'); params.push(norm, norm); }
@@ -164,8 +159,7 @@ export async function handleQuery(request, env) {
         conditions.push(`(${ecoConds.join(' OR ')})`);
     }
 
-    if (result && player) {
-        const norm = normalizePlayerName(player);
+    if (result && norm) {
         if (result === 'win') {
             conditions.push('((g.white_norm = ? AND g.result = ?) OR (g.black_norm = ? AND g.result = ?))');
             params.push(norm, '1-0', norm, '0-1');
@@ -178,8 +172,7 @@ export async function handleQuery(request, env) {
         }
     }
 
-    if ((minRating || maxRating) && player) {
-        const norm = normalizePlayerName(player);
+    if ((minRating || maxRating) && norm) {
         const ratingConds = [];
         const min = minRating ? parseInt(minRating) : null;
         const max = maxRating ? parseInt(maxRating) : null;
@@ -225,15 +218,16 @@ export async function handleQuery(request, env) {
         ? ', s.pgn AS submission_pgn, s.submitted_by, s.status AS submission_status'
         : '';
 
-    const countResult = await env.DB.prepare(
-        `SELECT COUNT(*) as total FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where}`
-    ).bind(...params).first();
+    const [countResult, gamesResult] = await Promise.all([
+        env.DB.prepare(
+            `SELECT COUNT(*) as total FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where}`
+        ).bind(...params).first(),
+        env.DB.prepare(
+            `SELECT ${selectCols}${submissionCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${submissionJoin} ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
+        ).bind(...params, limit, offset).all(),
+    ]);
 
-    const result2 = await env.DB.prepare(
-        `SELECT ${selectCols}${submissionCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${submissionJoin} ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
-    ).bind(...params, limit, offset).all();
-
-    const games = result2.results.map(row => {
+    const games = gamesResult.results.map(row => {
         const game = {
             tournament: row.tournament_name, tournamentSlug: row.tournament_slug,
             shortCode: row.short_code, round: row.round, board: row.board,
@@ -273,7 +267,7 @@ export async function handleTournaments(request, env) {
 
 export async function handlePlayers(request, env) {
     const result = await env.DB.prepare(
-        'SELECT DISTINCT name FROM (SELECT white AS name FROM games UNION SELECT black AS name FROM games) ORDER BY name'
+        'SELECT name FROM (SELECT white AS name FROM games UNION SELECT black AS name FROM games) ORDER BY name'
     ).all();
     return corsResponse({
         players: result.results.map(r => formatPlayerName(r.name)),
@@ -295,16 +289,18 @@ export async function handlePlayerHistory(request, env) {
     const standingsPrefix = `standings:${slug}:`;
     const { keys } = await env.SUBSCRIBERS.list({ prefix: standingsPrefix });
 
-    let foundPlayer = null;
-    let foundSection = null;
+    // Fetch all standings sections in parallel
+    const sections = await Promise.all(keys.map(key => env.SUBSCRIBERS.get(key.name, 'json')));
 
-    for (const key of keys) {
-        const section = await env.SUBSCRIBERS.get(key.name, 'json');
+    let foundPlayer = null;
+    let foundSectionData = null;
+
+    for (const section of sections) {
         if (!section?.players) continue;
         for (const p of section.players) {
             if (patterns.some(r => r.test(p.name))) {
                 foundPlayer = p;
-                foundSection = section.section;
+                foundSectionData = section;
                 break;
             }
         }
@@ -313,15 +309,27 @@ export async function handlePlayerHistory(request, env) {
 
     if (!foundPlayer) return corsResponse({ error: 'Player not found in standings' }, 404, env, request);
 
+    // Build rank map from the found section (already fetched above)
     const rankMap = {};
-    const sectionData = await env.SUBSCRIBERS.get(`${standingsPrefix}${foundSection}`, 'json');
-    if (sectionData?.players) {
-        for (const p of sectionData.players) rankMap[p.rank] = { name: p.name, rating: p.rating, url: p.url };
+    if (foundSectionData?.players) {
+        for (const p of foundSectionData.players) rankMap[p.rank] = { name: p.name, rating: p.rating, url: p.url };
     }
 
-    const pairingsColors = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json') || {};
     const norm = normalizePlayerName(playerName);
 
+    // Fetch pairings colors + all player games in parallel (single D1 query for all rounds)
+    const [pairingsColors, gameRows] = await Promise.all([
+        env.SUBSCRIBERS.get('cache:pairingsColors', 'json').then(v => v || {}),
+        env.DB.prepare(
+            'SELECT round, white_norm, board, game_id FROM games WHERE tournament_slug = ? AND (white_norm = ? OR black_norm = ?)'
+        ).bind(slug, norm, norm).all().then(r => r.results),
+    ]);
+
+    // Index game rows by round for O(1) lookup
+    const gamesByRound = {};
+    for (const row of gameRows) gamesByRound[row.round] = row;
+
+    const byeTypes = { H: 'half', B: 'full', U: 'zero' };
     const rounds = {};
     for (let i = 0; i < foundPlayer.rounds.length; i++) {
         const roundData = foundPlayer.rounds[i];
@@ -330,7 +338,6 @@ export async function handlePlayerHistory(request, env) {
         const code = roundData.result;
 
         if (code === 'H' || code === 'B' || code === 'U') {
-            const byeTypes = { H: 'half', B: 'full', U: 'zero' };
             rounds[roundNum] = { result: code, isBye: true, byeType: byeTypes[code], color: null, opponent: null, opponentRating: null, board: null };
             continue;
         }
@@ -338,10 +345,8 @@ export async function handlePlayerHistory(request, env) {
         const opponent = rankMap[roundData.opponentRank];
         let color = null, board = null, gameId = null;
 
-        // D1 first (has game_id), then pairingsColors fallback for very recent rounds
-        const gameRow = await env.DB.prepare(
-            'SELECT white_norm, board, game_id FROM games WHERE tournament_slug = ? AND round = ? AND (white_norm = ? OR black_norm = ?)'
-        ).bind(slug, roundNum, norm, norm).first();
+        // D1 lookup (single query above), then pairingsColors fallback for very recent rounds
+        const gameRow = gamesByRound[roundNum];
         if (gameRow) {
             color = gameRow.white_norm === norm ? 'White' : 'Black';
             board = gameRow.board;
@@ -362,7 +367,7 @@ export async function handlePlayerHistory(request, env) {
 
     return corsResponse({
         tournamentName: meta.name, tournamentSlug: slug,
-        totalRounds: meta?.totalRounds || 0, section: foundSection,
+        totalRounds: meta?.totalRounds || 0, section: foundSectionData?.section,
         uscfId: foundPlayer.id || null, rounds,
     }, 200, env, request);
 }
@@ -376,9 +381,10 @@ export async function handleEcoClassify(request, env) {
     return corsResponse(classifyFen(fen) || {}, 200, env, request);
 }
 
+const ecoEpdJson = JSON.stringify(ecoEpd);
+
 export function handleEcoData(request, env) {
-    const json = JSON.stringify(ecoEpd);
-    return new Response(json, {
+    return new Response(ecoEpdJson, {
         headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 'public, max-age=604800',
@@ -405,6 +411,7 @@ export async function handleSubmitGame(request, env) {
     if (game.pgn) return corsResponse({ error: 'Game already has an official PGN' }, 409, env, request);
 
     const opening = classifyOpening(pgn);
+    const now = new Date().toISOString();
     await env.DB.prepare(
         `INSERT OR REPLACE INTO game_submissions
          (tournament_slug, round, board, white, black, white_norm, black_norm,
@@ -415,7 +422,7 @@ export async function handleSubmitGame(request, env) {
         game.white, game.black,
         normalizePlayerName(game.white), normalizePlayerName(game.black),
         game.result, opening?.eco || null, opening?.name || null, game.section,
-        pgn, submittedBy || null, new Date().toISOString(), new Date().toISOString()
+        pgn, submittedBy || null, now, now
     ).run();
 
     return corsResponse({ success: true, eco: opening?.eco || null, openingName: opening?.name || null }, 200, env, request);

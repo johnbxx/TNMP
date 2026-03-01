@@ -7,14 +7,7 @@
  */
 
 import { Chess } from 'chess.js';
-
-/**
- * Convert FEN to EPD (strip halfmove and fullmove clocks).
- * Matches the pattern used in worker/src/eco.js.
- */
-function fenToEpd(fen) {
-    return fen.split(' ').slice(0, 4).join(' ');
-}
+import { fenToEpd } from './utils.js';
 
 /**
  * Extract main-line move tokens from PGN text.

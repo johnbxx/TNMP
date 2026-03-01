@@ -54,6 +54,13 @@ export function normalizeSection(s) {
 }
 
 /**
+ * Convert FEN to EPD (strip halfmove and fullmove clocks).
+ */
+export function fenToEpd(fen) {
+    return fen.split(' ').slice(0, 4).join(' ');
+}
+
+/**
  * Get display info for a result code.
  * Accepts history codes ('W', 'L', 'D') or player result strings ('1', '0', '½', '1 X', '0 F').
  * Returns { emoji, text, outcome } or null if unrecognized.

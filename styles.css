@@ -70,12 +70,6 @@
     --transition-medium: 0.3s ease;
     --transition-slow: 0.5s ease;
 
-    /* Viewer layout (read by JS in syncDesktopLayout) */
-    --viewer-layout-gap: 12;       /* px, gap between board and moves */
-    --viewer-min-moves-w: 160;     /* px, minimum moves panel width (side-by-side) */
-    --viewer-min-moves-h: 120;     /* px, minimum moves panel height (stacked) */
-    --viewer-min-board: 200;       /* px, minimum board size */
-    --viewer-stacked-threshold: 1.15; /* stacked if board is >15% larger than side-by-side */
 }
 
 * {
@@ -1865,18 +1859,6 @@ html.off-season .meme {
         min-width: 160px;
         height: 100%;
         overflow-y: auto;
-    }
-    /* Stacked layout: board on top, moves below (narrow viewer area) */
-    .viewer-layout-stacked {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto 1fr;
-        justify-items: center;
-    }
-    .viewer-layout-stacked .viewer-moves {
-        grid-column: 1;
-        grid-row: 4;
-        min-width: 0;
-        width: 100%;
     }
 }
 

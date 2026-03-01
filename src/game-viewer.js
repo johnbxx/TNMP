@@ -2,12 +2,12 @@ import { openModal, closeModal } from './modal.js';
 import { initViewer, destroyViewer, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
 import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, isEditorDirty, copyPgn } from './pgn-editor.js';
 import { loadRoundHistory } from './history.js';
-import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, openGameFromBrowser, clearFilter, getCachedGame, openEditorForGame, restoreExplorer } from './game-browser.js';
+import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, openGameFromBrowser, clearFilter, getCachedGame, openEditorForGame, launchExplorer } from './game-browser.js';
 import { buildExplorerTree, buildExplorerTree1, getPositionStats, scorePercent } from './opening-explorer.js';
 import { classifyFen as classifyEco, loadEcoData } from './eco.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
 import { Chess } from 'chess.js';
-import { START_FEN, destroyBoard, createBoard, getBoard, setResizeCallback, clearHighlights } from './board-core.js';
+import { START_FEN, destroyBoard, createBoard, getBoard, setResizeCallback, clearHighlights, resetSquareOpacity } from './board-core.js';
 
 const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
 
@@ -20,6 +20,23 @@ let _onExplorerNavigate = null; // callback(gameIds) when explorer position chan
 let _explorerLastEco = null;   // last known ECO classification (sticky)
 let _explorerBuildId = 0;      // incremented on each build to cancel stale background passes
 let _savedExplorerMoves = null; // stashed move history when switching to viewer (for back button)
+
+/**
+ * Replay a sequence of SAN moves on the explorer, stopping if a move
+ * isn't in the tree. Resets chess/history/eco state before replaying.
+ */
+function replayExplorerMoves(moves, tree) {
+    _explorerChess = new Chess();
+    _explorerMoveHistory = [];
+    _explorerLastEco = null;
+    for (const san of moves) {
+        const stats = getPositionStats(tree, _explorerChess.fen());
+        if (!stats || !stats.moves.some(m => m.san === san)) break;
+        try { _explorerChess.move(san); } catch { break; }
+        _explorerMoveHistory.push(san);
+    }
+    _explorerSelectedRow = 0;
+}
 
 function destroyExplorer() {
     if (panelMode === 'explorer') {
@@ -97,16 +114,7 @@ export function showExplorer(games, opts = {}) {
         _explorerTree = tree;
         // Replay saved moves as far as the current tree supports
         if (restoreMoves && restoreMoves.length > 0) {
-            _explorerChess = new Chess();
-            _explorerMoveHistory = [];
-            _explorerLastEco = null;
-            for (const san of restoreMoves) {
-                const stats = getPositionStats(tree, _explorerChess.fen());
-                if (!stats || !stats.moves.some(m => m.san === san)) break;
-                try { _explorerChess.move(san); } catch { break; }
-                _explorerMoveHistory.push(san);
-            }
-            _explorerSelectedRow = 0;
+            replayExplorerMoves(restoreMoves, tree);
             const board = getBoard();
             if (board) board.position(_explorerChess.fen(), false);
         }
@@ -147,17 +155,7 @@ export function refreshExplorer(games) {
 
     function applyTree(tree) {
         _explorerTree = tree;
-        const oldHistory = [..._explorerMoveHistory];
-        _explorerChess = new Chess();
-        _explorerMoveHistory = [];
-        _explorerLastEco = null;
-        for (const san of oldHistory) {
-            const stats = getPositionStats(_explorerTree, _explorerChess.fen());
-            if (!stats || !stats.moves.some(m => m.san === san)) break;
-            try { _explorerChess.move(san); } catch { break; }
-            _explorerMoveHistory.push(san);
-        }
-        _explorerSelectedRow = 0;
+        replayExplorerMoves([..._explorerMoveHistory], tree);
         if (board) {
             board.position(_explorerChess.fen());
             if (board.orientation() !== currentOrientation) board.orientation(currentOrientation);
@@ -313,8 +311,7 @@ function explorerPlayMove(san) {
 export function explorerGoBack() {
     if (_explorerMoveHistory.length === 0) return;
     _explorerMoveHistory.pop();
-    _explorerChess = new Chess();
-    for (const san of _explorerMoveHistory) _explorerChess.move(san);
+    _explorerChess.undo();
     _explorerSelectedRow = 0;
 
     const board = getBoard();
@@ -366,29 +363,25 @@ function explorerOnDragStart(dragStartEvt) {
     return true;
 }
 
-function explorerResetSquareOpacity() {
-    document.querySelectorAll('#viewer-board [data-square-coord]').forEach(sq => sq.style.opacity = 1);
-}
-
 function explorerOnDrop(dropEvt) {
     // Check if this move exists in the explorer tree
     const from = dropEvt.source;
     const to = dropEvt.target;
     const chess = _explorerChess;
-    if (!chess) { explorerResetSquareOpacity(); return 'snapback'; }
+    if (!chess) { resetSquareOpacity(); return 'snapback'; }
 
     // Try the move in a temporary chess instance
     const test = new Chess(chess.fen());
     let move;
-    try { move = test.move({ from, to, promotion: 'q' }); } catch { explorerResetSquareOpacity(); return 'snapback'; }
-    if (!move) { explorerResetSquareOpacity(); return 'snapback'; }
+    try { move = test.move({ from, to, promotion: 'q' }); } catch { resetSquareOpacity(); return 'snapback'; }
+    if (!move) { resetSquareOpacity(); return 'snapback'; }
 
     // Check if this SAN exists in the explorer tree
     const stats = getPositionStats(_explorerTree, chess.fen());
-    if (!stats || !stats.moves.some(m => m.san === move.san)) { explorerResetSquareOpacity(); return 'snapback'; }
+    if (!stats || !stats.moves.some(m => m.san === move.san)) { resetSquareOpacity(); return 'snapback'; }
 
     // Valid explorer move — play it
-    explorerResetSquareOpacity();
+    resetSquareOpacity();
     explorerPlayMove(move.san);
     return 'drop';
 }
@@ -537,30 +530,16 @@ function setMode(mode) {
     const commentInput = document.getElementById('editor-comment-input');
     const modalEl = document.querySelector('.modal-content-viewer');
 
-    if (mode === 'explorer') {
-        viewerToolbar?.classList.remove('hidden');
-        editorToolbar?.classList.add('hidden');
-        viewerHeader?.classList.remove('hidden');
-        editorEco?.classList.add('hidden');
-        commentInput?.classList.add('hidden');
-        modalEl?.classList.add('explorer-active');
-        renderExplorerToolbar();
-    } else if (mode === 'editor') {
-        viewerToolbar?.classList.add('hidden');
-        editorToolbar?.classList.remove('hidden');
-        viewerHeader?.classList.add('hidden');
-        commentInput?.classList.remove('hidden');
-        modalEl?.classList.remove('explorer-active');
-        restoreViewerToolbar();
-    } else {
-        viewerToolbar?.classList.remove('hidden');
-        editorToolbar?.classList.add('hidden');
-        viewerHeader?.classList.remove('hidden');
-        editorEco?.classList.add('hidden');
-        commentInput?.classList.add('hidden');
-        modalEl?.classList.remove('explorer-active');
-        restoreViewerToolbar();
-    }
+    const isEditor = mode === 'editor';
+    viewerToolbar?.classList.toggle('hidden', isEditor);
+    editorToolbar?.classList.toggle('hidden', !isEditor);
+    viewerHeader?.classList.toggle('hidden', isEditor);
+    editorEco?.classList.add('hidden');
+    commentInput?.classList.toggle('hidden', !isEditor);
+    modalEl?.classList.toggle('explorer-active', mode === 'explorer');
+
+    if (mode === 'explorer') renderExplorerToolbar();
+    else restoreViewerToolbar();
 }
 
 /**
@@ -572,7 +551,7 @@ function showBrowser() {
         if (panelMode === 'viewer') destroyViewer();
         if (panelMode === 'editor') closeEditor();
         panelMode = 'viewer';
-        restoreExplorer();
+        launchExplorer({ restore: true });
         return;
     }
     const modal = document.querySelector('.modal-content-viewer');
@@ -600,7 +579,7 @@ export async function openImportedGames(games) {
     await openGameBrowser();
     // Desktop: show explorer; mobile: open first game
     if (isCombinedWidth()) {
-        restoreExplorer();
+        launchExplorer();
     } else {
         const first = games.find(g => g.hasPgn && g.gameId);
         if (first) openGameFromBrowser(first.gameId);
@@ -727,8 +706,8 @@ export function editCurrentGame() {
 }
 
 /**
- * Leave explorer and return to browser view (mobile).
- * On desktop, this is a no-op since both are always visible.
+ * Leave explorer and return to browser view.
+ * On mobile, shows browser-only. On desktop, restores the explorer via showBrowser().
  */
 export function explorerBackToBrowser() {
     showBrowser();
@@ -744,20 +723,9 @@ export function editorBackToViewer() {
         closeEditor();
         const game = _currentGameId ? getCachedGame(_currentGameId) : null;
         if (game) {
-            setMode('viewer');
-            const meta = {
-                gameId: game.gameId,
-                round: game.round != null ? Number(game.round) : undefined,
-                board: game.board != null ? Number(game.board) : undefined,
-                eco: game.eco,
-                openingName: game.openingName,
-                hasPgn: game.hasPgn,
-                onPrev: _onPrev,
-                onNext: _onNext,
-            };
-            initViewer(game.pgn || '*', undefined, meta);
+            panelMode = 'viewer'; // reset so openGameViewer doesn't trigger dirty check again
+            openGameViewer({ game, onPrev: _onPrev, onNext: _onNext });
         } else {
-            // No game to return to — just close the panel
             forceCloseGamePanel();
         }
     });
@@ -867,6 +835,7 @@ function forceCloseGamePanel() {
     }
 
     panelMode = 'viewer';
+    _currentGameId = null;
     document.querySelector('.modal-content-viewer')?.classList.remove('explorer-active');
     restoreViewerToolbar();
     _onPrev = null;

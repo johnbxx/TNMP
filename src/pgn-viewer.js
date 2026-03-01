@@ -11,6 +11,7 @@ import {
     highlightSquares, clearHighlights, highlightCurrentMove,
     goToNode, updateNavigationButtons,
     renderMoveList as renderMoveListCore,
+    resizeBoard,
 } from './board-core.js';
 
 const VIEWER_BTNS = { start: 'viewer-start', prev: 'viewer-prev', next: 'viewer-next', end: 'viewer-end' };
@@ -46,13 +47,13 @@ export function initViewer(pgn, playerColor, meta = {}) {
     setResizeCallback(() => {
         if (!getBoard()) return;
         renderMoveList();
-        syncDesktopLayout();
+        resizeBoard();
     });
 
     highlightSquares(null);
     renderMoveList();
     updateNavigationButtons(VIEWER_BTNS);
-    syncDesktopLayout();
+    resizeBoard();
 }
 
 /**
@@ -406,10 +407,6 @@ function extractBoardFromPgn(pgn) {
     return m ? parseInt(m[1], 10) : null;
 }
 
-export function syncDesktopLayout() {
-    const board = getBoard();
-    if (board && board.resize) board.resize();
-}
 
 function renderMoveList() {
     renderMoveListCore({

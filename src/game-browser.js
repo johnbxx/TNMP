@@ -1047,32 +1047,24 @@ function syncExplorer() {
 }
 
 /**
- * Launch the opening explorer from the browser.
- * On mobile, switches from browser-only view to explorer view.
+ * Launch or restore the opening explorer from the current visible games.
+ * On mobile, also unhides the viewer area (removes browser-only).
+ * If the explorer is already active and visible, this is a no-op.
+ * @param {object} [opts]
+ * @param {boolean} [opts.restore] - If true, restore saved move history
  */
-export function launchExplorer() {
-    // Remove browser-only so the viewer area is visible
+export function launchExplorer({ restore = false } = {}) {
     const modal = document.querySelector('.modal-content-viewer');
     if (modal) modal.classList.remove('browser-only');
 
     // If explorer is already active (just hidden by browser-only), just reveal it
-    if (isExplorerMode()) return;
+    if (!restore && isExplorerMode()) return;
 
-    _explorerGameIds = null;
-    const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
-    showExplorer(gamesWithPgn, { onNavigate: onExplorerNavigate });
-}
-
-/**
- * Start (or restart) the explorer from the current visible games.
- * Called when returning to the explorer from a game on desktop.
- */
-export function restoreExplorer() {
     _explorerGameIds = null;
     const gamesWithPgn = getVisibleGames().filter(g => g.pgn);
     showExplorer(gamesWithPgn, {
         onNavigate: onExplorerNavigate,
-        restoreMoves: getSavedExplorerMoves(),
+        restoreMoves: restore ? getSavedExplorerMoves() : undefined,
     });
 }
 

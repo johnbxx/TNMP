@@ -10,8 +10,8 @@ import { resolveTournament } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings, extractPairingsColors,
-    parsePlayerInfo, findPlayerPairingFromSections, findPlayerResultFromSections,
-    composeMessage, composeResultsMessage,
+    parsePlayerInfo, parseGameResult, findPlayerPairingFromSections,
+    findPlayerResultFromSections, composeMessage, composeResultsMessage,
 } from './parser.js';
 import { classifyOpening } from './eco.js';
 
@@ -80,10 +80,9 @@ export async function handleScheduled(env) {
     // Parse and persist standings per section
     try {
         const standings = parseStandings(parsed.strippedHtml);
-        for (const section of standings) {
-            const key = `standings:${slug}:${section.section}`;
-            await env.SUBSCRIBERS.put(key, JSON.stringify(section));
-        }
+        await Promise.all(standings.map(section =>
+            env.SUBSCRIBERS.put(`standings:${slug}:${section.section}`, JSON.stringify(section))
+        ));
         if (standings.length > 0) {
             console.log(`Persisted standings for ${standings.length} section(s): ${standings.map(s => s.section).join(', ')}`);
         }
@@ -188,18 +187,12 @@ export async function handleScheduled(env) {
                     if (!board) continue;
                     const white = parsePlayerInfo(row.whiteName).name;
                     const black = parsePlayerInfo(row.blackName).name;
-                    let result = '*';
-                    const wr = row.whiteResult.trim();
-                    const br = row.blackResult.trim();
-                    if (wr === '1' && br === '0') result = '1-0';
-                    else if (wr === '0' && br === '1') result = '0-1';
-                    else if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) result = '1/2-1/2';
                     shellStmts.push(
                         env.DB.prepare(
                             `INSERT OR IGNORE INTO games
                              (tournament_slug, round, board, white, black, white_norm, black_norm, result, section, pgn)
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
-                        ).bind(slug, rnd, board, white, black, normalizePlayerName(white), normalizePlayerName(black), result, section.section)
+                        ).bind(slug, rnd, board, white, black, normalizePlayerName(white), normalizePlayerName(black), parseGameResult(row.whiteResult, row.blackResult), section.section)
                     );
                 }
             }

@@ -254,8 +254,21 @@ export function cleanupBoardDOM() {
     if (movesEl) { movesEl.innerHTML = ''; movesEl.style.maxHeight = ''; }
     const modalEl = document.querySelector('.modal-content-viewer');
     if (modalEl) modalEl.style.width = '';
-    const layoutEl = document.querySelector('.viewer-layout');
-    if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
+}
+
+/**
+ * Reset all square opacity to 1 (used after drag-and-drop).
+ * Shared by editor and explorer drag handlers.
+ */
+export function resetSquareOpacity() {
+    document.querySelectorAll('#viewer-board [data-square-coord]').forEach(sq => sq.style.opacity = 1);
+}
+
+/**
+ * Resize the board to fit its container.
+ */
+export function resizeBoard() {
+    if (_board && _board.resize) _board.resize();
 }
 
 // --- Square Highlighting ---
@@ -399,138 +412,16 @@ export function highlightCurrentMove() {
     const container = document.getElementById('viewer-moves');
     if (!container) return;
 
+    let currentEl = null;
     container.querySelectorAll('[data-node-id]').forEach(el => {
-        el.classList.toggle('move-current', parseInt(el.dataset.nodeId) === _currentNodeId);
+        const isCurrent = parseInt(el.dataset.nodeId) === _currentNodeId;
+        el.classList.toggle('move-current', isCurrent);
+        if (isCurrent) currentEl = el;
     });
 
-    const currentEl = container.querySelector('.move-current');
     if (currentEl) {
         currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
-}
-
-// --- Desktop Layout Sync ---
-
-/**
- * Sync board/moves/modal sizing for desktop layout.
- * Handles both viewer (with header, stacked layout) and editor (with comment box) modes.
- *
- * @param {object} [options]
- * @param {boolean} [options.includeHeader] - Account for #viewer-header height (viewer mode)
- * @param {boolean} [options.allowStacked] - Allow stacked layout when browser panel is open (viewer mode)
- * @param {string}  [options.commentElId] - Element ID for comment textarea to size (editor mode)
- * @param {number}  [options.maxModalWidth] - Cap modal width (editor mode, default: unlimited)
- * @param {number}  [options.maxBoardRatio] - Max board height as fraction of available (editor: 0.8)
- */
-export function syncDesktopLayout(options = {}) {
-    if (!isDesktop()) {
-        // Clean up desktop inline styles so mobile layout works
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        const modalEl = document.querySelector('.modal-content-viewer');
-        const layoutEl = document.querySelector('.viewer-layout');
-        if (boardEl) boardEl.style.width = '';
-        if (movesEl) movesEl.style.maxHeight = '';
-        if (modalEl) modalEl.style.width = '';
-        if (layoutEl) layoutEl.classList.remove('viewer-layout-stacked');
-        if (options.commentElId) {
-            const commentEl = document.getElementById(options.commentElId);
-            if (commentEl) { commentEl.style.width = ''; commentEl.style.maxHeight = ''; }
-        }
-        if (_board && _board.resize) _board.resize();
-        return;
-    }
-    requestAnimationFrame(() => {
-        const modalEl = document.querySelector('.modal-content-viewer');
-        const boardEl = document.getElementById('viewer-board');
-        const movesEl = document.getElementById('viewer-moves');
-        const layoutEl = document.querySelector('.viewer-layout');
-        if (!modalEl || !boardEl || !movesEl || !layoutEl) return;
-
-        const rootStyle = getComputedStyle(document.documentElement);
-        const cssNum = (prop) => parseFloat(rootStyle.getPropertyValue(prop)) || 0;
-        const layoutGap = cssNum('--viewer-layout-gap');
-        const minMovesWidth = cssNum('--viewer-min-moves-w');
-        const minBoard = cssNum('--viewer-min-board');
-
-        const hasBrowser = modalEl.classList.contains('has-browser');
-        const containerEl = hasBrowser ? modalEl.querySelector('.viewer-main') : modalEl;
-        if (!containerEl) return;
-
-        const toolbarEl = containerEl.querySelector('.viewer-toolbar:not(.hidden)');
-        const toolbarH = toolbarEl ? toolbarEl.offsetHeight : 0;
-        const toolbarMargin = toolbarEl ? parseFloat(getComputedStyle(toolbarEl).marginTop) || 0 : 0;
-        const containerPadding = parseFloat(getComputedStyle(containerEl).paddingTop)
-                               + parseFloat(getComputedStyle(containerEl).paddingBottom);
-
-        let headerH = 0, headerMargin = 0;
-        if (options.includeHeader) {
-            const headerEl = document.getElementById('viewer-header');
-            headerH = headerEl ? headerEl.offsetHeight : 0;
-            headerMargin = headerH > 0 ? parseFloat(getComputedStyle(headerEl).marginBottom) || 0 : 0;
-        }
-
-        const availableHeight = containerEl.clientHeight - headerH - headerMargin - toolbarH - toolbarMargin - containerPadding;
-
-        let availableWidth;
-        if (hasBrowser) {
-            const mainPadding = parseFloat(getComputedStyle(containerEl).paddingLeft)
-                              + parseFloat(getComputedStyle(containerEl).paddingRight);
-            availableWidth = containerEl.clientWidth - mainPadding;
-        } else {
-            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
-                           + parseFloat(getComputedStyle(modalEl).paddingRight);
-            availableWidth = window.innerWidth * 0.95 - hPadding;
-        }
-
-        let boardSize;
-        if (options.allowStacked) {
-            // Viewer mode: consider stacked layout (board above moves) in browser panel
-            const minMovesHeight = cssNum('--viewer-min-moves-h');
-            const stackedThreshold = cssNum('--viewer-stacked-threshold');
-            const sideBySideBoardSize = Math.min(availableHeight, availableWidth - minMovesWidth - layoutGap);
-            const stackedBoardSize = Math.min(availableWidth, availableHeight - minMovesHeight - layoutGap);
-            const useStacked = hasBrowser && stackedBoardSize > sideBySideBoardSize * stackedThreshold;
-
-            if (useStacked) {
-                layoutEl.classList.add('viewer-layout-stacked');
-                boardSize = Math.floor(Math.max(stackedBoardSize, minBoard));
-                boardEl.style.width = boardSize + 'px';
-                movesEl.style.maxHeight = (availableHeight - boardSize - layoutGap) + 'px';
-            } else {
-                layoutEl.classList.remove('viewer-layout-stacked');
-                boardSize = Math.floor(Math.max(sideBySideBoardSize, minBoard));
-                boardEl.style.width = boardSize + 'px';
-                movesEl.style.maxHeight = boardSize + 'px';
-            }
-        } else {
-            // Editor mode: board capped at maxBoardRatio, comment box below, moves full height
-            layoutEl.classList.remove('viewer-layout-stacked');
-            const maxBoardH = options.maxBoardRatio ? Math.floor(availableHeight * options.maxBoardRatio) : availableHeight;
-            const maxBoardW = availableWidth - minMovesWidth - layoutGap;
-            boardSize = Math.floor(Math.max(Math.min(maxBoardH, maxBoardW), minBoard));
-            boardEl.style.width = boardSize + 'px';
-            movesEl.style.maxHeight = availableHeight + 'px';
-
-            if (options.commentElId) {
-                const commentEl = document.getElementById(options.commentElId);
-                const commentMargin = 12;
-                if (commentEl && !commentEl.classList.contains('hidden')) {
-                    commentEl.style.width = boardSize + 'px';
-                    commentEl.style.maxHeight = (availableHeight - boardSize - commentMargin) + 'px';
-                }
-            }
-        }
-
-        if (!hasBrowser) {
-            const hPadding = parseFloat(getComputedStyle(modalEl).paddingLeft)
-                           + parseFloat(getComputedStyle(modalEl).paddingRight);
-            const rawModalWidth = boardSize + minMovesWidth + layoutGap + hPadding;
-            modalEl.style.width = (options.maxModalWidth ? Math.min(rawModalWidth, options.maxModalWidth) : rawModalWidth) + 'px';
-        }
-
-        if (_board && _board.resize) _board.resize();
-    });
 }
 
 // --- Move List Rendering ---

@@ -7,6 +7,7 @@ import { openModal, closeModal, onModalClose } from './modal.js';
 
 let currentPlayer = null;
 let cachedGames = null;
+let cachedStats = null;
 let activeTab = 'overview';
 
 /**
@@ -17,6 +18,7 @@ let activeTab = 'overview';
 export async function openPlayerProfile(playerName) {
     currentPlayer = playerName;
     cachedGames = null;
+    cachedStats = null;
     activeTab = 'overview';
 
     openModal('profile-modal');
@@ -47,6 +49,7 @@ export function closePlayerProfile() {
     closeModal('profile-modal');
     currentPlayer = null;
     cachedGames = null;
+    cachedStats = null;
 }
 
 /**
@@ -216,7 +219,8 @@ function renderTabs(body) {
 function renderTab(tabName) {
     const container = document.getElementById('profile-tab-content');
     if (!container || !cachedGames) return;
-    const stats = computeStats(cachedGames, currentPlayer);
+    if (!cachedStats) cachedStats = computeStats(cachedGames, currentPlayer);
+    const stats = cachedStats;
 
     switch (tabName) {
         case 'overview': return renderOverview(container, stats);
@@ -333,50 +337,30 @@ function groupByFamily(entries, side) {
         .sort((a, b) => b.total - a.total);
 }
 
+function renderOpeningSection(families, color, icon) {
+    let html = `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/${icon}" alt="${color}"> As ${color}</div>`;
+    if (families.length === 0) {
+        return html + '<p class="profile-empty-small">No games with ECO data.</p>';
+    }
+    html += '<div class="profile-opening-list">';
+    for (const f of families) {
+        const wp = scorePct(f.wins, f.draws, f.total);
+        html += `
+            <button class="profile-opening-row" data-eco="${f.codes.join(',')}" data-color="${color.toLowerCase()}" data-family="${f.family}">
+                <span class="profile-opening-name">${f.family}</span>
+                <span class="profile-opening-count">${f.total}</span>
+                ${winBar(f.wins, f.losses, f.draws, f.total)}
+                <span class="profile-opening-pct">${wp}%</span>
+            </button>`;
+    }
+    return html + '</div>';
+}
+
 function renderOpenings(container, stats) {
     const entries = [...stats.ecos.entries()];
-    const asWhite = groupByFamily(entries, 'white');
-    const asBlack = groupByFamily(entries, 'black');
-
-    let html = '';
-
-    html += `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/wK.webp" alt="White"> As White</div>`;
-    if (asWhite.length === 0) {
-        html += '<p class="profile-empty-small">No games with ECO data.</p>';
-    } else {
-        html += '<div class="profile-opening-list">';
-        for (const f of asWhite) {
-            const wp = scorePct(f.wins, f.draws, f.total);
-            html += `
-                <button class="profile-opening-row" data-eco="${f.codes.join(',')}" data-color="white" data-family="${f.family}">
-                    <span class="profile-opening-name">${f.family}</span>
-                    <span class="profile-opening-count">${f.total}</span>
-                    ${winBar(f.wins, f.losses, f.draws, f.total)}
-                    <span class="profile-opening-pct">${wp}%</span>
-                </button>`;
-        }
-        html += '</div>';
-    }
-
-    html += `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/bK.webp" alt="Black"> As Black</div>`;
-    if (asBlack.length === 0) {
-        html += '<p class="profile-empty-small">No games with ECO data.</p>';
-    } else {
-        html += '<div class="profile-opening-list">';
-        for (const f of asBlack) {
-            const wp = scorePct(f.wins, f.draws, f.total);
-            html += `
-                <button class="profile-opening-row" data-eco="${f.codes.join(',')}" data-color="black" data-family="${f.family}">
-                    <span class="profile-opening-name">${f.family}</span>
-                    <span class="profile-opening-count">${f.total}</span>
-                    ${winBar(f.wins, f.losses, f.draws, f.total)}
-                    <span class="profile-opening-pct">${wp}%</span>
-                </button>`;
-        }
-        html += '</div>';
-    }
-
-    container.innerHTML = html;
+    container.innerHTML =
+        renderOpeningSection(groupByFamily(entries, 'white'), 'White', 'wK.webp') +
+        renderOpeningSection(groupByFamily(entries, 'black'), 'Black', 'bK.webp');
 }
 
 function renderOpponents(container, stats) {
@@ -447,47 +431,36 @@ export function initPlayerProfile() {
         }
     });
 
+    // Close profile and open the game browser with given query
+    async function browseTo(query) {
+        closePlayerProfile();
+        const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
+            import('./game-browser.js'), import('./game-viewer.js')
+        ]);
+        await openGameViewer();
+        openGameBrowser(query);
+    }
+
     // Clicks within profile body — tournament rows, opponent rows, stat rows
     document.getElementById('profile-body').addEventListener('click', async (e) => {
         const tournamentRow = e.target.closest('[data-slug]');
         if (tournamentRow) {
-            const slug = tournamentRow.dataset.slug;
-            const player = tournamentRow.dataset.player;
-            closePlayerProfile();
-            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
-                import('./game-browser.js'), import('./game-viewer.js')
-            ]);
-            await openGameViewer();
-            openGameBrowser({ player, tournament: slug });
-            return;
+            return browseTo({ player: tournamentRow.dataset.player, tournament: tournamentRow.dataset.slug });
         }
 
         const openingRow = e.target.closest('[data-eco]');
         if (openingRow && currentPlayer) {
-            const player = currentPlayer;
-            const eco = openingRow.dataset.eco.split(',');
-            const color = openingRow.dataset.color;
-            const family = openingRow.dataset.family;
-            closePlayerProfile();
-            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
-                import('./game-browser.js'), import('./game-viewer.js')
-            ]);
-            await openGameViewer();
-            openGameBrowser({ player, eco, color, ecoLabel: family });
-            return;
+            return browseTo({
+                player: currentPlayer,
+                eco: openingRow.dataset.eco.split(','),
+                color: openingRow.dataset.color,
+                ecoLabel: openingRow.dataset.family,
+            });
         }
 
         const h2hBtn = e.target.closest('[data-h2h]');
         if (h2hBtn && currentPlayer) {
-            const player = currentPlayer;
-            const opponent = h2hBtn.dataset.h2h;
-            closePlayerProfile();
-            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
-                import('./game-browser.js'), import('./game-viewer.js')
-            ]);
-            await openGameViewer();
-            openGameBrowser({ player, opponent });
-            return;
+            return browseTo({ player: currentPlayer, opponent: h2hBtn.dataset.h2h });
         }
 
         const opponentRow = e.target.closest('[data-opponent]');
@@ -498,15 +471,10 @@ export function initPlayerProfile() {
 
         const statBtn = e.target.closest('[data-profile-action]');
         if (statBtn && currentPlayer) {
-            const action = statBtn.dataset.profileAction;
             const query = { player: currentPlayer, tournament: 'all' };
+            const action = statBtn.dataset.profileAction;
             if (action === 'white' || action === 'black') query.color = action;
-            closePlayerProfile();
-            const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
-                import('./game-browser.js'), import('./game-viewer.js')
-            ]);
-            await openGameViewer();
-            openGameBrowser(query);
+            return browseTo(query);
         }
     });
 }

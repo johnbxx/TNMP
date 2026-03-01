@@ -160,8 +160,6 @@ const wrappedCheckPairings = async function() {
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
     const settingsModal = document.getElementById('settings-modal');
-    const aboutModal = document.getElementById('about-modal');
-    const privacyModal = document.getElementById('privacy-modal');
     const viewerModal = document.getElementById('viewer-modal');
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
@@ -174,15 +172,17 @@ document.addEventListener('keydown', (e) => {
         } else if (e.key === 'Escape') {
             closeModal('settings-modal');
         }
-    } else if (!aboutModal.classList.contains('hidden')) {
-        trapFocus(e, 'about-modal');
-        if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
-            closeModal('about-modal');
-        }
-    } else if (!privacyModal.classList.contains('hidden')) {
-        trapFocus(e, 'privacy-modal');
-        if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
-            closeModal('privacy-modal');
+    } else {
+        // About and Privacy modals share the same keyboard behavior
+        for (const id of ['about-modal', 'privacy-modal']) {
+            const modal = document.getElementById(id);
+            if (!modal.classList.contains('hidden')) {
+                trapFocus(e, id);
+                if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
+                    closeModal(id);
+                }
+                break;
+            }
         }
     }
 });

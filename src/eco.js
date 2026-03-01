@@ -7,6 +7,7 @@
  */
 
 import { WORKER_URL } from './config.js';
+import { fenToEpd } from './utils.js';
 
 const STORAGE_KEY = 'eco-epd-data';
 
@@ -41,13 +42,6 @@ export async function loadEcoData() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(_ecoData));
         } catch { /* quota exceeded — fine, memory cache still works */ }
     } catch { /* network error — ECO will be unavailable */ }
-}
-
-/**
- * Convert FEN to EPD (strip halfmove and fullmove clocks).
- */
-function fenToEpd(fen) {
-    return fen.split(' ').slice(0, 4).join(' ');
 }
 
 /**

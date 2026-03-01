@@ -31,6 +31,19 @@ function escapeRegex(s) {
 }
 
 /**
+ * Convert white/black result strings from a pairings table into a PGN result.
+ * Returns '1-0', '0-1', '1/2-1/2', or '*'.
+ */
+export function parseGameResult(whiteResult, blackResult) {
+    const wr = whiteResult.trim();
+    const br = blackResult.trim();
+    if (wr === '1' && br === '0') return '1-0';
+    if (wr === '0' && br === '1') return '0-1';
+    if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) return '1/2-1/2';
+    return '*';
+}
+
+/**
  * Parse pairings table rows from a table HTML string.
  * Returns array of { board, whiteResult, whiteName, whiteUrl, blackResult, blackName, blackUrl }.
  */
@@ -192,14 +205,19 @@ export function parseTournamentPage(html) {
 // Section 2: QUERY FUNCTIONS ON PARSED SECTIONS
 // ============================================================
 
+function findMaxRound(sections) {
+    let max = 0;
+    for (const s of sections) { if (s.round > max) max = s.round; }
+    return max;
+}
+
 /**
  * Check whether the highest-round pairings sections have results filled in.
  * Takes pre-parsed sections array from parseTournamentPage().
  */
 function checkResults(sections) {
     if (sections.length === 0) return false;
-    let maxRound = 0;
-    for (const s of sections) { if (s.round > maxRound) maxRound = s.round; }
+    const maxRound = findMaxRound(sections);
     for (const s of sections) {
         if (s.round !== maxRound) continue;
         if (/extra games/i.test(s.section)) continue;
@@ -216,8 +234,7 @@ function checkResults(sections) {
  */
 export function findPlayerPairingFromSections(sections, playerName) {
     const playerRegex = new RegExp(escapeRegex(playerName), 'i');
-    let maxRound = 0;
-    for (const s of sections) { if (s.round > maxRound) maxRound = s.round; }
+    const maxRound = findMaxRound(sections);
 
     for (const s of sections) {
         if (s.round !== maxRound) continue;
@@ -255,8 +272,7 @@ export function findPlayerPairingFromSections(sections, playerName) {
  */
 export function findPlayerResultFromSections(sections, playerName) {
     const playerRegex = new RegExp(escapeRegex(playerName), 'i');
-    let maxRound = 0;
-    for (const s of sections) { if (s.round > maxRound) maxRound = s.round; }
+    const maxRound = findMaxRound(sections);
 
     for (const s of sections) {
         if (s.round !== maxRound) continue;
@@ -614,14 +630,7 @@ export function extractPairingsColors(sections) {
             const black = parsePlayerInfo(row.blackName).name;
             const board = row.board ? parseInt(row.board, 10) || null : null;
 
-            let result = '*';
-            const wr = row.whiteResult.trim();
-            const br = row.blackResult.trim();
-            if (wr === '1' && br === '0') result = '1-0';
-            else if (wr === '0' && br === '1') result = '0-1';
-            else if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) result = '1/2-1/2';
-
-            colors[rnd].push({ white, black, result, board });
+            colors[rnd].push({ white, black, result: parseGameResult(row.whiteResult, row.blackResult), board });
         }
     }
 
