@@ -292,15 +292,23 @@ document.addEventListener('click', (e) => {
     if (e.target.closest('#debug-pgn-editor')) { openGameEditor({}); return; }
 });
 
-// Hold-to-repeat helper
-function holdToRepeat(btn, action) {
+// Delegated hold-to-repeat for [data-hold] buttons (survives innerHTML rebuilds)
+{
     let timer = null;
-    const start = () => { action(); timer = setTimeout(() => { timer = setInterval(action, 80); }, 400); };
-    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
-    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); start(); });
-    btn.addEventListener('pointerup', stop);
-    btn.addEventListener('pointerleave', stop);
-    btn.addEventListener('pointercancel', stop);
+    let activeBtn = null;
+    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; activeBtn = null; };
+    document.addEventListener('pointerdown', (e) => {
+        const btn = e.target.closest('[data-hold][data-action]');
+        if (!btn) return;
+        const action = ACTIONS[btn.dataset.action];
+        if (!action) return;
+        e.preventDefault();
+        activeBtn = btn;
+        action();
+        timer = setTimeout(() => { timer = setInterval(action, 80); }, 400);
+    });
+    document.addEventListener('pointerup', stop);
+    document.addEventListener('pointercancel', stop);
 }
 
 async function handleShareAction(action) {
@@ -355,12 +363,6 @@ if ('serviceWorker' in navigator) {
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
     initDarkMode();
-
-    // Hold-to-repeat for prev/next buttons
-    document.querySelectorAll('[data-hold]').forEach(btn => {
-        const action = ACTIONS[btn.dataset.action];
-        if (action) holdToRepeat(btn, action);
-    });
 
     // Comments button starts active
     document.querySelector('[data-action="viewer-comments"]')?.classList.add('active');
