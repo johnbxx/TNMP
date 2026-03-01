@@ -1834,13 +1834,14 @@ html.off-season .meme {
         min-height: 0;
         display: grid;
         grid-template-columns: auto 1fr;
-        grid-template-rows: auto auto 1fr;
+        grid-template-rows: 1fr auto auto;
         align-items: start;
     }
     .viewer-board {
-        /* JS sets width = height to make it a square */
         grid-column: 1;
         grid-row: 1;
+        aspect-ratio: 1;
+        max-height: 100%;
         max-width: none;
         min-width: 200px; /* prevent auto grid column from collapsing to 0 before JS sizes the board */
     }
