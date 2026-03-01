@@ -238,18 +238,30 @@ function parseTokens(tokens, startIdx) {
  * Extract the move text portion from a full PGN string.
  */
 export function extractMoveText(pgn) {
-    const lastHeader = pgn.lastIndexOf(']\n');
-    return lastHeader >= 0 ? pgn.substring(lastHeader + 2).trim() : pgn.trim();
+    const i = findHeaderEnd(pgn);
+    return i >= 0 ? pgn.substring(i).trim() : pgn.trim();
 }
 
 /**
  * Build a clean PGN (headers + main line moves only) for chess.js.
  */
 export function buildCleanPgn(pgn, mainLineMoves) {
-    const lastHeader = pgn.lastIndexOf(']\n');
-    const headers = lastHeader >= 0 ? pgn.substring(0, lastHeader + 2) : '';
+    const i = findHeaderEnd(pgn);
+    const headers = i >= 0 ? pgn.substring(0, i) : '';
     const moveStr = mainLineMoves.map(m => m.san).join(' ');
     return headers + '\n' + moveStr;
+}
+
+/**
+ * Find the index where movetext begins (after the last header line).
+ * Returns the character index after the last ]\n (or ]\r\n), or -1 if no headers found.
+ */
+function findHeaderEnd(pgn) {
+    let i = pgn.lastIndexOf(']\n');
+    if (i >= 0) return i + 2;
+    i = pgn.lastIndexOf(']\r\n');
+    if (i >= 0) return i + 3;
+    return -1;
 }
 
 /**

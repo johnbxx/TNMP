@@ -1843,7 +1843,7 @@ html.off-season .meme {
         aspect-ratio: 1;
         max-height: 100%;
         max-width: none;
-        min-width: 200px; /* prevent auto grid column from collapsing to 0 before JS sizes the board */
+        min-width: 200px;
     }
     .editor-eco:not(.hidden) {
         grid-column: 1;

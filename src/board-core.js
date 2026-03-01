@@ -266,9 +266,35 @@ export function resetSquareOpacity() {
 
 /**
  * Resize the board to fit its container.
+ * Chessboard2 is width-driven: it reads container width, makes a square,
+ * and sets inline height. We cap the container width so the resulting
+ * square doesn't push the toolbar off screen.
  */
 export function resizeBoard() {
-    if (_board && _board.resize) _board.resize();
+    if (!_board || !_board.resize) return;
+    const boardEl = document.getElementById('viewer-board');
+    const main = boardEl?.closest('.viewer-main');
+    if (!boardEl || !main) { _board.resize(); return; }
+
+    // Measure how much vertical space is available for the board.
+    // .viewer-main is a flex column: header + layout + toolbar.
+    // The board's max size = main height - header - toolbar - margins.
+    const header = main.querySelector('.viewer-header');
+    const toolbar = main.querySelector('.viewer-toolbar');
+    const mainHeight = main.getBoundingClientRect().height;
+    const headerHeight = header ? header.getBoundingClientRect().height : 0;
+    const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 0;
+    const padding = parseFloat(getComputedStyle(main).paddingTop) + parseFloat(getComputedStyle(main).paddingBottom);
+    const toolbarMargin = toolbar ? parseFloat(getComputedStyle(toolbar).marginTop) : 0;
+    const headerMargin = header ? parseFloat(getComputedStyle(header).marginBottom) : 0;
+
+    const available = mainHeight - headerHeight - toolbarHeight - padding - toolbarMargin - headerMargin;
+
+    // Cap board width to available height (board is square)
+    if (available > 0) {
+        boardEl.style.maxWidth = `${available}px`;
+    }
+    _board.resize();
 }
 
 // --- Square Highlighting ---

@@ -1,12 +1,19 @@
 import { openGameViewer, openGameEditor, showExplorer, refreshExplorer, isExplorerMode, getSavedExplorerMoves } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
-import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame } from './browser-data.js';
+import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame, onGamesChange } from './browser-data.js';
 import { getTournamentMeta } from './config.js';
 import { openPlayerProfile } from './player-profile.js';
 
 // Re-export for external consumers
 export { prefetchGames, getCachedGame } from './browser-data.js';
+
+// Re-render browser + explorer whenever the game data changes
+onGamesChange(() => {
+    if (!document.getElementById('browser-games')) return;
+    renderGamesList();
+    syncExplorer();
+});
 
 // --- Browser-local state (module-private) ---
 let _selectedPlayer = null;
@@ -279,13 +286,15 @@ export async function openGameBrowser(query = null) {
 
     const isLocal = !!getGamesData()?.query?.local;
 
-    // Apply filter state from query (profile drilldown)
+    // Apply filter state from query (profile drilldown), or reset if no query
     if (query?.player) {
         _selectedPlayer = query.player;
         _filterTournament = (!query.tournament || query.tournament === 'all') ? null : query.tournament;
         _filterColor = query.color || null;
         _filterEco = query.eco ? new Set(query.eco) : null;
         _filterOpponent = query.opponent || null;
+    } else if (!query) {
+        resetBrowserState();
     }
 
     // Fetch data if needed (skip for local imports — data already loaded)
@@ -348,6 +357,7 @@ export async function openGameBrowser(query = null) {
 
     const containerEl = panelEl.querySelector('.browser-content');
     renderBrowserContent(containerEl, roundNums);
+    syncExplorer();
 }
 
 // --- Editor/submission helpers ---
@@ -429,12 +439,19 @@ export function hideBrowserPanel() {
     const modalContent = document.querySelector('.modal-content-viewer');
     if (modalContent) modalContent.classList.remove('has-browser');
 
-    // If we were viewing local imports, clear that data so the next open
-    // doesn't think we're still in local mode
+    resetBrowserState();
+
+    // Re-prime with current tournament data so the next open is instant.
+    // For local imports, just clear — no server data to re-fetch.
     if (getGamesData()?.query?.local) {
         clearGamesData();
+    } else {
+        const slug = getActiveTournamentSlug();
+        fetchGames(
+            slug ? { tournament: slug, include: 'pgn,submissions' } : { include: 'pgn,submissions' },
+            { cache: !slug },
+        ).catch(() => {});
     }
-    resetBrowserState();
 }
 
 // --- Game opening from browser ---
@@ -922,6 +939,7 @@ async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
 
     renderChips();
     renderGamesList();
+    syncExplorer();
 }
 
 /**

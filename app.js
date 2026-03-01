@@ -399,7 +399,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gameId && /^\d{10,20}$/.test(gameId)) {
         fetchGames({ gameId, include: 'pgn' }).then(() => {
             const game = getCachedGame(gameId);
-            if (game) openGameViewer({ game });
+            if (game) {
+                const pName = CONFIG.playerName?.toLowerCase();
+                const orientation = pName && game.black?.toLowerCase() === pName ? 'Black' : 'White';
+                openGameViewer({ game, orientation });
+            }
             window.history.replaceState({}, '', window.location.pathname);
         }).catch(() => {});
     }

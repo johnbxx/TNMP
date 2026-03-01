@@ -8,14 +8,14 @@
 
 import { Chess } from 'chess.js';
 import { fenToEpd } from './utils.js';
+import { extractMoveText } from './pgn-parser.js';
 
 /**
  * Extract main-line move tokens from PGN text.
  * Strips variations, comments, NAGs, move numbers, and result tokens.
  */
 function extractMoveTokens(pgn) {
-    const lastHeader = pgn.lastIndexOf(']\n');
-    const moveText = lastHeader >= 0 ? pgn.substring(lastHeader + 2).trim() : pgn.trim();
+    const moveText = extractMoveText(pgn);
 
     // Strip nested variations
     let depth = 0;
@@ -54,11 +54,10 @@ const START_EPD = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
 
 /**
  * Extract just the first SAN move from PGN text (fast path for ply-1 pass).
- * Skips headers, grabs the first move token after "1." without full parsing.
+ * Grabs the first move token after "1." without full parsing.
  */
 function extractFirstMove(pgn) {
-    const lastHeader = pgn.lastIndexOf(']\n');
-    const moveText = lastHeader >= 0 ? pgn.substring(lastHeader + 2) : pgn;
+    const moveText = extractMoveText(pgn);
     const m = moveText.match(/1\.\s*(\S+)/);
     return m ? m[1] : null;
 }

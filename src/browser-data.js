@@ -15,6 +15,13 @@ let tournamentList = null;
 let activeTournamentSlug = null;
 let fetchGeneration = 0;
 
+// --- Change notification ---
+
+let _onChange = null;
+
+/** Register a callback to be called whenever gamesData changes. */
+export function onGamesChange(fn) { _onChange = fn; }
+
 // --- Getters / setters ---
 
 export function getGamesData() { return gamesData; }
@@ -59,6 +66,7 @@ export async function fetchGames(queryParams = {}, { cache = false } = {}) {
     if (cache) {
         try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(gamesData)); } catch { /* quota */ }
     }
+    _onChange?.();
     return gamesData;
 }
 
