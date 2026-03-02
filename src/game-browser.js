@@ -339,7 +339,7 @@ export async function openGameBrowser(query = null) {
             const containerEl = panelEl.querySelector('.browser-content');
             await ensureBrowserLists();
             renderBrowserContent(containerEl, []);
-            containerEl.querySelector('#browser-games').innerHTML = '<p class="viewer-error">No games available yet.</p>';
+            containerEl.querySelector('#browser-games').innerHTML = '<div class="browser-empty"><p>No games available yet.</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>';
             await renderDataSourceDropdown();
             return;
         }
@@ -599,7 +599,7 @@ async function switchDataSource(value, currentSlug) {
     if (containerEl) renderBrowserContent(containerEl, roundNums);
     if (roundNums.length === 0 && !isLocal) {
         const gamesEl = containerEl?.querySelector('#browser-games');
-        if (gamesEl) gamesEl.innerHTML = '<p class="viewer-error">No games available yet.</p>';
+        if (gamesEl) gamesEl.innerHTML = '<div class="browser-empty"><p>No games available yet.</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>';
     }
 
     // Refresh explorer with new data
@@ -657,9 +657,10 @@ function renderBrowserContent(containerEl, roundNumbers) {
         tabsHtml += '</div>';
     }
 
-    // Section filters (only in tournament mode with multiple sections)
+    // Section filters (only when viewing a single tournament's sections)
+    const showSections = !playerMode && _sectionList.length > 1 && (!isLocal || _filterEvent);
     let sectionsHtml = '';
-    if (!playerMode && _sectionList.length > 1) {
+    if (showSections) {
         sectionsHtml = '<div class="browser-sections" id="browser-sections">';
         for (const s of _sectionList) {
             const active = _visibleSections.has(s) ? ' browser-section-active' : '';
@@ -1015,10 +1016,8 @@ function renderGamesList() {
     const games = getVisibleGames();
 
     if (games.length === 0) {
-        const msg = _explorerGameIds
-            ? '<p class="browser-empty">No games reached this position.</p>'
-            : '<p class="browser-empty">No games found.</p>';
-        gamesEl.innerHTML = msg;
+        const label = _explorerGameIds ? 'No games reached this position.' : 'No games found.';
+        gamesEl.innerHTML = `<div class="browser-empty"><p>${label}</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>`;
         return;
     }
 

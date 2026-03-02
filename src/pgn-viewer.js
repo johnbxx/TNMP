@@ -12,6 +12,7 @@ import {
     goToNode, updateNavigationButtons,
     renderMoveList as renderMoveListCore,
     resizeBoard,
+    formatLinePreview, clearCollapsedVariations,
 } from './board-core.js';
 
 const VIEWER_BTNS = { start: 'viewer-start', prev: 'viewer-prev', next: 'viewer-next', end: 'viewer-end' };
@@ -92,6 +93,8 @@ export function toggleComments() {
     return commentsHidden;
 }
 
+export function isCommentsHidden() { return commentsHidden; }
+
 let branchMode = false;
 
 export function toggleBranchMode() {
@@ -100,37 +103,10 @@ export function toggleBranchMode() {
     return branchMode;
 }
 
+export function isBranchMode() { return branchMode; }
+
 let branchChoices = [];  // node IDs of current branch options
 let branchSelectedIdx = 0;
-
-/**
- * Format a line preview starting from a node: "3. Bc4 Bc5 4. c3 ..."
- * Shows up to maxMoves half-moves, with trailing ellipsis if the line continues.
- */
-function formatLinePreview(startNodeId, maxMoves = 6) {
-    const nodes = getNodes();
-    const parts = [];
-    let id = startNodeId;
-    let count = 0;
-    while (id !== null && count < maxMoves) {
-        const n = nodes[id];
-        const ply = n.ply;
-        const moveNum = Math.floor((ply - 1) / 2) + 1;
-        const isWhite = ply % 2 === 1;
-        if (isWhite) {
-            parts.push(`${moveNum}.\u00A0${n.san}`);
-        } else if (count === 0) {
-            // First move is black — show move number with dots
-            parts.push(`${moveNum}...\u00A0${n.san}`);
-        } else {
-            parts.push(n.san);
-        }
-        id = n.mainChild;
-        count++;
-    }
-    if (id !== null) parts.push('\u2026');
-    return parts.join(' ');
-}
 
 /**
  * Show a centered popover with branch choices and line previews.
@@ -233,6 +209,7 @@ export function destroyViewer() {
     stopAutoPlay();
     destroyBoard();
     resetState();
+    clearCollapsedVariations();
     rawPgn = null;
     commentsHidden = false;
     branchMode = false;
@@ -382,14 +359,14 @@ function renderGameHeader(pgn, meta = {}) {
         ${roundBoardHtml}
         <div class="viewer-players">
             <div class="viewer-player ${whiteClass}">
-                <span class="viewer-player-name">${formatName(white)}${whiteElo ? ` (${whiteElo})` : ''}</span>
+                <span class="viewer-player-name" data-player="${formatName(white)}">${formatName(white)}${whiteElo ? ` (${whiteElo})` : ''}</span>
                 <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
                 <span class="viewer-player-score">${whiteSymbol}</span>
             </div>
             <div class="viewer-player ${blackClass}">
                 <span class="viewer-player-score">${blackSymbol}</span>
                 <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
-                <span class="viewer-player-name">${formatName(black)}${blackElo ? ` (${blackElo})` : ''}</span>
+                <span class="viewer-player-name" data-player="${formatName(black)}">${formatName(black)}${blackElo ? ` (${blackElo})` : ''}</span>
             </div>
         </div>
         ${openingHtml}

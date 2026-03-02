@@ -33,6 +33,71 @@ export function setAnnotatedMoves(m) { _annotatedMoves = m; }
 export function getStartingFen() { return _startingFen; }
 export function setStartingFen(fen) { _startingFen = fen; }
 
+// --- Variation Collapse State ---
+
+const MIN_COLLAPSIBLE = 6; // variations shorter than this can't be collapsed
+const _varToggled = new Set();  // node IDs the user has manually collapsed
+
+/** Count half-moves in a variation by walking the mainChild chain. */
+function varLength(startId) {
+    let count = 0, id = startId;
+    while (id !== null) {
+        const n = _nodes[id];
+        if (!n || n.deleted) break;
+        count++;
+        id = n.mainChild;
+    }
+    return count;
+}
+
+/** Can this variation be collapsed at all? */
+function isCollapsible(nodeId) {
+    return varLength(nodeId) >= MIN_COLLAPSIBLE;
+}
+
+/** Is this variation currently collapsed? */
+function isVarCollapsed(nodeId) {
+    return _varToggled.has(nodeId);
+}
+
+/** Toggle a variation's collapsed state. */
+export function toggleVariation(nodeId) {
+    if (_varToggled.has(nodeId)) _varToggled.delete(nodeId);
+    else _varToggled.add(nodeId);
+}
+
+/** Clear all collapse state (called on game load). */
+export function clearCollapsedVariations() {
+    _varToggled.clear();
+}
+
+/**
+ * Format a line preview: "3. Bc4 Bc5 4. c3 …"
+ * Shows up to maxMoves half-moves with trailing ellipsis if the line continues.
+ */
+export function formatLinePreview(startNodeId, maxMoves = 6) {
+    const parts = [];
+    let id = startNodeId, count = 0;
+    while (id !== null && count < maxMoves) {
+        const n = _nodes[id];
+        if (!n || n.deleted) break;
+        const ply = n.ply;
+        const moveNum = Math.floor((ply - 1) / 2) + 1;
+        const isWhite = ply % 2 === 1;
+        if (isWhite) {
+            parts.push(`${moveNum}.\u00A0${n.san}`);
+        } else if (count === 0) {
+            parts.push(`${moveNum}...\u00A0${n.san}`);
+        } else {
+            parts.push(n.san);
+        }
+        id = n.mainChild;
+        count++;
+    }
+    if (id !== null) parts.push('\u2026');
+    return parts.join(' ');
+}
+
 // --- Constants ---
 
 export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -485,7 +550,14 @@ export function renderMoveTable(options = {}) {
                 const subMain = n.mainChild;
                 for (const subId of n.children) {
                     if (subId !== subMain && !_nodes[subId].deleted) {
-                        vhtml += `<span class="move-variation-block">(${renderVariationInline(subId)})</span> `;
+                        const collapsible = isCollapsible(subId);
+                        if (collapsible && isVarCollapsed(subId)) {
+                            vhtml += `<span class="move-variation-block collapsed" data-var-node="${subId}"><span class="var-toggle">\u25B8</span>(${formatLinePreview(subId, 4)})</span> `;
+                        } else {
+                            const toggle = collapsible ? `<span class="var-toggle">\u25BE</span>` : '';
+                            const attr = collapsible ? ` data-var-node="${subId}"` : '';
+                            vhtml += `<span class="move-variation-block"${attr}>${toggle}(${renderVariationInline(subId)})</span> `;
+                        }
                     }
                 }
             }
@@ -500,7 +572,14 @@ export function renderMoveTable(options = {}) {
         const alts = parentNode.children.filter(cid => cid !== mainId && !_nodes[cid].deleted);
         if (alts.length === 0) return;
         for (const altId of alts) {
-            html += `<span class="mt-variation">(${renderVariationInline(altId)})</span>`;
+            const collapsible = !hideComments && isCollapsible(altId);
+            if (collapsible && isVarCollapsed(altId)) {
+                html += `<span class="mt-variation collapsed" data-var-node="${altId}"><span class="var-toggle">\u25B8</span>(${formatLinePreview(altId, 4)})</span>`;
+            } else {
+                const toggle = collapsible ? `<span class="var-toggle">\u25BE</span>` : '';
+                const attr = collapsible ? ` data-var-node="${altId}"` : '';
+                html += `<span class="mt-variation"${attr}>${toggle}(${renderVariationInline(altId)})</span>`;
+            }
         }
     }
 
@@ -622,9 +701,23 @@ export function renderAnnotatedMoves(moves, parentNodeId, isVariation, options =
 
         if (m.variations) {
             for (const variation of m.variations) {
-                html += `<span class="move-variation-block">(`;
-                html += renderAnnotatedMoves(variation, prevNodeId, true, options);
-                html += `)</span> `;
+                // Resolve the first node ID of this variation for collapse tracking
+                const varSan = variation[0]?.san;
+                const varParent = _nodes[prevNodeId];
+                const varNodeId = varSan && varParent
+                    ? varParent.children.find(cid => _nodes[cid].san === varSan && cid !== nodeId && (!filterDeleted || !_nodes[cid].deleted))
+                    : undefined;
+
+                const collapsible = varNodeId !== undefined && !filterDeleted && isCollapsible(varNodeId);
+                if (collapsible && isVarCollapsed(varNodeId)) {
+                    html += `<span class="move-variation-block collapsed" data-var-node="${varNodeId}"><span class="var-toggle">\u25B8</span>(${formatLinePreview(varNodeId, 4)})</span> `;
+                } else {
+                    const varAttr = collapsible ? ` data-var-node="${varNodeId}"` : '';
+                    const varToggle = collapsible ? `<span class="var-toggle">\u25BE</span>` : '';
+                    html += `<span class="move-variation-block"${varAttr}>${varToggle}(`;
+                    html += renderAnnotatedMoves(variation, prevNodeId, true, options);
+                    html += `)</span> `;
+                }
             }
         }
 
@@ -656,9 +749,21 @@ export function renderMoveList(options = {}) {
     }
 
     container.onclick = (e) => {
+        // Move click (navigate to position)
         const moveEl = e.target.closest('[data-node-id]');
         if (moveEl && options.onMoveClick) {
             options.onMoveClick(parseInt(moveEl.dataset.nodeId, 10));
+            return;
+        }
+        // Variation toggle (collapse/expand) — only when not in editor (filterDeleted)
+        if (!options.filterDeleted) {
+            const varEl = e.target.closest('[data-var-node]');
+            if (varEl) {
+                toggleVariation(parseInt(varEl.dataset.varNode, 10));
+                const scrollTop = container.scrollTop;
+                renderMoveList(options);
+                container.scrollTop = scrollTop;
+            }
         }
     };
 

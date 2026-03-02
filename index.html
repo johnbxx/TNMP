@@ -98,8 +98,11 @@
             <h2 id="settings-modal-title">Settings</h2>
             <div class="setting-group">
                 <label for="player-name-input">Your Name</label>
-                <input type="text" id="player-name-input" placeholder="e.g., Magnus Carlsen" autocomplete="name">
-                <p class="setting-hint">Enter your name exactly as it appears in the pairings to see your board, color, and opponent.</p>
+                <div class="setting-name-wrap">
+                    <input type="text" id="player-name-input" placeholder="Search for your name..." autocomplete="off" spellcheck="false">
+                    <div id="settings-autocomplete" class="browser-autocomplete hidden"></div>
+                </div>
+                <p class="setting-hint">Start typing to find your name, or enter it manually.</p>
             </div>
             <div class="setting-group">
                 <label>Notifications</label>

@@ -1,8 +1,9 @@
 import { openModal, closeModal } from './modal.js';
-import { initViewer, destroyViewer, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate } from './pgn-viewer.js';
+import { initViewer, destroyViewer, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate, isCommentsHidden, isBranchMode } from './pgn-viewer.js';
 import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, isEditorDirty, copyPgn } from './pgn-editor.js';
 import { loadRoundHistory } from './history.js';
 import { renderBrowserInPanel, hideBrowserPanel, highlightActiveGame, openBrowserWithCurrentFilter, openGameBrowser, openGameFromBrowser, clearFilter, getCachedGame, openEditorForGame, launchExplorer } from './game-browser.js';
+import { openPlayerProfile } from './player-profile.js';
 import { buildExplorerTree, buildExplorerTree1, getPositionStats, scorePercent } from './opening-explorer.js';
 import { classifyFen as classifyEco, loadEcoData } from './eco.js';
 import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
@@ -256,6 +257,7 @@ function renderExplorer() {
                 const selected = i === _explorerSelectedRow ? ' explorer-row-selected' : '';
 
                 html += `<button class="explorer-row${selected}" data-explorer-move="${m.san}" data-explorer-idx="${i}">`;
+                html += `<span class="explorer-tip"><span class="explorer-tip-w">+${m.whiteWins}</span> <span class="explorer-tip-d">=${m.draws}</span> <span class="explorer-tip-b">\u2212${m.blackWins}</span></span>`;
                 html += `<span class="explorer-col-move explorer-san">${m.san}</span>`;
                 html += `<span class="explorer-col-games">${m.total}</span>`;
                 html += `<span class="explorer-col-bar"><span class="explorer-bar"><span class="explorer-bar-w" style="width:${wPct}%"></span><span class="explorer-bar-d" style="width:${dPct}%"></span><span class="explorer-bar-b" style="width:${bPct}%"></span></span></span>`;
@@ -498,6 +500,8 @@ function wireViewerHeader() {
         }
         if (e.target.closest('#viewer-browse-prev')) { _onPrev?.(); return; }
         if (e.target.closest('#viewer-browse-next')) { _onNext?.(); return; }
+        const playerEl = e.target.closest('[data-player]');
+        if (playerEl) { openPlayerProfile(playerEl.dataset.player); return; }
     });
 }
 
@@ -516,6 +520,9 @@ function cacheViewerToolbar() {
 function restoreViewerToolbar() {
     const toolbar = document.getElementById('viewer-toolbar');
     if (toolbar && _originalViewerToolbar) toolbar.innerHTML = _originalViewerToolbar;
+    // Sync toggle button states to actual viewer state
+    document.getElementById('viewer-comments')?.classList.toggle('active', !isCommentsHidden());
+    document.getElementById('viewer-branch')?.classList.toggle('active', isBranchMode());
 }
 
 function setMode(mode) {
