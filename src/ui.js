@@ -200,8 +200,8 @@ export function showState(state, info, pairingInfo = null) {
     // Update button text based on state (onclick wired by app.js)
     const btn = document.getElementById('check-btn');
     if (state === STATE.OFF_SEASON) {
-        const linkUrl = getTournamentMeta().nextTournament?.url
-            || getTournamentMeta().url;
+        const linkUrl = getTournamentMeta().url
+            || getTournamentMeta().nextTournament?.url;
         if (linkUrl) {
             btn.textContent = 'View Tournament Info';
             btn.onclick = () => window.open(linkUrl, '_blank');
