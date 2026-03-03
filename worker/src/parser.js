@@ -8,6 +8,8 @@
  *   4. Pure utilities (message composition, tournament list, round dates, PGN extraction)
  */
 
+import { pacificOffset } from './helpers.js';
+
 const SITE_URL = 'https://tnmpairings.com';
 
 // --- Internal helpers ---
@@ -596,7 +598,8 @@ export function parseRoundDates(html, year) {
         if (ampm === 'pm' && hours !== 12) hours += 12;
         if (ampm === 'am' && hours === 12) hours = 0;
 
-        dates.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+        const offset = pacificOffset(year, month, day);
+        dates.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00${offset}`);
     }
 
     return dates;

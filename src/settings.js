@@ -6,9 +6,11 @@ import { checkPushStatus, syncPushSubscription } from './push.js';
 import { fetchPlayerList } from './browser-data.js';
 
 export function initDarkMode() {
-    if (localStorage.getItem('darkMode') === '1') {
-        document.documentElement.classList.add('dark-mode');
-    }
+    const stored = localStorage.getItem('darkMode');
+    const dark = stored !== null
+        ? stored === '1'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (dark) document.documentElement.classList.add('dark-mode');
 }
 
 // --- Settings modal ---
@@ -19,7 +21,7 @@ export function openSettings() {
     const input = document.getElementById('player-name-input');
     input.value = CONFIG.playerName;
     document.getElementById('settings-autocomplete').classList.add('hidden');
-    document.getElementById('dark-mode-toggle').checked = localStorage.getItem('darkMode') === '1';
+    document.getElementById('dark-mode-toggle').checked = document.documentElement.classList.contains('dark-mode');
     openModal('settings-modal', input);
     checkPushStatus();
     if (!_autocompleteReady) {

@@ -199,8 +199,8 @@ describe('parseRoundDates', () => {
 
     it('returns correct ISO date strings', () => {
         const dates = parseRoundDates(tournamentDetailHtml, 2026);
-        expect(dates[0]).toBe('2026-01-06T18:30:00');
-        expect(dates[6]).toBe('2026-02-17T18:30:00');
+        expect(dates[0]).toBe('2026-01-06T18:30:00-08:00');
+        expect(dates[6]).toBe('2026-02-17T18:30:00-08:00');
     });
 
     it('returns empty array for HTML without round times', () => {

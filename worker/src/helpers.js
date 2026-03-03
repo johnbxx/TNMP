@@ -84,6 +84,30 @@ export function buildPlayerNamePatterns(playerName) {
     return patterns;
 }
 
+// --- Pacific Timezone Offset ---
+
+/**
+ * Return the UTC offset for US Pacific time on a given calendar date.
+ * US DST rules (since 2007): spring forward 2nd Sunday of March, fall back 1st Sunday of November.
+ * @param {number} year
+ * @param {number} month - 1-indexed (1=Jan, 12=Dec)
+ * @param {number} day
+ * @returns {string} '-08:00' (PST) or '-07:00' (PDT)
+ */
+export function pacificOffset(year, month, day) {
+    if (month >= 4 && month <= 10) return '-07:00';
+    if (month <= 2 || month === 12) return '-08:00';
+    if (month === 3) {
+        const marchFirstDay = new Date(Date.UTC(year, 2, 1)).getUTCDay();
+        const secondSunday = 1 + (7 - marchFirstDay) % 7 + 7;
+        return day >= secondSunday ? '-07:00' : '-08:00';
+    }
+    // November
+    const novFirstDay = new Date(Date.UTC(year, 10, 1)).getUTCDay();
+    const firstSunday = 1 + (7 - novFirstDay) % 7;
+    return day >= firstSunday ? '-08:00' : '-07:00';
+}
+
 // --- Tournament Slug ---
 
 export function slugifyTournament(name) {

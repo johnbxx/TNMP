@@ -4,7 +4,7 @@
  * Handles: /tournament-html, /tournament-state, /og-state, /health
  */
 
-import { corsResponse, mergeGameColors, slugifyTournament, getTournamentSlug, TOURNAMENTS_LIST_URL, MI_BASE_URL, META_CACHE_TTL } from './helpers.js';
+import { corsResponse, mergeGameColors, slugifyTournament, getTournamentSlug, pacificOffset, TOURNAMENTS_LIST_URL, MI_BASE_URL, META_CACHE_TTL } from './helpers.js';
 import { hasPairings, hasResults, findPlayerPairing, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
 
 // --- Tournament Resolution Helpers ---
@@ -17,7 +17,10 @@ function parseListDate(dateStr, year) {
     const m = dateStr.match(/(\w+)\s+(\d+)/);
     if (!m) return null;
     const month = MONTHS[m[1].toLowerCase()];
-    return month !== undefined ? new Date(year, month, parseInt(m[2], 10)) : null;
+    if (month === undefined) return null;
+    const day = parseInt(m[2], 10);
+    const mo = month + 1;
+    return new Date(`${year}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00${pacificOffset(year, mo, day)}`);
 }
 
 async function fetchTournamentPage(url, year) {
@@ -77,16 +80,27 @@ export async function resolveTournament(env) {
     const year = now.getFullYear();
 
     let current = null, next = null;
-    const parsed = tournaments.map(t => ({ ...t, start: parseListDate(t.startDate, year), end: parseListDate(t.endDate, year) })).filter(t => t.start && t.end);
+    // Parse dates, auto-incrementing year when dates go backwards (handles Dec→Jan year boundary)
+    const parsed = [];
+    let prevEnd = null;
+    for (const t of tournaments) {
+        let y = year;
+        let start = parseListDate(t.startDate, y);
+        if (prevEnd && start && start < prevEnd) start = parseListDate(t.startDate, ++y);
+        let end = parseListDate(t.endDate, y);
+        if (start && end && end < start) end = parseListDate(t.endDate, y + 1);
+        if (start && end) { parsed.push({ ...t, start, end }); prevEnd = end; }
+    }
 
     for (let i = 0; i < parsed.length; i++) {
         const t = parsed[i];
         const nextT = i + 1 < parsed.length ? parsed[i + 1] : null;
         // Use 6:30PM Pacific on the next tournament's start date (round 1 start time)
         // rather than midnight, so the old tournament stays active until the new one begins
-        const nextStart = nextT
-            ? new Date(nextT.start.getFullYear(), nextT.start.getMonth(), nextT.start.getDate(), 18, 30)
-            : null;
+        const nextStart = nextT ? (() => {
+            const y = nextT.start.getFullYear(), mo = nextT.start.getMonth() + 1, d = nextT.start.getDate();
+            return new Date(`${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}T18:30:00${pacificOffset(y, mo, d)}`);
+        })() : null;
         const activeEnd = nextStart
             ? new Date(nextStart.getTime() - 7 * 24 * 60 * 60 * 1000)
             : new Date(t.end.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -95,7 +109,8 @@ export async function resolveTournament(env) {
 
     // Fall back to persisted previous tournament if next listed is >7 days away
     if (current?.start && current.start.getTime() > now.getTime()) {
-        const r1Start = new Date(current.start.getFullYear(), current.start.getMonth(), current.start.getDate(), 18, 30);
+        const cy = current.start.getFullYear(), cmo = current.start.getMonth() + 1, cd = current.start.getDate();
+        const r1Start = new Date(`${cy}-${String(cmo).padStart(2, '0')}-${String(cd).padStart(2, '0')}T18:30:00${pacificOffset(cy, cmo, cd)}`);
         const sevenDaysBefore = new Date(r1Start.getTime() - 7 * 24 * 60 * 60 * 1000);
         if (now < sevenDaysBefore) {
             const prev = await env.SUBSCRIBERS.get('state:previousTournament', 'json');
@@ -136,27 +151,31 @@ export function getTimeState(roundDates, nextTournament) {
 
     if (roundDates?.length > 0) {
         const nowMs = now.getTime();
-        const rounds = roundDates.map(d => {
-            const p = d.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-            return p ? new Date(`${p[1]}-${p[2]}-${p[3]}T${p[4]}:${p[5]}:00`) : null;
-        }).filter(Boolean);
+        const rounds = roundDates.map(d => { const dt = new Date(d); return isNaN(dt) ? null : dt; }).filter(Boolean);
 
         if (rounds.length > 0) {
+            const r1Str = roundDates[0];
             const r1Date = rounds[0];
-            const r1DayStart = new Date(r1Date);
-            r1DayStart.setHours(0, 0, 0, 0);
+            const r1DatePart = r1Str.slice(0, 10);
+            const r1OffsetPart = r1Str.slice(19);
+            const r1DayStart = new Date(r1DatePart + 'T00:00:00' + r1OffsetPart);
 
             if (nextTournament?.startDate) {
-                const nextR1 = new Date(nextTournament.startDate + 'T18:30:00');
+                const [ny, nm, nd] = nextTournament.startDate.split('-').map(Number);
+                const nextR1 = new Date(nextTournament.startDate + 'T18:30:00' + pacificOffset(ny, nm, nd));
                 const sevenBefore = new Date(nextR1.getTime() - 7 * 24 * 60 * 60 * 1000);
                 if (nowMs >= sevenBefore.getTime() && nowMs < nextR1.getTime()) return 'off_season';
             }
             if (nowMs < r1DayStart.getTime()) return 'off_season';
             if (nowMs < r1Date.getTime()) return 'off_season_r1';
 
-            // Tournament is over — all round dates are in the past
+            // Past all rounds? Check if we're still on the last round's day
             const lastRound = rounds[rounds.length - 1];
-            if (nowMs >= lastRound.getTime()) return 'results_window';
+            if (nowMs >= lastRound.getTime()) {
+                const roundDay = new Date(lastRound.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })).getDate();
+                if (roundDay === pacificTime.getDate() && timeInMinutes >= 1110) return 'round_in_progress';
+                return 'results_window';
+            }
         }
     }
 
@@ -194,8 +213,9 @@ export function computeAppState(cached, meta) {
         state = 'off_season';
         if (timeState === 'off_season_r1') {
             const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-            offSeason = { targetDate: today + 'T18:30:00' };
-            info = 'Round 1 pairings will be posted onsite at 6:30PM.';
+            const [ty, tm, td] = today.split('-').map(Number);
+            offSeason = { targetDate: today + 'T18:30:00' + pacificOffset(ty, tm, td) };
+            info = 'Round 1 pairings will be posted onsite at 6:30PM';
         } else {
             const r1 = roundDates?.[0];
             const r1Date = r1 ? new Date(r1) : null;
@@ -204,9 +224,11 @@ export function computeAppState(cached, meta) {
                 info = `${tournamentName || 'The next TNM'} starts ${dateStr}. Round 1 pairings will be posted onsite.`;
                 offSeason = { targetDate: r1 };
             } else if (nextTournament?.startDate) {
-                const dateStr = new Date(nextTournament.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+                const [ny, nm, nd] = nextTournament.startDate.split('-').map(Number);
+                const nextOffset = pacificOffset(ny, nm, nd);
+                const dateStr = new Date(nextTournament.startDate + 'T00:00:00' + nextOffset).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
                 info = `The next TNM starts ${dateStr}. Round 1 pairings will be posted onsite.`;
-                offSeason = { targetDate: nextTournament.startDate + 'T18:30:00' };
+                offSeason = { targetDate: nextTournament.startDate + 'T18:30:00' + nextOffset };
             } else {
                 info = 'Check back for the next TNM schedule.';
             }
