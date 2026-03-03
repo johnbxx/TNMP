@@ -108,6 +108,20 @@ export function pacificOffset(year, month, day) {
     return day >= firstSunday ? '-08:00' : '-07:00';
 }
 
+const pad2 = n => String(n).padStart(2, '0');
+
+/**
+ * Build an ISO 8601 datetime string with the correct Pacific UTC offset.
+ * @param {number} year
+ * @param {number} month - 1-indexed (1=Jan, 12=Dec)
+ * @param {number} day
+ * @param {string} [time='00:00:00'] - HH:MM:SS
+ * @returns {string} e.g. '2026-03-09T18:30:00-07:00'
+ */
+export function pacificDatetime(year, month, day, time = '00:00:00') {
+    return `${year}-${pad2(month)}-${pad2(day)}T${time}${pacificOffset(year, month, day)}`;
+}
+
 // --- Tournament Slug ---
 
 export function slugifyTournament(name) {

@@ -8,7 +8,7 @@
  *   4. Pure utilities (message composition, tournament list, round dates, PGN extraction)
  */
 
-import { pacificOffset } from './helpers.js';
+import { pacificDatetime } from './helpers.js';
 
 const SITE_URL = 'https://tnmpairings.com';
 
@@ -157,7 +157,7 @@ export function parseTournamentPage(html) {
     }
 
     // --- Pass 2: H3 + table sections ---
-    const sectionRegex = /<h3>([^<]*(?:Pairings for Round|Standings)[^<]*)<\/h3>([\s\S]*?)(<table>[\s\S]*?<\/table>)/gi;
+    const sectionRegex = /<h3>([^<]*(?:Pairings for Round|Standings)[^<]*)<\/h3>([\s\S]*?)(<table[^>]*>[\s\S]*?<\/table>)/gi;
     const standingsParts = [];
     const pairingsParts = [];
     const pairingsSections = [];
@@ -301,16 +301,17 @@ export function hasPairings(html) {
  * Check whether the highest-round pairings table has results filled in.
  */
 export function hasResults(html) {
-    const pairingsRegex = /<h3>Pairings for Round (\d+)\.[^<]*<\/h3>[\s\S]*?<table>([\s\S]*?)<\/table>/gi;
+    const pairingsRegex = /<h3>(Pairings for Round (\d+)\.[^<]*)<\/h3>[\s\S]*?<table[^>]*>([\s\S]*?)<\/table>/gi;
     let match;
     let maxRound = 0;
     let maxRoundTable = null;
 
     while ((match = pairingsRegex.exec(html)) !== null) {
-        const round = parseInt(match[1], 10);
+        if (/extra games/i.test(match[1])) continue;
+        const round = parseInt(match[2], 10);
         if (round > maxRound) {
             maxRound = round;
-            maxRoundTable = match[2];
+            maxRoundTable = match[3];
         }
     }
 
@@ -348,7 +349,7 @@ export function hasResults(html) {
  * Returns { board, color, opponent, opponentRating, opponentUrl, section } or { isBye, byeType, section } or null.
  */
 export function findPlayerPairing(html, playerName) {
-    const pairingsRegex = /<h3>Pairings for Round \d+\.[^<]*:\s*([^<]+)<\/h3>[\s\S]*?<table>[\s\S]*?<\/table>/gi;
+    const pairingsRegex = /<h3>Pairings for Round \d+\.[^<]*:\s*([^<]+)<\/h3>[\s\S]*?<table[^>]*>[\s\S]*?<\/table>/gi;
     let match;
     const playerRegex = new RegExp(escapeRegex(playerName), 'i');
 
@@ -370,7 +371,7 @@ export function findPlayerPairing(html, playerName) {
             const blackUrl = rowMatch[6] || null;
 
             if (playerRegex.test(whiteName)) {
-                if (/^bye$/i.test(blackName)) {
+                if (/^(bye|full point bye)$/i.test(blackName)) {
                     return { isBye: true, byeType: whiteResult === '1' ? 'full' : 'half', section };
                 }
                 const opponentInfo = parsePlayerInfo(blackName);
@@ -382,7 +383,7 @@ export function findPlayerPairing(html, playerName) {
             }
 
             if (playerRegex.test(blackName)) {
-                if (/^bye$/i.test(whiteName)) {
+                if (/^(bye|full point bye)$/i.test(whiteName)) {
                     return { isBye: true, byeType: blackResult === '1' ? 'full' : 'half', section };
                 }
                 const opponentInfo = parsePlayerInfo(whiteName);
@@ -404,7 +405,7 @@ export function findPlayerPairing(html, playerName) {
  */
 export function parseStandings(html) {
     const sections = [];
-    const sectionRegex = /<h3>([^<]*Standings[^<]*)<\/h3>[\s\S]*?(<table>[\s\S]*?<\/table>)/gi;
+    const sectionRegex = /<h3>([^<]*Standings[^<]*)<\/h3>[\s\S]*?(<table[^>]*>[\s\S]*?<\/table>)/gi;
     let sectionMatch;
 
     while ((sectionMatch = sectionRegex.exec(html)) !== null) {
@@ -433,7 +434,7 @@ export function parseStandings(html) {
                 const cellContent = cellMatch[2];
                 const isNameCell = /class="[^"]*name[^"]*"/.test(attrs);
                 const linkMatch = cellContent.match(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
-                const text = cellContent.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+                const text = decodeEntities(cellContent.replace(/<[^>]*>/g, ''));
                 cells.push({ text, link: linkMatch ? linkMatch[1] : null, isName: isNameCell });
             }
 
@@ -598,8 +599,8 @@ export function parseRoundDates(html, year) {
         if (ampm === 'pm' && hours !== 12) hours += 12;
         if (ampm === 'am' && hours === 12) hours = 0;
 
-        const offset = pacificOffset(year, month, day);
-        dates.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00${offset}`);
+        const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+        dates.push(pacificDatetime(year, month, day, time));
     }
 
     return dates;
@@ -610,7 +611,7 @@ export function parseRoundDates(html, year) {
  */
 export function extractTournamentName(html) {
     const match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-    return match ? match[1].replace(/&#039;/g, "'").replace(/&amp;/g, '&').trim() : null;
+    return match ? decodeEntities(match[1]) : null;
 }
 
 /**
