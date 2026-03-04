@@ -1,7 +1,7 @@
 import { openGameViewer, openGameEditor, showExplorer, refreshExplorer, isExplorerMode, getSavedExplorerMoves } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
-import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, getPlayerUscfId, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame, onGamesChange } from './browser-data.js';
+import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, getPlayerUscfId, getPlayerDbName, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame, onGamesChange } from './browser-data.js';
 import { getTournamentMeta } from './config.js';
 import { openPlayerProfile } from './player-profile.js';
 
@@ -302,7 +302,7 @@ export async function openGameBrowser(query = null) {
         if (_selectedPlayer && !isPlayerDataLoaded(_selectedPlayer)) {
             panelEl.innerHTML = '<p class="viewer-loading" style="padding:1rem">Loading games...</p>';
             try {
-                await fetchGames({ player: _selectedPlayer, tournament: 'all', include: 'pgn' });
+                await fetchGames({ player: getPlayerDbName(_selectedPlayer), tournament: 'all', include: 'pgn' });
             } catch (err) {
                 panelEl.innerHTML = `<p class="viewer-error" style="padding:1rem">Failed to load games: ${err.message}</p>`;
                 return;
@@ -936,7 +936,7 @@ async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
     if (!isLocal && !isPlayerDataLoaded(name)) {
         const gamesEl = document.getElementById('browser-games');
         if (gamesEl) gamesEl.innerHTML = '<p class="viewer-loading">Loading...</p>';
-        await fetchGames({ player: name, tournament: 'all', include: 'pgn' });
+        await fetchGames({ player: getPlayerDbName(name), tournament: 'all', include: 'pgn' });
     }
 
     renderChips();
@@ -1117,7 +1117,7 @@ function renderGameRow(game, boardLabel = null) {
             <span class="browser-board">${boardLabel || game.board || '?'}${statusIcon}</span>
             <div class="browser-player browser-player-white">
                 <span class="browser-name">${game.white}</span>
-                ${game.whiteElo ? `<span class="browser-elo">${game.whiteElo}</span>` : ''}
+                ${game.whiteElo ? `<span class="browser-elo">${game.whiteElo}</span>` : game.result ? '<span class="browser-elo browser-elo-unrated">unr.</span>' : ''}
             </div>
             <div class="browser-result-center">
                 <div class="browser-result-half ${whiteClass}">
@@ -1131,7 +1131,7 @@ function renderGameRow(game, boardLabel = null) {
             </div>
             <div class="browser-player browser-player-black">
                 <span class="browser-name">${game.black}</span>
-                ${game.blackElo ? `<span class="browser-elo">${game.blackElo}</span>` : ''}
+                ${game.blackElo ? `<span class="browser-elo">${game.blackElo}</span>` : game.result ? '<span class="browser-elo browser-elo-unrated">unr.</span>' : ''}
             </div>
         </div>
     `;

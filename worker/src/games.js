@@ -291,6 +291,7 @@ export async function handlePlayers(request, env) {
             return corsResponse({
                 players: result.results.map(r => ({
                     name: formatPlayerName(r.name),
+                    dbName: r.name,
                     uscfId: r.uscf_id || null,
                     rating: r.rating || null,
                 })),
@@ -301,7 +302,7 @@ export async function handlePlayers(request, env) {
         'SELECT name FROM (SELECT white AS name FROM games UNION SELECT black AS name FROM games) ORDER BY name'
     ).all();
     return corsResponse({
-        players: result.results.map(r => ({ name: formatPlayerName(r.name), uscfId: null })),
+        players: result.results.map(r => ({ name: formatPlayerName(r.name), dbName: r.name, uscfId: null })),
     }, 200, env, request);
 }
 

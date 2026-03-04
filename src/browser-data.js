@@ -115,21 +115,21 @@ export async function fetchTournamentList() {
  * Returns a flat array of name strings for autocomplete.
  */
 let allPlayers = null;
-let playerUscfIds = null;
-let playerRatings = null;
+let playerIndex = null; // display name → { dbName, uscfId, rating }
 
 export async function fetchPlayerList() {
     if (allPlayers) return allPlayers;
     const response = await fetch(`${WORKER_URL}/players`);
     if (!response.ok) throw new Error('Failed to fetch players');
     const data = await response.json();
-    // Handle both old format (string[]) and new format ({ name, uscfId, rating }[])
     if (data.players.length > 0 && typeof data.players[0] === 'object') {
-        playerUscfIds = {};
-        playerRatings = {};
+        playerIndex = {};
         allPlayers = data.players.map(p => {
-            if (p.uscfId) playerUscfIds[p.name] = p.uscfId;
-            if (p.rating) playerRatings[p.name] = p.rating;
+            playerIndex[p.name] = {
+                dbName: p.dbName || p.name,
+                uscfId: p.uscfId || null,
+                rating: p.rating || null,
+            };
             return p.name;
         });
     } else {
@@ -138,14 +138,19 @@ export async function fetchPlayerList() {
     return allPlayers;
 }
 
+/** Look up a player's DB name ("LastName, FirstName") by display name. */
+export function getPlayerDbName(displayName) {
+    return playerIndex?.[displayName]?.dbName || displayName;
+}
+
 /** Look up a player's USCF ID by display name (available after fetchPlayerList). */
 export function getPlayerUscfId(displayName) {
-    return playerUscfIds?.[displayName] || null;
+    return playerIndex?.[displayName]?.uscfId || null;
 }
 
 /** Look up a player's current USCF rating by display name (available after fetchPlayerList). */
 export function getPlayerRating(displayName) {
-    return playerRatings?.[displayName] || null;
+    return playerIndex?.[displayName]?.rating || null;
 }
 
 // --- Derived data helpers ---

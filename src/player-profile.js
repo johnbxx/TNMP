@@ -4,6 +4,7 @@
  */
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
+import { getPlayerDbName, getPlayerUscfId, getPlayerRating } from './browser-data.js';
 
 let currentPlayer = null;
 let currentUscfId = null;
@@ -31,19 +32,8 @@ export async function openPlayerProfile(playerName, { uscfId } = {}) {
     body.innerHTML = '<p class="profile-loading">Loading stats...</p>';
 
     // If no uscfId was passed, try to look it up
-    let uscfRating = null;
-    if (!currentUscfId) {
-        try {
-            const { getPlayerUscfId, getPlayerRating } = await import('./browser-data.js');
-            currentUscfId = getPlayerUscfId(playerName);
-            uscfRating = getPlayerRating(playerName);
-        } catch { /* optional */ }
-    } else {
-        try {
-            const { getPlayerRating } = await import('./browser-data.js');
-            uscfRating = getPlayerRating(playerName);
-        } catch { /* optional */ }
-    }
+    if (!currentUscfId) currentUscfId = getPlayerUscfId(playerName);
+    const uscfRating = getPlayerRating(playerName);
 
     try {
         const games = await fetchAllPlayerGames(playerName);
@@ -83,11 +73,12 @@ export function closePlayerProfile() {
  * Fetch all games for a player across all tournaments, paginating if needed.
  */
 async function fetchAllPlayerGames(playerName) {
+    const dbName = getPlayerDbName(playerName);
     const allGames = [];
     let offset = 0;
     const limit = 500;
     while (true) {
-        const url = `${WORKER_URL}/query?player=${encodeURIComponent(playerName)}&tournament=all&limit=${limit}&offset=${offset}`;
+        const url = `${WORKER_URL}/query?player=${encodeURIComponent(dbName)}&tournament=all&limit=${limit}&offset=${offset}`;
         const resp = await fetch(url);
         if (!resp.ok) throw new Error('Server error');
         const data = await resp.json();

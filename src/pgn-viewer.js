@@ -359,14 +359,14 @@ function renderGameHeader(pgn, meta = {}) {
         ${roundBoardHtml}
         <div class="viewer-players">
             <div class="viewer-player ${whiteClass}">
-                <span class="viewer-player-name" data-player="${formatName(white)}">${formatName(white)}${whiteElo ? ` (${whiteElo})` : ''}</span>
+                <span class="viewer-player-name" data-player="${formatName(white)}">${formatName(white)}${whiteElo ? ` (${whiteElo})` : ' <span class="viewer-unrated">(unr.)</span>'}</span>
                 <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
                 <span class="viewer-player-score">${whiteSymbol}</span>
             </div>
             <div class="viewer-player ${blackClass}">
                 <span class="viewer-player-score">${blackSymbol}</span>
                 <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
-                <span class="viewer-player-name" data-player="${formatName(black)}">${formatName(black)}${blackElo ? ` (${blackElo})` : ''}</span>
+                <span class="viewer-player-name" data-player="${formatName(black)}">${formatName(black)}${blackElo ? ` (${blackElo})` : ' <span class="viewer-unrated">(unr.)</span>'}</span>
             </div>
         </div>
         ${openingHtml}

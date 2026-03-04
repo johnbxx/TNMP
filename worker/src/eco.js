@@ -35,21 +35,34 @@ export function classifyFen(fen) {
 function extractMoveTokens(pgn) {
     // Normalize line endings (some PGNs use \r\n)
     const normalized = pgn.replace(/\r\n/g, '\n');
-    // Find move text after the last header
-    const lastHeader = normalized.lastIndexOf(']\n');
-    const moveText = lastHeader >= 0 ? normalized.substring(lastHeader + 2).trim() : normalized.trim();
+    // Find move text after the last header line (matches [Tag "value"] at line start)
+    const headerRegex = /^\[[A-Za-z]\w*\s+"[^"]*"\]\s*$/gm;
+    let lastHeaderEnd = 0;
+    let m;
+    while ((m = headerRegex.exec(normalized)) !== null) {
+        lastHeaderEnd = m.index + m[0].length;
+    }
+    const moveText = normalized.substring(lastHeaderEnd).trim();
 
-    // Strip nested variations by counting parens
+    // Strip comments FIRST (before variations, since comments may contain parens)
+    let commentStripped = '';
+    let inComment = false;
+    for (const ch of moveText) {
+        if (ch === '{') { inComment = true; continue; }
+        if (ch === '}') { inComment = false; continue; }
+        if (!inComment) commentStripped += ch;
+    }
+
+    // Then strip nested variations by counting parens
     let depth = 0;
     let stripped = '';
-    for (const ch of moveText) {
+    for (const ch of commentStripped) {
         if (ch === '(') { depth++; continue; }
         if (ch === ')') { depth--; continue; }
         if (depth === 0) stripped += ch;
     }
 
     return stripped
-        .replace(/\{[^}]*\}/g, '')       // Remove {comments}
         .replace(/\$\d+/g, '')           // Remove $NAGs
         .replace(/\d+\.{3}/g, '')        // Remove "1..."
         .replace(/\d+\./g, '')           // Remove "1."

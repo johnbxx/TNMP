@@ -5,7 +5,7 @@
  * Called by the worker's scheduled() entry point.
  */
 
-import { slugifyTournament, normalizePlayerName, getTournamentSlug } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, formatPlayerName, getTournamentSlug } from './helpers.js';
 import { resolveTournament } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
@@ -77,12 +77,13 @@ export async function handleScheduled(env) {
 
     const slug = slugifyTournament(tournament.name);
 
-    // Load alias map and USCF ID→canonical name map for name canonicalization
+    // Load alias map, USCF ID→canonical name map, and rating history for name canonicalization + ELO fallback
     const aliasMap = new Map();
     const uscfIdMap = new Map(); // uscf_id → { name, norm, aliases }
+    const ratingHistoryMap = new Map(); // canonical name → [{ date, rating }, ...] sorted oldest-first
     try {
         const allPlayers = await env.DB.prepare(
-            "SELECT name, name_norm, uscf_id, aliases FROM players"
+            "SELECT name, name_norm, uscf_id, aliases, rating_history FROM players"
         ).all();
         for (const row of allPlayers.results) {
             if (row.uscf_id) uscfIdMap.set(row.uscf_id, { name: row.name, norm: row.name_norm, aliases: JSON.parse(row.aliases || '[]') });
@@ -90,8 +91,28 @@ export async function handleScheduled(env) {
             for (const alias of aliases) {
                 aliasMap.set(alias, { name: row.name, norm: row.name_norm });
             }
+            if (row.rating_history) {
+                try {
+                    const history = JSON.parse(row.rating_history);
+                    if (history.length > 0) ratingHistoryMap.set(row.name, history);
+                } catch { /* ignore malformed JSON */ }
+            }
         }
     } catch { /* players table may not exist yet */ }
+
+    /** Find the rating active on a given date from a player's rating history. */
+    function ratingAtDate(playerName, gameDate) {
+        if (!gameDate) return null;
+        const history = ratingHistoryMap.get(playerName);
+        if (!history) return null;
+        const normalized = gameDate.replace(/\./g, '-');
+        let best = null;
+        for (const entry of history) {
+            if (entry.date <= normalized) best = entry.rating;
+            else break;
+        }
+        return best;
+    }
 
     // Parse standings and build HTML name → USCF ID map (needed by canonicalize)
     const htmlNameToUscfId = new Map();
@@ -131,15 +152,11 @@ export async function handleScheduled(env) {
     }
 
     // Canonicalize standings names and persist to KV
-    function formatDisplayName(dbName) {
-        const parts = dbName.split(',').map(s => s.trim());
-        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : dbName;
-    }
     try {
         for (const section of standings) {
             for (const p of section.players) {
                 const resolved = canonicalize(p.name);
-                if (resolved.name !== p.name) p.name = formatDisplayName(resolved.name);
+                if (resolved.name !== p.name) p.name = formatPlayerName(resolved.name);
             }
         }
         await Promise.all(standings.map(section =>
@@ -206,8 +223,8 @@ export async function handleScheduled(env) {
                         slug, parseInt(roundNum), g.board,
                         whiteName, blackName,
                         whiteNorm, blackNorm,
-                        g.whiteElo ? parseInt(g.whiteElo) : null,
-                        g.blackElo ? parseInt(g.blackElo) : null,
+                        g.whiteElo ? parseInt(g.whiteElo) : ratingAtDate(whiteName, g.date),
+                        g.blackElo ? parseInt(g.blackElo) : ratingAtDate(blackName, g.date),
                         g.result,
                         opening ? opening.eco : g.eco,
                         opening ? opening.name : null,

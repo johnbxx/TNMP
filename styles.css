@@ -1362,6 +1362,11 @@ html.off-season .meme {
     flex-shrink: 0;
 }
 
+.viewer-unrated {
+    font-weight: 400;
+    font-style: italic;
+    opacity: 0.5;
+}
 .viewer-player-name {
     font-size: 0.85rem;
     font-weight: 600;
@@ -2815,6 +2820,10 @@ select.editor-header-input {
     font-size: 0.65rem;
     color: var(--text-faint);
     flex-shrink: 0;
+}
+.browser-elo-unrated {
+    font-style: italic;
+    opacity: 0.6;
 }
 
 .browser-score {
