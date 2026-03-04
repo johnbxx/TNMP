@@ -1,0 +1,4616 @@
+{
+  "generatedAt": "2026-03-04T01:06:10.887Z",
+  "stats": {
+    "totalD1Players": 408,
+    "matched": 407,
+    "unmatched": 1
+  },
+  "players": [
+    {
+      "name": "(), Mikhail",
+      "displayName": "Mikhail ()",
+      "uscfId": "12878856",
+      "matchType": "opponent-xref",
+      "uscfName": "MIKHAIL CHERNOBILSKIY",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Abraham, Michael",
+      "displayName": "Michael Abraham",
+      "uscfId": "12776147",
+      "matchType": "exact",
+      "uscfName": "MICHAEL DAVID ABRAHAM",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Abraham, Michael David",
+      "displayName": "Michael David Abraham",
+      "uscfId": "12776147",
+      "matchType": "exact",
+      "uscfName": "MICHAEL DAVID ABRAHAM",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Achuthan, Aryan",
+      "displayName": "Aryan Achuthan",
+      "uscfId": "15445324",
+      "matchType": "exact",
+      "uscfName": "Aryan Achuthan",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Acosta, Edgardo Francisco",
+      "displayName": "Edgardo Francisco Acosta",
+      "uscfId": "16226136",
+      "matchType": "exact",
+      "uscfName": "Edgardo Francisco Acosta",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Adams, Aaron",
+      "displayName": "Aaron Adams",
+      "uscfId": "30809012",
+      "matchType": "exact",
+      "uscfName": "Aaron Adams",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Admassu, Yonathan",
+      "displayName": "Yonathan Admassu",
+      "uscfId": "15323127",
+      "matchType": "exact",
+      "uscfName": "YONATHAN ADMASSU",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Agdamag, Samuel",
+      "displayName": "Samuel Agdamag",
+      "uscfId": "14874734",
+      "matchType": "exact",
+      "uscfName": "Samuel Agdamag",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Agrawal, Varun",
+      "displayName": "Varun Agrawal",
+      "uscfId": "30082646",
+      "matchType": "exact",
+      "uscfName": "Varun Agrawal",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ahearn, Matthew",
+      "displayName": "Matthew Ahearn",
+      "uscfId": "30944447",
+      "matchType": "exact",
+      "uscfName": "MATTHEW AHEARN",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Aher, Sandesh",
+      "displayName": "Sandesh Aher",
+      "uscfId": "16730310",
+      "matchType": "exact",
+      "uscfName": "SANDESH AHER",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ahmed, Saadit",
+      "displayName": "Saadit Ahmed",
+      "uscfId": "16489827",
+      "matchType": "exact",
+      "uscfName": "Saadit Ahmed",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Ahrens, Richard",
+      "displayName": "Richard Ahrens",
+      "uscfId": "16953298",
+      "matchType": "exact",
+      "uscfName": "Richard William Ahrens",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ahrens, Richard William",
+      "displayName": "Richard William Ahrens",
+      "uscfId": "16953298",
+      "matchType": "exact",
+      "uscfName": "Richard William Ahrens",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Akkurt, Bugra",
+      "displayName": "Bugra Akkurt",
+      "uscfId": "31032720",
+      "matchType": "exact",
+      "uscfName": "Bugra Cuneyt Akkurt",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Alzhin, Leonid",
+      "displayName": "Leonid Alzhin",
+      "uscfId": "14144415",
+      "matchType": "exact",
+      "uscfName": "LEONID ALZHIN",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Anderson, Michael Gene",
+      "displayName": "Michael Gene Anderson",
+      "uscfId": "10471133",
+      "matchType": "exact",
+      "uscfName": "MICHAEL GENE ANDERSON",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Argo, Guy",
+      "displayName": "Guy Argo",
+      "uscfId": "12517167",
+      "matchType": "exact",
+      "uscfName": "GUY ARGO",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Arivoli, Aradhana",
+      "displayName": "Aradhana Arivoli",
+      "uscfId": "16325318",
+      "matchType": "exact",
+      "uscfName": "Aradhana Arivoli",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Arivoli, Sadhana",
+      "displayName": "Sadhana Arivoli",
+      "uscfId": "15655807",
+      "matchType": "exact",
+      "uscfName": "Sadhana Arivoli",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Asavasaetakul, Chawit",
+      "displayName": "Chawit Asavasaetakul",
+      "uscfId": "30241114",
+      "matchType": "exact",
+      "uscfName": "Chawit Asavasaetakul",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ashfield, Adam",
+      "displayName": "Adam Ashfield",
+      "uscfId": "31764766",
+      "matchType": "exact",
+      "uscfName": "Adam Ashfield",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Athreya, Nagendra",
+      "displayName": "Nagendra Athreya",
+      "uscfId": "30909559",
+      "matchType": "exact",
+      "uscfName": "Nagendra Athreya",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Atkeson, Christopher",
+      "displayName": "Christopher Atkeson",
+      "uscfId": "17080462",
+      "matchType": "exact",
+      "uscfName": "Christopher Timothy Atkeson",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Atkeson, Christopher Timothy",
+      "displayName": "Christopher Timothy Atkeson",
+      "uscfId": "17080462",
+      "matchType": "exact",
+      "uscfName": "Christopher Timothy Atkeson",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Avendano, Imanola Amadeus",
+      "displayName": "Imanola Amadeus Avendano",
+      "uscfId": "12919269",
+      "matchType": "exact",
+      "uscfName": "Imanola Amadeus Avendano",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Babayan, Gagik",
+      "displayName": "Gagik Babayan",
+      "uscfId": "15695454",
+      "matchType": "exact",
+      "uscfName": "Gagik Babayan",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Baker-Williams, Tyler",
+      "displayName": "Tyler Baker-Williams",
+      "uscfId": "30722403",
+      "matchType": "exact",
+      "uscfName": "Tyler Baker-Williams",
+      "source": {
+        "eventId": "202310171652",
+        "eventName": "2023 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Bala, Ahir",
+      "displayName": "Ahir Bala",
+      "uscfId": "12802372",
+      "matchType": "exact",
+      "uscfName": "AHIR BALA",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Balyan, Aryan",
+      "displayName": "Aryan Balyan",
+      "uscfId": "15273590",
+      "matchType": "exact",
+      "uscfName": "ARYAN BALYAN",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Bambou, Christophe",
+      "displayName": "Christophe Bambou",
+      "uscfId": "12734479",
+      "matchType": "exact",
+      "uscfName": "Christophe Bambou",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Barreyro, Romeo Belmes",
+      "displayName": "Romeo Belmes Barreyro",
+      "uscfId": "17018168",
+      "matchType": "exact",
+      "uscfName": "ROMEO BELMES BARREYRO",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Bayaraa, Bilguun",
+      "displayName": "Bilguun Bayaraa",
+      "uscfId": "15191886",
+      "matchType": "exact",
+      "uscfName": "BILGUUN BAYARAA",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Bayaraa, Chinguun",
+      "displayName": "Chinguun Bayaraa",
+      "uscfId": "14271324",
+      "matchType": "exact",
+      "uscfName": "CHINGUUN BAYARAA",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ben Cherif, Rachid",
+      "displayName": "Rachid Ben Cherif",
+      "uscfId": "32790058",
+      "matchType": "exact",
+      "uscfName": "Rachid Ben Cherif",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Benaid, Henry",
+      "displayName": "Henry Benaid",
+      "uscfId": "15273055",
+      "matchType": "exact",
+      "uscfName": "HENRY BENAID",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Bess, Kevin",
+      "displayName": "Kevin Bess",
+      "uscfId": "32145132",
+      "matchType": "exact",
+      "uscfName": "Kevin Bess",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Bhatia, Aadit",
+      "displayName": "Aadit Bhatia",
+      "uscfId": "16689603",
+      "matchType": "exact",
+      "uscfName": "AADIT BHATIA",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Bhingarkar, Pratyush",
+      "displayName": "Pratyush Bhingarkar",
+      "uscfId": "30015889",
+      "matchType": "exact",
+      "uscfName": "Pratyush Bhingarkar",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Bickley, Tobiah",
+      "displayName": "Tobiah Bickley",
+      "uscfId": "30164211",
+      "matchType": "exact",
+      "uscfName": "Tobiah Bickley",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Blum, Paul",
+      "displayName": "Paul Blum",
+      "uscfId": "12748433",
+      "matchType": "exact",
+      "uscfName": "PAUL BLUM",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Booth, Kyle",
+      "displayName": "Kyle Booth",
+      "uscfId": "30715175",
+      "matchType": "exact",
+      "uscfName": "Kyle Ewart Coventry Booth",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Booth, Kyle Ewart Coventry",
+      "displayName": "Kyle Ewart Coventry Booth",
+      "uscfId": "30715175",
+      "matchType": "exact",
+      "uscfName": "Kyle Ewart Coventry Booth",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Boyer, John",
+      "displayName": "John Boyer",
+      "uscfId": "16865157",
+      "matchType": "exact",
+      "uscfName": "JOHN BOYER",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Braithwaite, Andrew",
+      "displayName": "Andrew Braithwaite",
+      "uscfId": "31237898",
+      "matchType": "exact",
+      "uscfName": "Andrew Braithwaite",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Briancon-Marjollet, Victor",
+      "displayName": "Victor Briancon-Marjollet",
+      "uscfId": "30684050",
+      "matchType": "exact",
+      "uscfName": "Victor Briancon-Marjollet",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Brickhouse, Christian",
+      "displayName": "Christian Brickhouse",
+      "uscfId": "30261226",
+      "matchType": "exact",
+      "uscfName": "Christian Brickhouse",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Brown, Nicholas M",
+      "displayName": "Nicholas M Brown",
+      "uscfId": "12446259",
+      "matchType": "exact",
+      "uscfName": "Nicholas M Brown",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Brown, Samuel Tseng",
+      "displayName": "Samuel Tseng Brown",
+      "uscfId": "16380615",
+      "matchType": "exact",
+      "uscfName": "Samuel Tseng Brown",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Burkhardt, Doug",
+      "displayName": "Doug Burkhardt",
+      "uscfId": "31265165",
+      "matchType": "opponent-xref",
+      "uscfName": "Douglas Alan Burkhardt",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Burkhardt, Douglas Alan",
+      "displayName": "Douglas Alan Burkhardt",
+      "uscfId": "31265165",
+      "matchType": "exact",
+      "uscfName": "Douglas Alan Burkhardt",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Byambaa, Uyanga",
+      "displayName": "Uyanga Byambaa",
+      "uscfId": "14271351",
+      "matchType": "exact",
+      "uscfName": "UYANGA BYAMBAA",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Cadimas, Freddie Llanes",
+      "displayName": "Freddie Llanes Cadimas",
+      "uscfId": "30134392",
+      "matchType": "exact",
+      "uscfName": "Freddie LLANES Cadimas",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Cafiero, Michael",
+      "displayName": "Michael Cafiero",
+      "uscfId": "31431203",
+      "matchType": "exact",
+      "uscfName": "Michael Cafiero",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Calvert, Sam",
+      "displayName": "Sam Calvert",
+      "uscfId": "16725524",
+      "matchType": "exact",
+      "uscfName": "SAM CALVERT",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Canessa, Kate",
+      "displayName": "Kate Canessa",
+      "uscfId": "14102056",
+      "matchType": "exact",
+      "uscfName": "KATE CANESSA",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Cao, Danny",
+      "displayName": "Danny Cao",
+      "uscfId": "16939797",
+      "matchType": "exact",
+      "uscfName": "Danny Du Uy Cao",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Cao, Danny Du Uy",
+      "displayName": "Danny Du Uy Cao",
+      "uscfId": "16939797",
+      "matchType": "exact",
+      "uscfName": "Danny Du Uy Cao",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Carion, Anthony Patrick",
+      "displayName": "Anthony Patrick Carion",
+      "uscfId": "31307134",
+      "matchType": "exact",
+      "uscfName": "Anthony Patrick Carion",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Casares, Nick",
+      "displayName": "Nick Casares",
+      "uscfId": "10424364",
+      "matchType": "exact",
+      "uscfName": "NICK CASARES",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Casares, Nick Jr",
+      "displayName": "Nick Jr Casares",
+      "uscfId": "10424364",
+      "matchType": "opponent-xref",
+      "uscfName": "NICK CASARES",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Cawthon, Jeremy David",
+      "displayName": "Jeremy David Cawthon",
+      "uscfId": "15038608",
+      "matchType": "exact",
+      "uscfName": "JEREMY David CAWTHON",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Chalissery, Jossy",
+      "displayName": "Jossy Chalissery",
+      "uscfId": "12795405",
+      "matchType": "exact",
+      "uscfName": "JOSSY CHALISSERY",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Chalissery, Neil",
+      "displayName": "Neil Chalissery",
+      "uscfId": "15495526",
+      "matchType": "exact",
+      "uscfName": "Neil Chalissery",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Chan, John",
+      "displayName": "John Chan",
+      "uscfId": "12561007",
+      "matchType": "exact",
+      "uscfName": "JOHN CHAN",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Chan, Kyle",
+      "displayName": "Kyle Chan",
+      "uscfId": "30063365",
+      "matchType": "exact",
+      "uscfName": "Kyle Chan",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Chanoff, Eli Kleiner",
+      "displayName": "Eli Kleiner Chanoff",
+      "uscfId": "12898987",
+      "matchType": "exact",
+      "uscfName": "Eli Kleiner Chanoff",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chea, Na",
+      "displayName": "Na Chea",
+      "uscfId": "15147161",
+      "matchType": "exact",
+      "uscfName": "NA CHEA",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chei, Morsy",
+      "displayName": "Morsy Chei",
+      "uscfId": "30911273",
+      "matchType": "exact",
+      "uscfName": "Morsy Chei",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chen, Bowie",
+      "displayName": "Bowie Chen",
+      "uscfId": "32358809",
+      "matchType": "exact",
+      "uscfName": "Bowie Chen",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Chen, Quincy",
+      "displayName": "Quincy Chen",
+      "uscfId": "13716492",
+      "matchType": "exact",
+      "uscfName": "Quincy Chen",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Cheng, Kar Lun",
+      "displayName": "Kar Lun Cheng",
+      "uscfId": "30599116",
+      "matchType": "exact",
+      "uscfName": "Kar Lun Cheng",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chernobilskiy, Mikhail",
+      "displayName": "Mikhail Chernobilskiy",
+      "uscfId": "12878856",
+      "matchType": "exact",
+      "uscfName": "MIKHAIL CHERNOBILSKIY",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Chester, Thomas",
+      "displayName": "Thomas Chester",
+      "uscfId": "31952244",
+      "matchType": "exact",
+      "uscfName": "Thomas E Chester",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Chitta, Adithya",
+      "displayName": "Adithya Chitta",
+      "uscfId": "16695036",
+      "matchType": "exact",
+      "uscfName": "Adithya Chitta",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chockalingam, Rajiv",
+      "displayName": "Rajiv Chockalingam",
+      "uscfId": "13456783",
+      "matchType": "exact",
+      "uscfName": "RAJIV ARUN CHOCKALINGAM",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chockalingam, Rajiv Arun",
+      "displayName": "Rajiv Arun Chockalingam",
+      "uscfId": "13456783",
+      "matchType": "exact",
+      "uscfName": "RAJIV ARUN CHOCKALINGAM",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Chodakowski, Sebastian",
+      "displayName": "Sebastian Chodakowski",
+      "uscfId": "32591442",
+      "matchType": "exact",
+      "uscfName": "Sebastian Chodakowski",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Clark, Drew H",
+      "displayName": "Drew H Clark",
+      "uscfId": "30178041",
+      "matchType": "exact",
+      "uscfName": "Drew H Clark",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Clemens, Kristian",
+      "displayName": "Kristian Clemens",
+      "uscfId": "13901075",
+      "matchType": "exact",
+      "uscfName": "Kristian Clemens",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Coghlan, Tomas",
+      "displayName": "Tomas Coghlan",
+      "uscfId": "30648379",
+      "matchType": "exact",
+      "uscfName": "Tomas Coghlan",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Conklin, Jack",
+      "displayName": "Jack Conklin",
+      "uscfId": "30041045",
+      "matchType": "exact",
+      "uscfName": "Jack Conklin",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Cooper, Lee",
+      "displayName": "Lee Cooper",
+      "uscfId": "14563710",
+      "matchType": "exact",
+      "uscfName": "Lee Cooper",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Coyne, Theodore James",
+      "displayName": "Theodore James Coyne",
+      "uscfId": "13848228",
+      "matchType": "exact",
+      "uscfName": "Theodore James Coyne",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Cremisi, Daniel",
+      "displayName": "Daniel Cremisi",
+      "uscfId": "14543654",
+      "matchType": "exact",
+      "uscfName": "Daniel Cremisi",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Crompton, Robert",
+      "displayName": "Robert Crompton",
+      "uscfId": "31442886",
+      "matchType": "exact",
+      "uscfName": "Robert Crompton",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "D'Mello, Sanjay",
+      "displayName": "Sanjay D'Mello",
+      "uscfId": "31767090",
+      "matchType": "exact",
+      "uscfName": "Sanjay D'Mello",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Daily, Brian",
+      "displayName": "Brian Daily",
+      "uscfId": "15231780",
+      "matchType": "exact",
+      "uscfName": "BRIAN DAILY",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dale, Cameron",
+      "displayName": "Cameron Dale",
+      "uscfId": "31220049",
+      "matchType": "exact",
+      "uscfName": "Cameron Ryan Dale",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dancig Perlman, Yali",
+      "displayName": "Yali Dancig Perlman",
+      "uscfId": "16280288",
+      "matchType": "exact",
+      "uscfName": "YALI DANCIG PERLMAN",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Danganan, Sean",
+      "displayName": "Sean Danganan",
+      "uscfId": "32500049",
+      "matchType": "exact",
+      "uscfName": "Sean Danganan",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Das, Rohan",
+      "displayName": "Rohan Das",
+      "uscfId": "15263634",
+      "matchType": "exact",
+      "uscfName": "Rohan Das",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dash, Rohan",
+      "displayName": "Rohan Dash",
+      "uscfId": "30688281",
+      "matchType": "exact",
+      "uscfName": "Rohan Dash",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Dash, Satyakam",
+      "displayName": "Satyakam Dash",
+      "uscfId": "31420034",
+      "matchType": "exact",
+      "uscfName": "Satyakam Dash",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Dasika, Archit",
+      "displayName": "Archit Dasika",
+      "uscfId": "14903402",
+      "matchType": "exact",
+      "uscfName": "Archit Dasika",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Davis, Rick",
+      "displayName": "Rick Davis",
+      "uscfId": "31466027",
+      "matchType": "exact",
+      "uscfName": "Rick Davis",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dees, Calvin",
+      "displayName": "Calvin Dees",
+      "uscfId": "30307126",
+      "matchType": "exact",
+      "uscfName": "Calvin Dees",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Dees, Calvin Django",
+      "displayName": "Calvin Django Dees",
+      "uscfId": "30307126",
+      "matchType": "opponent-xref",
+      "uscfName": "Calvin Dees",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Delateur, Nicholas",
+      "displayName": "Nicholas Delateur",
+      "uscfId": "12751841",
+      "matchType": "first-name-only",
+      "uscfName": "Nicholas Andrew Delateur",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Delateur, Nicholas Andrew",
+      "displayName": "Nicholas Andrew Delateur",
+      "uscfId": "12751841",
+      "matchType": "exact",
+      "uscfName": "Nicholas Andrew Delateur",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Diaz, Conrado",
+      "displayName": "Conrado Diaz",
+      "uscfId": "15624626",
+      "matchType": "exact",
+      "uscfName": "CONRADO DIAZ",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Diller, Brad",
+      "displayName": "Brad Diller",
+      "uscfId": "10079993",
+      "matchType": "opponent-xref",
+      "uscfName": "BRADLEY R DILLER",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Diller, Bradley R",
+      "displayName": "Bradley R Diller",
+      "uscfId": "10079993",
+      "matchType": "exact",
+      "uscfName": "BRADLEY R DILLER",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Dillon, William B",
+      "displayName": "William B Dillon",
+      "uscfId": "30609383",
+      "matchType": "exact",
+      "uscfName": "William B Dillon",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dilworth, Lacey",
+      "displayName": "Lacey Dilworth",
+      "uscfId": "30731457",
+      "matchType": "exact",
+      "uscfName": "Lacey Dilworth",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dixon, Rashad",
+      "displayName": "Rashad Dixon",
+      "uscfId": "31194287",
+      "matchType": "exact",
+      "uscfName": "Rashad Dixon",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dolan, Kevin",
+      "displayName": "Kevin Dolan",
+      "uscfId": "31210853",
+      "matchType": "exact",
+      "uscfName": "Kevin Dolan",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Driss, Qassoud",
+      "displayName": "Qassoud Driss",
+      "uscfId": "32834359",
+      "matchType": "exact",
+      "uscfName": "Qassoud Driss",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Dunlap, Steven Alan",
+      "displayName": "Steven Alan Dunlap",
+      "uscfId": "14905812",
+      "matchType": "exact",
+      "uscfName": "STEVEN Alan DUNLAP",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Dutter, Frederic",
+      "displayName": "Frederic Dutter",
+      "uscfId": "12343420",
+      "matchType": "exact",
+      "uscfName": "FREDERIC Dutter",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Dzhanhirov, Dmytro",
+      "displayName": "Dmytro Dzhanhirov",
+      "uscfId": "32073210",
+      "matchType": "exact",
+      "uscfName": "Dmytro Dzhanhirov",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ell, Adeline Christiana",
+      "displayName": "Adeline Christiana Ell",
+      "uscfId": "30780710",
+      "matchType": "exact",
+      "uscfName": "Adeline Christiana Ell",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ellement, Jason",
+      "displayName": "Jason Ellement",
+      "uscfId": "30811668",
+      "matchType": "exact",
+      "uscfName": "Jason Ellement",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Elmendorf, Robert",
+      "displayName": "Robert Elmendorf",
+      "uscfId": "32553826",
+      "matchType": "exact",
+      "uscfName": "Robert Elmendorf",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Elster, Benjamin",
+      "displayName": "Benjamin Elster",
+      "uscfId": "32471329",
+      "matchType": "exact",
+      "uscfName": "Benjamin Elster",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Fan, Jimmy Qinmo",
+      "displayName": "Jimmy Qinmo Fan",
+      "uscfId": "17303750",
+      "matchType": "exact",
+      "uscfName": "Jimmy Qinmo Fan",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Fan, Shanhuan",
+      "displayName": "Shanhuan Fan",
+      "uscfId": "30777426",
+      "matchType": "exact",
+      "uscfName": "Shanhuan Fan",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Fan, Timmy Qinnuo",
+      "displayName": "Timmy Qinnuo Fan",
+      "uscfId": "30247337",
+      "matchType": "exact",
+      "uscfName": "Timmy Qinnuo Fan",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Fees, Holden",
+      "displayName": "Holden Fees",
+      "uscfId": "30663319",
+      "matchType": "exact",
+      "uscfName": "Holden Fees",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Ferguson, Forest",
+      "displayName": "Forest Ferguson",
+      "uscfId": "31203339",
+      "matchType": "exact",
+      "uscfName": "Forest Ferguson",
+      "source": {
+        "eventId": "202310171652",
+        "eventName": "2023 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Fernandes, Joshua",
+      "displayName": "Joshua Fernandes",
+      "uscfId": "31857676",
+      "matchType": "exact",
+      "uscfName": "Joshua Nitin Fernandes",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Fernandes, Joshua Nitin",
+      "displayName": "Joshua Nitin Fernandes",
+      "uscfId": "31857676",
+      "matchType": "exact",
+      "uscfName": "Joshua Nitin Fernandes",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Figueroa, Jeremy Alejandro",
+      "displayName": "Jeremy Alejandro Figueroa",
+      "uscfId": "31361388",
+      "matchType": "exact",
+      "uscfName": "Jeremy Alejandro Figueroa",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Finacom, Richard V",
+      "displayName": "Richard V Finacom",
+      "uscfId": "11452728",
+      "matchType": "exact",
+      "uscfName": "RICHARD V FINACOM",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Fisher, Brett",
+      "displayName": "Brett Fisher",
+      "uscfId": "31540384",
+      "matchType": "exact",
+      "uscfName": "Brett Fisher",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Fitzgerald, William",
+      "displayName": "William Fitzgerald",
+      "uscfId": "17048414",
+      "matchType": "exact",
+      "uscfName": "William Fitzgerald",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Gaffagan, Steven",
+      "displayName": "Steven Gaffagan",
+      "uscfId": "12542809",
+      "matchType": "exact",
+      "uscfName": "Steven Gaffagan",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Galvez, Carlos",
+      "displayName": "Carlos Galvez",
+      "uscfId": "30263086",
+      "matchType": "exact",
+      "uscfName": "Carlos Galvez",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Galvin, Connor",
+      "displayName": "Connor Galvin",
+      "uscfId": "15883572",
+      "matchType": "exact",
+      "uscfName": "CONNOR GALVIN",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Garcia, Eugenio Vargas",
+      "displayName": "Eugenio Vargas Garcia",
+      "uscfId": "14637025",
+      "matchType": "exact",
+      "uscfName": "EUGENIO VARGAS GARCIA",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gay, John",
+      "displayName": "John Gay",
+      "uscfId": "31090591",
+      "matchType": "exact",
+      "uscfName": "John Brodie Gay",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gay, John Brodie",
+      "displayName": "John Brodie Gay",
+      "uscfId": "31090591",
+      "matchType": "exact",
+      "uscfName": "John Brodie Gay",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gnana Hari Sekar, Easwar",
+      "displayName": "Easwar Gnana Hari Sekar",
+      "uscfId": "16418483",
+      "matchType": "exact",
+      "uscfName": "Easwar Gnana Hari Sekar",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Golas, Jacob",
+      "displayName": "Jacob Golas",
+      "uscfId": "32790532",
+      "matchType": "exact",
+      "uscfName": "Jacob Golas",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Golwalkar, Shardul S",
+      "displayName": "Shardul S Golwalkar",
+      "uscfId": "12797243",
+      "matchType": "exact",
+      "uscfName": "SHARDUL S GOLWALKAR",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gray, William",
+      "displayName": "William Gray",
+      "uscfId": "13217831",
+      "matchType": "exact",
+      "uscfName": "WILLIAM GRAY",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gu, Chunhui",
+      "displayName": "Chunhui Gu",
+      "uscfId": "30213918",
+      "matchType": "exact",
+      "uscfName": "Chunhui Gu",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gu, Thomas",
+      "displayName": "Thomas Gu",
+      "uscfId": "17005685",
+      "matchType": "exact",
+      "uscfName": "Thomas Gu",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Gurkirat, Singh",
+      "displayName": "Singh Gurkirat",
+      "uscfId": "32509376",
+      "matchType": "opponent-xref",
+      "uscfName": "Gurkirat Singh",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Hack, Richard",
+      "displayName": "Richard Hack",
+      "uscfId": "12796129",
+      "matchType": "exact",
+      "uscfName": "Richard Hack",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Halle, Zachary",
+      "displayName": "Zachary Halle",
+      "uscfId": "31331691",
+      "matchType": "exact",
+      "uscfName": "Zachary Halle",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Handigol, Abhishek",
+      "displayName": "Abhishek Handigol",
+      "uscfId": "14124611",
+      "matchType": "exact",
+      "uscfName": "ABHISHEK HANDIGOL",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Hao, Max",
+      "displayName": "Max Hao",
+      "uscfId": "16083648",
+      "matchType": "exact",
+      "uscfName": "Max Hao",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Harris, Clarence",
+      "displayName": "Clarence Harris",
+      "uscfId": "12543396",
+      "matchType": "exact",
+      "uscfName": "CLARENCE HARRIS",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Hasteer, Divija",
+      "displayName": "Divija Hasteer",
+      "uscfId": "13975247",
+      "matchType": "exact",
+      "uscfName": "DIVIJA HASTEER",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Hau, Imelda Meili",
+      "displayName": "Imelda Meili Hau",
+      "uscfId": "32196802",
+      "matchType": "exact",
+      "uscfName": "Imelda Meili Hau",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Hearn, Kagen Lane",
+      "displayName": "Kagen Lane Hearn",
+      "uscfId": "17074563",
+      "matchType": "opponent-xref",
+      "uscfName": "KAGEN HEARN",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Heimann, Mark",
+      "displayName": "Mark Heimann",
+      "uscfId": "12802899",
+      "matchType": "exact",
+      "uscfName": "Mark Heimann",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Heiserman, Jimmy",
+      "displayName": "Jimmy Heiserman",
+      "uscfId": "12799690",
+      "matchType": "exact",
+      "uscfName": "JIMMY HEISERMAN",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Hernandez, Jose",
+      "displayName": "Jose Hernandez",
+      "uscfId": "30320164",
+      "matchType": "exact",
+      "uscfName": "Jose Hernandez",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Hilliard, Michael R",
+      "displayName": "Michael R Hilliard",
+      "uscfId": "12279170",
+      "matchType": "exact",
+      "uscfName": "Michael R Hilliard",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Hollon, Nick",
+      "displayName": "Nick Hollon",
+      "uscfId": "30477149",
+      "matchType": "exact",
+      "uscfName": "Nick Hollon",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Horde, Nicolas T",
+      "displayName": "Nicolas T Horde",
+      "uscfId": "30573134",
+      "matchType": "exact",
+      "uscfName": "Nicolas T Horde",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Horgan, Michael",
+      "displayName": "Michael Horgan",
+      "uscfId": "14210651",
+      "matchType": "exact",
+      "uscfName": "MICHAEL HORGAN",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Horowitz, Phineas F",
+      "displayName": "Phineas F Horowitz",
+      "uscfId": "14209057",
+      "matchType": "exact",
+      "uscfName": "Phineas F Horowitz",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Hossain, Shaikat",
+      "displayName": "Shaikat Hossain",
+      "uscfId": "17207363",
+      "matchType": "exact",
+      "uscfName": "SHAIKAT HOSSAIN",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Howe, Alan",
+      "displayName": "Alan Howe",
+      "uscfId": "12442421",
+      "matchType": "exact",
+      "uscfName": "ALAN HOWE",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Huang, Immanuel",
+      "displayName": "Immanuel Huang",
+      "uscfId": "31924932",
+      "matchType": "exact",
+      "uscfName": "Immanuel Huang",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Hule, Pratyush",
+      "displayName": "Pratyush Hule",
+      "uscfId": "16317000",
+      "matchType": "exact",
+      "uscfName": "Pratyush Hule",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Imbens, Andrew",
+      "displayName": "Andrew Imbens",
+      "uscfId": "30102682",
+      "matchType": "exact",
+      "uscfName": "Andrew Imbens",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Indukuri, Suhas Varma",
+      "displayName": "Suhas Varma Indukuri",
+      "uscfId": "16887781",
+      "matchType": "exact",
+      "uscfName": "Suhas Varma Indukuri",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ivanenko, Anthony",
+      "displayName": "Anthony Ivanenko",
+      "uscfId": "30902660",
+      "matchType": "exact",
+      "uscfName": "Anthony Vladimir Ivanenko",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ivanenko, Anthony Vladimir",
+      "displayName": "Anthony Vladimir Ivanenko",
+      "uscfId": "30902660",
+      "matchType": "exact",
+      "uscfName": "Anthony Vladimir Ivanenko",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ivanenko, Tony",
+      "displayName": "Tony Ivanenko",
+      "uscfId": "30902660",
+      "matchType": "opponent-xref",
+      "uscfName": "Anthony Vladimir Ivanenko",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "James, Charles",
+      "displayName": "Charles James",
+      "uscfId": "12448028",
+      "matchType": "exact",
+      "uscfName": "CHARLES JAMES",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Jenkins, Gregori",
+      "displayName": "Gregori Jenkins",
+      "uscfId": "32275769",
+      "matchType": "exact",
+      "uscfName": "Gregori Lorenzo Jenkins",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Jenkins, Gregori Lorenzo",
+      "displayName": "Gregori Lorenzo Jenkins",
+      "uscfId": "32275769",
+      "matchType": "exact",
+      "uscfName": "Gregori Lorenzo Jenkins",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Jiam, Max",
+      "displayName": "Max Jiam",
+      "uscfId": "31363005",
+      "matchType": "exact",
+      "uscfName": "Max Jiam",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Jian, Sheng",
+      "displayName": "Sheng Jian",
+      "uscfId": "31211361",
+      "matchType": "exact",
+      "uscfName": "Sheng Jian",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Jones, Clarence",
+      "displayName": "Clarence Jones",
+      "uscfId": "14950296",
+      "matchType": "exact",
+      "uscfName": "CLARENCE JONES",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Jones, James E",
+      "displayName": "James E Jones",
+      "uscfId": "10168350",
+      "matchType": "opponent-xref",
+      "uscfName": "JAMES E. JONES",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Kalonaris, Zeno",
+      "displayName": "Zeno Kalonaris",
+      "uscfId": "16307134",
+      "matchType": "exact",
+      "uscfName": "Zeno Kalonaris",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Kanaparthi, Pardhu Sai",
+      "displayName": "Pardhu Sai Kanaparthi",
+      "uscfId": "30250581",
+      "matchType": "exact",
+      "uscfName": "Pardhu Sai Kanaparthi",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Kaplan, Glenn",
+      "displayName": "Glenn Kaplan",
+      "uscfId": "12680193",
+      "matchType": "exact",
+      "uscfName": "Glenn Kaplan",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Karpe, Ummon",
+      "displayName": "Ummon Karpe",
+      "uscfId": "12932259",
+      "matchType": "exact",
+      "uscfName": "UMMON KARPE",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Karthi, Jashith",
+      "displayName": "Jashith Karthi",
+      "uscfId": "30016333",
+      "matchType": "exact",
+      "uscfName": "Jashith Karthi",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Karwat, Joseph",
+      "displayName": "Joseph Karwat",
+      "uscfId": "16761266",
+      "matchType": "exact",
+      "uscfName": "JOSEPH KARWAT",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Khodaverdian, Alex",
+      "displayName": "Alex Khodaverdian",
+      "uscfId": "30644099",
+      "matchType": "exact",
+      "uscfName": "ALEX KHODAVERDIAN",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Khristoforov, Sergey",
+      "displayName": "Sergey Khristoforov",
+      "uscfId": "14509354",
+      "matchType": "exact",
+      "uscfName": "SERGEY KHRISTOFOROV",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Kingma, Karl Stuart",
+      "displayName": "Karl Stuart Kingma",
+      "uscfId": "12782822",
+      "matchType": "exact",
+      "uscfName": "KARL STUART KINGMA",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Klahn, Matthew S",
+      "displayName": "Matthew S Klahn",
+      "uscfId": "12627779",
+      "matchType": "exact",
+      "uscfName": "MATTHEW S KLAHN",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Kojevnikov, Alexander",
+      "displayName": "Alexander Kojevnikov",
+      "uscfId": "31856555",
+      "matchType": "exact",
+      "uscfName": "Alexander Kojevnikov",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Krayushkin, Igor",
+      "displayName": "Igor Krayushkin",
+      "uscfId": "12902786",
+      "matchType": "exact",
+      "uscfName": "Igor Krayushkin",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Krezanoski, Paul",
+      "displayName": "Paul Krezanoski",
+      "uscfId": "16897133",
+      "matchType": "exact",
+      "uscfName": "PAUL KREZANOSKI",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Krishnan, Sreyshthaa",
+      "displayName": "Sreyshthaa Krishnan",
+      "uscfId": "30452740",
+      "matchType": "exact",
+      "uscfName": "Sreyshthaa Krishnan",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Krishnan, Varun",
+      "displayName": "Varun Krishnan",
+      "uscfId": "12908029",
+      "matchType": "exact",
+      "uscfName": "Varun Krishnan",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Kulkarni, Neil",
+      "displayName": "Neil Kulkarni",
+      "uscfId": "16246077",
+      "matchType": "exact",
+      "uscfName": "NEIL KULKARNI",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Kumar, Jay Dave",
+      "displayName": "Jay Dave Kumar",
+      "uscfId": "13041993",
+      "matchType": "opponent-xref",
+      "uscfName": "JAY KUMAR",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Kwong, Dylan",
+      "displayName": "Dylan Kwong",
+      "uscfId": "16406714",
+      "matchType": "exact",
+      "uscfName": "Dylan Kwong",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Lamouroux, Lucas",
+      "displayName": "Lucas Lamouroux",
+      "uscfId": "31209571",
+      "matchType": "exact",
+      "uscfName": "Lucas Lamouroux",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lamstein, Joshua",
+      "displayName": "Joshua Lamstein",
+      "uscfId": "15487526",
+      "matchType": "exact",
+      "uscfName": "Joshua Lamstein",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Land, Sean",
+      "displayName": "Sean Land",
+      "uscfId": "16441206",
+      "matchType": "exact",
+      "uscfName": "SEAN LAND",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Langendorf, Brian Keith",
+      "displayName": "Brian Keith Langendorf",
+      "uscfId": "30893468",
+      "matchType": "exact",
+      "uscfName": "Brian Keith Langendorf",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Langrog, Alex",
+      "displayName": "Alex Langrog",
+      "uscfId": "12636476",
+      "matchType": "exact",
+      "uscfName": "ALEX LANGROG",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Latourette, Nicholas James",
+      "displayName": "Nicholas James Latourette",
+      "uscfId": "12779071",
+      "matchType": "exact",
+      "uscfName": "NICHOLAS JAMES LATOURETTE",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Lau, Aiden",
+      "displayName": "Aiden Lau",
+      "uscfId": "31035073",
+      "matchType": "exact",
+      "uscfName": "Aiden Lau",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lavi, Eilon",
+      "displayName": "Eilon Lavi",
+      "uscfId": "16731183",
+      "matchType": "exact",
+      "uscfName": "EILON LAVI",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Lazarus, Isaac",
+      "displayName": "Isaac Lazarus",
+      "uscfId": "30911201",
+      "matchType": "exact",
+      "uscfName": "Isaac Lazarus",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Le, Thu Anh",
+      "displayName": "Thu Anh Le",
+      "uscfId": "17248797",
+      "matchType": "exact",
+      "uscfName": "Thu Anh Le",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Lee, Andy C",
+      "displayName": "Andy C Lee",
+      "uscfId": "12559999",
+      "matchType": "exact",
+      "uscfName": "Andy C Lee",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Lee, Yinpok R",
+      "displayName": "Yinpok R Lee",
+      "uscfId": "32231030",
+      "matchType": "exact",
+      "uscfName": "Yinpok R Lee",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lesniewski, Lucas",
+      "displayName": "Lucas Lesniewski",
+      "uscfId": "17039584",
+      "matchType": "exact",
+      "uscfName": "Lucas Lesniewski",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Lessler, Peter",
+      "displayName": "Peter Lessler",
+      "uscfId": "13010758",
+      "matchType": "exact",
+      "uscfName": "Peter Lessler",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Levin, Adam",
+      "displayName": "Adam Levin",
+      "uscfId": "12761435",
+      "matchType": "exact",
+      "uscfName": "ADAM LEVIN",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lewis, Ed",
+      "displayName": "Ed Lewis",
+      "uscfId": "12601629",
+      "matchType": "opponent-xref",
+      "uscfName": "EDWARD LEWIS",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lewis, Edward",
+      "displayName": "Edward Lewis",
+      "uscfId": "12601629",
+      "matchType": "exact",
+      "uscfName": "EDWARD LEWIS",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Lilles, Alex",
+      "displayName": "Alex Lilles",
+      "uscfId": "12453049",
+      "matchType": "exact",
+      "uscfName": "ALEX PIERRE LILLES",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Lim, Ryan",
+      "displayName": "Ryan Lim",
+      "uscfId": "31236388",
+      "matchType": "exact",
+      "uscfName": "Ryan Lim",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lin, Michael",
+      "displayName": "Michael Lin",
+      "uscfId": "13732397",
+      "matchType": "exact",
+      "uscfName": "Michael Lin",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Liou, Arthur",
+      "displayName": "Arthur Liou",
+      "uscfId": "12906142",
+      "matchType": "exact",
+      "uscfName": "ARTHUR LIOU",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Little, John",
+      "displayName": "John Little",
+      "uscfId": "31626985",
+      "matchType": "exact",
+      "uscfName": "John Little",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Liu, Eric",
+      "displayName": "Eric Liu",
+      "uscfId": "12929670",
+      "matchType": "exact",
+      "uscfName": "ERIC LIU",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Liu, Felix",
+      "displayName": "Felix Liu",
+      "uscfId": "14709715",
+      "matchType": "exact",
+      "uscfName": "Felix Liu",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Liu, Jinfeng",
+      "displayName": "Jinfeng Liu",
+      "uscfId": "16244917",
+      "matchType": "exact",
+      "uscfName": "Jinfeng Liu",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Liu, Serena",
+      "displayName": "Serena Liu",
+      "uscfId": "16887121",
+      "matchType": "exact",
+      "uscfName": "Serena Liu",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Lopez-Oneal, Owen Michael",
+      "displayName": "Owen Michael Lopez-Oneal",
+      "uscfId": "31909069",
+      "matchType": "exact",
+      "uscfName": "Owen Michael Lopez-Oneal",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Lue, Victor",
+      "displayName": "Victor Lue",
+      "uscfId": "14058177",
+      "matchType": "exact",
+      "uscfName": "Victor Lue",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Mackley, Merlin Ethan",
+      "displayName": "Merlin Ethan Mackley",
+      "uscfId": "31277598",
+      "matchType": "exact",
+      "uscfName": "Merlin Ethan Mackley",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Macnee, Felix",
+      "displayName": "Felix Macnee",
+      "uscfId": "12570325",
+      "matchType": "exact",
+      "uscfName": "FELIX MACNEE",
+      "source": {
+        "eventId": "202310171652",
+        "eventName": "2023 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Maheshwari, Anubhav",
+      "displayName": "Anubhav Maheshwari",
+      "uscfId": "15362513",
+      "matchType": "exact",
+      "uscfName": "ANUBHAV MAHESHWARI",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Mahooti, James J",
+      "displayName": "James J Mahooti",
+      "uscfId": "12621393",
+      "matchType": "exact",
+      "uscfName": "James J Mahooti",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Mallela, Abhishek",
+      "displayName": "Abhishek Mallela",
+      "uscfId": "12888811",
+      "matchType": "exact",
+      "uscfName": "ABHISHEK MALLELA",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Marsh, Andrew",
+      "displayName": "Andrew Marsh",
+      "uscfId": "32324470",
+      "matchType": "exact",
+      "uscfName": "Andrew Marsh",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Martin, Bryan D",
+      "displayName": "Bryan D Martin",
+      "uscfId": "14691010",
+      "matchType": "exact",
+      "uscfName": "Bryan D Martin",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Marvin, Hayes",
+      "displayName": "Hayes Marvin",
+      "uscfId": "30636603",
+      "matchType": "exact",
+      "uscfName": "Hayes Alexander Marvin",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Marvin, Hayes Alexander",
+      "displayName": "Hayes Alexander Marvin",
+      "uscfId": "30636603",
+      "matchType": "exact",
+      "uscfName": "Hayes Alexander Marvin",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Mason, Scott",
+      "displayName": "Scott Mason",
+      "uscfId": "12456663",
+      "matchType": "exact",
+      "uscfName": "Scott Mason",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Massop, Daniel",
+      "displayName": "Daniel Massop",
+      "uscfId": "30328281",
+      "matchType": "exact",
+      "uscfName": "Daniel Massop",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Matar, Dominic",
+      "displayName": "Dominic Matar",
+      "uscfId": "16748251",
+      "matchType": "exact",
+      "uscfName": "DOMINIC MATAR",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Mays-Smith, Isaac S",
+      "displayName": "Isaac S Mays-Smith",
+      "uscfId": "30338290",
+      "matchType": "exact",
+      "uscfName": "Isaac S Mays-Smith",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "McClelland, Keagan",
+      "displayName": "Keagan McClelland",
+      "uscfId": "31944502",
+      "matchType": "exact",
+      "uscfName": "Keagan McClelland",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "McCollum, Patrick M",
+      "displayName": "Patrick M McCollum",
+      "uscfId": "11040519",
+      "matchType": "exact",
+      "uscfName": "Patrick M McCollum",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "McCutcheon, Bennett",
+      "displayName": "Bennett McCutcheon",
+      "uscfId": "30503085",
+      "matchType": "exact",
+      "uscfName": "Bennett McCutcheon",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Mehta, Soham",
+      "displayName": "Soham Mehta",
+      "uscfId": "30525452",
+      "matchType": "exact",
+      "uscfName": "Soham Mehta",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Melville, Cailen Jeremiah",
+      "displayName": "Cailen Jeremiah Melville",
+      "uscfId": "14006141",
+      "matchType": "exact",
+      "uscfName": "CAILEN JEREMIAH MELVILLE",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Menchtchikov, Alexander",
+      "displayName": "Alexander Menchtchikov",
+      "uscfId": "32554854",
+      "matchType": "exact",
+      "uscfName": "Alexander Menchtchikov",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Menchtchikov, Alexander Borisovich",
+      "displayName": "Alexander Borisovich Menchtchikov",
+      "uscfId": "32554854",
+      "matchType": "opponent-xref",
+      "uscfName": "Alexander Menchtchikov",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Mendes Da Costa, A.",
+      "displayName": "A. Mendes Da Costa",
+      "uscfId": "16672672",
+      "matchType": "opponent-xref",
+      "uscfName": "Alex Mendes da Costa",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Mendes Da Costa, Alex",
+      "displayName": "Alex Mendes Da Costa",
+      "uscfId": "16672672",
+      "matchType": "exact",
+      "uscfName": "Alex Mendes da Costa",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Mercado, Adam",
+      "displayName": "Adam Mercado",
+      "uscfId": "16571026",
+      "matchType": "exact",
+      "uscfName": "ADAM MERCADO",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Merk, Felix",
+      "displayName": "Felix Merk",
+      "uscfId": "16761910",
+      "matchType": "exact",
+      "uscfName": "Felix Elias Merk",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Merk, Felix Elias",
+      "displayName": "Felix Elias Merk",
+      "uscfId": "16761910",
+      "matchType": "exact",
+      "uscfName": "Felix Elias Merk",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Milliken, William",
+      "displayName": "William Milliken",
+      "uscfId": "11217109",
+      "matchType": "exact",
+      "uscfName": "WILLIAM MILLIKEN",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Moisselin, Simon",
+      "displayName": "Simon Moisselin",
+      "uscfId": "30713258",
+      "matchType": "exact",
+      "uscfName": "simon moisselin",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Molodyk, Mikhail Alexandrovich",
+      "displayName": "Mikhail Alexandrovich Molodyk",
+      "uscfId": "13573825",
+      "matchType": "exact",
+      "uscfName": "Mikhail Alexandrovich Molodyk",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Morello, Nicholas",
+      "displayName": "Nicholas Morello",
+      "uscfId": "31114079",
+      "matchType": "exact",
+      "uscfName": "Nicholas Morello",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Morris, Daniel",
+      "displayName": "Daniel Morris",
+      "uscfId": "30424176",
+      "matchType": "exact",
+      "uscfName": "Daniel Morris",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Moussapour, Dante",
+      "displayName": "Dante Moussapour",
+      "uscfId": "32484940",
+      "matchType": "exact",
+      "uscfName": "Dante Moussapour",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Mullins, Thomas N",
+      "displayName": "Thomas N Mullins",
+      "uscfId": "16720471",
+      "matchType": "exact",
+      "uscfName": "THOMAS N MULLINS",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Myers, Steven Lee",
+      "displayName": "Steven Lee Myers",
+      "uscfId": "30700928",
+      "matchType": "exact",
+      "uscfName": "Steven Lee Myers",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Mylsamy, Dhivya",
+      "displayName": "Dhivya Mylsamy",
+      "uscfId": "32226425",
+      "matchType": "exact",
+      "uscfName": "Dhivya Mylsamy",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Nathan, Nitish Sg",
+      "displayName": "Nitish Sg Nathan",
+      "uscfId": "15494283",
+      "matchType": "exact",
+      "uscfName": "Nitish SG Nathan",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Nehme, Romeo",
+      "displayName": "Romeo Nehme",
+      "uscfId": "16271243",
+      "matchType": "exact",
+      "uscfName": "ROMEO NEHME",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Nguyen, Binh Khac",
+      "displayName": "Binh Khac Nguyen",
+      "uscfId": "31695943",
+      "matchType": "exact",
+      "uscfName": "Binh Khac Nguyen",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Nguyen, Darian",
+      "displayName": "Darian Nguyen",
+      "uscfId": "14751121",
+      "matchType": "exact",
+      "uscfName": "Darian Nguyen",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Ni, April",
+      "displayName": "April Ni",
+      "uscfId": "30407426",
+      "matchType": "exact",
+      "uscfName": "April Ni",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ni, Leo",
+      "displayName": "Leo Ni",
+      "uscfId": "30407439",
+      "matchType": "exact",
+      "uscfName": "Leo Ni",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Ni, Tao",
+      "displayName": "Tao Ni",
+      "uscfId": "30260481",
+      "matchType": "exact",
+      "uscfName": "Tao Ni",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Ni, Zhanxi",
+      "displayName": "Zhanxi Ni",
+      "uscfId": "31173125",
+      "matchType": "exact",
+      "uscfName": "Zhanxi Ni",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Nolen, Sam",
+      "displayName": "Sam Nolen",
+      "uscfId": "30409370",
+      "matchType": "exact",
+      "uscfName": "Sam Nolen",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Nystrom Burke, Oli",
+      "displayName": "Oli Nystrom Burke",
+      "uscfId": "31407524",
+      "matchType": "opponent-xref",
+      "uscfName": "oliver peter Nystrom Burke",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Nystrom Burke, Oliver Peter",
+      "displayName": "Oliver Peter Nystrom Burke",
+      "uscfId": "31407524",
+      "matchType": "exact",
+      "uscfName": "oliver peter Nystrom Burke",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "O'Keefe, Stephen M",
+      "displayName": "Stephen M O'Keefe",
+      "uscfId": "12902524",
+      "matchType": "exact",
+      "uscfName": "Stephen M O'Keefe",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Ochoa, Jason B",
+      "displayName": "Jason B Ochoa",
+      "uscfId": "12440572",
+      "matchType": "exact",
+      "uscfName": "JASON B OCHOA",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Olson, David R",
+      "displayName": "David R Olson",
+      "uscfId": "13913131",
+      "matchType": "exact",
+      "uscfName": "DAVID R OLSON",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Otterbach, Renate",
+      "displayName": "Renate Otterbach",
+      "uscfId": "14565208",
+      "matchType": "exact",
+      "uscfName": "Renate Otterbach",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Pagan Griso, Simone",
+      "displayName": "Simone Pagan Griso",
+      "uscfId": "17322263",
+      "matchType": "exact",
+      "uscfName": "Simone Pagan Griso",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Paragiri, Reyansh",
+      "displayName": "Reyansh Paragiri",
+      "uscfId": "30233070",
+      "matchType": "exact",
+      "uscfName": "Reyansh Paragiri",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Parcells, Nathan",
+      "displayName": "Nathan Parcells",
+      "uscfId": "32691743",
+      "matchType": "exact",
+      "uscfName": "Nathan Parcells",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Parsons, Stephen",
+      "displayName": "Stephen Parsons",
+      "uscfId": "16566932",
+      "matchType": "exact",
+      "uscfName": "Stephen Parsons",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Patel, Milan",
+      "displayName": "Milan Patel",
+      "uscfId": "30830536",
+      "matchType": "exact",
+      "uscfName": "Milan Patel",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Patel, Shivam",
+      "displayName": "Shivam Patel",
+      "uscfId": "32448767",
+      "matchType": "exact",
+      "uscfName": "Shivam Patel",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Penagalapati, Anvitha",
+      "displayName": "Anvitha Penagalapati",
+      "uscfId": "16315087",
+      "matchType": "exact",
+      "uscfName": "Anvitha Penagalapati",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Perkins, Joel K",
+      "displayName": "Joel K Perkins",
+      "uscfId": "30358424",
+      "matchType": "exact",
+      "uscfName": "Joel K Perkins",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Perlov, Daniel Robert",
+      "displayName": "Daniel Robert Perlov",
+      "uscfId": "16465203",
+      "matchType": "exact",
+      "uscfName": "Daniel Robert Perlov",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Peterson, Jared E",
+      "displayName": "Jared E Peterson",
+      "uscfId": "10487871",
+      "matchType": "exact",
+      "uscfName": "JARED E PETERSON",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Pham, Nguyen Hoang Duy",
+      "displayName": "Nguyen Hoang Duy Pham",
+      "uscfId": "30742570",
+      "matchType": "exact",
+      "uscfName": "Nguyen Hoang Duy Pham",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Phillips, Michael Edward",
+      "displayName": "Michael Edward Phillips",
+      "uscfId": "15932421",
+      "matchType": "exact",
+      "uscfName": "MICHAEL EDWARD Phillips",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Pickering, Carl",
+      "displayName": "Carl Pickering",
+      "uscfId": "30689170",
+      "matchType": "exact",
+      "uscfName": "Carl Anthony Pickering",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Pickering, Carl Anthony",
+      "displayName": "Carl Anthony Pickering",
+      "uscfId": "30689170",
+      "matchType": "exact",
+      "uscfName": "Carl Anthony Pickering",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Pirone, John",
+      "displayName": "John Pirone",
+      "uscfId": "30758788",
+      "matchType": "exact",
+      "uscfName": "John Pirone",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Ploquin, Phil",
+      "displayName": "Phil Ploquin",
+      "uscfId": "12535882",
+      "matchType": "exact",
+      "uscfName": "PHIL PLOQUIN",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Ponnaluri, Naga Abhiram",
+      "displayName": "Naga Abhiram Ponnaluri",
+      "uscfId": "17010328",
+      "matchType": "exact",
+      "uscfName": "Naga Abhiram Ponnaluri",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Powers, Christopher",
+      "displayName": "Christopher Powers",
+      "uscfId": "30462548",
+      "matchType": "exact",
+      "uscfName": "Christopher Powers",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Prasad, Thejas",
+      "displayName": "Thejas Prasad",
+      "uscfId": "12890181",
+      "matchType": "exact",
+      "uscfName": "THEJAS PRASAD",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Priyadarshi, Rohan",
+      "displayName": "Rohan Priyadarshi",
+      "uscfId": "16760860",
+      "matchType": "exact",
+      "uscfName": "Rohan Priyadarshi",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Qi, Jenny",
+      "displayName": "Jenny Qi",
+      "uscfId": "17050786",
+      "matchType": "exact",
+      "uscfName": "Jenny Qi",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Qiu, Laurie",
+      "displayName": "Laurie Qiu",
+      "uscfId": "30582856",
+      "matchType": "exact",
+      "uscfName": "Laurie Qiu",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Quinn, Dahlia",
+      "displayName": "Dahlia Quinn",
+      "uscfId": "30654447",
+      "matchType": "exact",
+      "uscfName": "Dahlia Quinn",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Raahemifar, Keyan",
+      "displayName": "Keyan Raahemifar",
+      "uscfId": "30931036",
+      "matchType": "exact",
+      "uscfName": "Keyan Raahemifar",
+      "source": {
+        "eventId": "202310171652",
+        "eventName": "2023 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Rachuri, Sujan K",
+      "displayName": "Sujan K Rachuri",
+      "uscfId": "14917052",
+      "matchType": "exact",
+      "uscfName": "Sujan K Rachuri",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Rajaram, Raghu",
+      "displayName": "Raghu Rajaram",
+      "uscfId": "12698822",
+      "matchType": "exact",
+      "uscfName": "RAGHU RAJARAM",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Ramirez, Nazaret",
+      "displayName": "Nazaret Ramirez",
+      "uscfId": "32866278",
+      "matchType": "exact",
+      "uscfName": "Nazaret Ramirez",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Ramos, Joel Thomas",
+      "displayName": "Joel Thomas Ramos",
+      "uscfId": "30551530",
+      "matchType": "exact",
+      "uscfName": "Joel Thomas Ramos",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Rao, Neeraj",
+      "displayName": "Neeraj Rao",
+      "uscfId": "30789296",
+      "matchType": "exact",
+      "uscfName": "Neeraj Rao",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Reed, Paul Henry",
+      "displayName": "Paul Henry Reed",
+      "uscfId": "13373197",
+      "matchType": "exact",
+      "uscfName": "Paul Henry Reed",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Rex, Tobiah",
+      "displayName": "Tobiah Rex",
+      "uscfId": "30164211",
+      "matchType": "opponent-xref",
+      "uscfName": "Tobiah Bickley",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Rhodes, Christopher D",
+      "displayName": "Christopher D Rhodes",
+      "uscfId": "32132687",
+      "matchType": "exact",
+      "uscfName": "Christopher D Rhodes",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Riese, Kayven",
+      "displayName": "Kayven Riese",
+      "uscfId": "12572270",
+      "matchType": "exact",
+      "uscfName": "KAYVEN RIESE",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Rigel, Marlon",
+      "displayName": "Marlon Rigel",
+      "uscfId": "30206555",
+      "matchType": "exact",
+      "uscfName": "Marlon Rigel",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Robins, Alexander",
+      "displayName": "Alexander Robins",
+      "uscfId": "31932004",
+      "matchType": "exact",
+      "uscfName": "Alexander Robins",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Ross, Max L",
+      "displayName": "Max L Ross",
+      "uscfId": "16425248",
+      "matchType": "exact",
+      "uscfName": "Max L Ross",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Rosston, Andrew Burkett",
+      "displayName": "Andrew Burkett Rosston",
+      "uscfId": "32504699",
+      "matchType": "exact",
+      "uscfName": "Andrew Burkett Rosston",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Rothman, Ivan",
+      "displayName": "Ivan Rothman",
+      "uscfId": "12900634",
+      "matchType": "exact",
+      "uscfName": "IVAN ROTHMAN",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Rushton, Peter James",
+      "displayName": "Peter James Rushton",
+      "uscfId": "16453812",
+      "matchType": "exact",
+      "uscfName": "Peter James Rushton",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Samia, Alyssa",
+      "displayName": "Alyssa Samia",
+      "uscfId": "31735394",
+      "matchType": "exact",
+      "uscfName": "Alyssa Samia",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sangani, Nikhil",
+      "displayName": "Nikhil Sangani",
+      "uscfId": "31350033",
+      "matchType": "exact",
+      "uscfName": "Nikhil Sangani",
+      "source": {
+        "eventId": "202406180702",
+        "eventName": "2024 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sanguinetti, George A",
+      "displayName": "George A Sanguinetti",
+      "uscfId": "10478103",
+      "matchType": "exact",
+      "uscfName": "GEORGE A SANGUINETTI",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sankar, Arjun",
+      "displayName": "Arjun Sankar",
+      "uscfId": "14542170",
+      "matchType": "exact",
+      "uscfName": "ARJUN SANKAR",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Sankar, Arvind",
+      "displayName": "Arvind Sankar",
+      "uscfId": "13890891",
+      "matchType": "exact",
+      "uscfName": "ARVIND SANKAR",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sankar, Swaminathan",
+      "displayName": "Swaminathan Sankar",
+      "uscfId": "14080777",
+      "matchType": "exact",
+      "uscfName": "SWAMINATHAN SANKAR",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sansoni, Nathan",
+      "displayName": "Nathan Sansoni",
+      "uscfId": "16912921",
+      "matchType": "exact",
+      "uscfName": "NATHAN SANSONI",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Sant, Amit",
+      "displayName": "Amit Sant",
+      "uscfId": "13820145",
+      "matchType": "exact",
+      "uscfName": "AMIT SANT",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Santiago, Hugo",
+      "displayName": "Hugo Santiago",
+      "uscfId": "14842497",
+      "matchType": "exact",
+      "uscfName": "Hugo Osmar Santiago",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Santiago, Hugo Osmar",
+      "displayName": "Hugo Osmar Santiago",
+      "uscfId": "14842497",
+      "matchType": "exact",
+      "uscfName": "Hugo Osmar Santiago",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Santos, Catalino",
+      "displayName": "Catalino Santos",
+      "uscfId": "13585436",
+      "matchType": "exact",
+      "uscfName": "CATALINO SANTOS",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Sarmasi, Aron",
+      "displayName": "Aron Sarmasi",
+      "uscfId": "32263284",
+      "matchType": "exact",
+      "uscfName": "Aron Sarmasi",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Saucedo, Tristan",
+      "displayName": "Tristan Saucedo",
+      "uscfId": "30981868",
+      "matchType": "exact",
+      "uscfName": "Tristan Saucedo",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Sawhney, Yuvraj Singh",
+      "displayName": "Yuvraj Singh Sawhney",
+      "uscfId": "17095004",
+      "matchType": "exact",
+      "uscfName": "Yuvraj Singh Sawhney",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Schaezlein, Charlie",
+      "displayName": "Charlie Schaezlein",
+      "uscfId": "31629140",
+      "matchType": "exact",
+      "uscfName": "Charlie Schaezlein",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Schmidt, Otto Albert",
+      "displayName": "Otto Albert Schmidt",
+      "uscfId": "15329175",
+      "matchType": "exact",
+      "uscfName": "OTTO Albert SCHMIDT",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Schuster, Zack",
+      "displayName": "Zack Schuster",
+      "uscfId": "30179651",
+      "matchType": "exact",
+      "uscfName": "Zack Schuster",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Seidel, David",
+      "displayName": "David Seidel",
+      "uscfId": "12654689",
+      "matchType": "exact",
+      "uscfName": "David Seidel",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Senthilkumar, Pranav",
+      "displayName": "Pranav Senthilkumar",
+      "uscfId": "14020007",
+      "matchType": "exact",
+      "uscfName": "Pranav Senthilkumar",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Serena, Liu",
+      "displayName": "Liu Serena",
+      "uscfId": "16887121",
+      "matchType": "opponent-xref",
+      "uscfName": "Serena Liu",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Seshadri, Sudarshan",
+      "displayName": "Sudarshan Seshadri",
+      "uscfId": "12906250",
+      "matchType": "exact",
+      "uscfName": "Sudarshan Seshadri",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Sevall, Dan",
+      "displayName": "Dan Sevall",
+      "uscfId": "12811060",
+      "matchType": "opponent-xref",
+      "uscfName": "DANIEL SEVALL",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sevall, Daniel",
+      "displayName": "Daniel Sevall",
+      "uscfId": "12811060",
+      "matchType": "exact",
+      "uscfName": "DANIEL SEVALL",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Sharan, Shubhankar",
+      "displayName": "Shubhankar Sharan",
+      "uscfId": "30358414",
+      "matchType": "exact",
+      "uscfName": "Shubhankar Sharan",
+      "source": {
+        "eventId": "202404169582",
+        "eventName": "2024 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sharma, Keshav",
+      "displayName": "Keshav Sharma",
+      "uscfId": "31083452",
+      "matchType": "exact",
+      "uscfName": "Keshav Sharma",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Shrauger, Alex Hayden",
+      "displayName": "Alex Hayden Shrauger",
+      "uscfId": "15328908",
+      "matchType": "exact",
+      "uscfName": "Alex Hayden Shrauger",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Siegel, David",
+      "displayName": "David Siegel",
+      "uscfId": "12595160",
+      "matchType": "exact",
+      "uscfName": "David Siegel",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Singer, Andrew",
+      "displayName": "Andrew Singer",
+      "uscfId": "30803745",
+      "matchType": "exact",
+      "uscfName": "Andrew Singer",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Singh, Gurkirat",
+      "displayName": "Gurkirat Singh",
+      "uscfId": "32509376",
+      "matchType": "exact",
+      "uscfName": "Gurkirat Singh",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Singhal, Sanat",
+      "displayName": "Sanat Singhal",
+      "uscfId": "15580756",
+      "matchType": "exact",
+      "uscfName": "SANAT SINGHAL",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Sisti, Daniel J",
+      "displayName": "Daniel J Sisti",
+      "uscfId": "12734121",
+      "matchType": "exact",
+      "uscfName": "DANIEL J SISTI",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Sloan, Sacha Marino",
+      "displayName": "Sacha Marino Sloan",
+      "uscfId": "32301287",
+      "matchType": "exact",
+      "uscfName": "Sacha Marino Sloan",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Sloan, Sasha",
+      "displayName": "Sasha Sloan",
+      "uscfId": "32301287",
+      "matchType": "opponent-xref",
+      "uscfName": "Sacha Marino Sloan",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Smets, Ray",
+      "displayName": "Ray Smets",
+      "uscfId": "30776274",
+      "matchType": "exact",
+      "uscfName": "Ray Smets",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Smith, Daniel",
+      "displayName": "Daniel Smith",
+      "uscfId": "31779836",
+      "matchType": "exact",
+      "uscfName": "Daniel Smith",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Smith, Olivia",
+      "displayName": "Olivia Smith",
+      "uscfId": "31256739",
+      "matchType": "exact",
+      "uscfName": "Olivia Smith",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Smith, Robert H",
+      "displayName": "Robert H Smith",
+      "uscfId": "12463327",
+      "matchType": "exact",
+      "uscfName": "ROBERT H SMITH",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Smith, Robert H III",
+      "displayName": "Robert H III Smith",
+      "uscfId": "12463327",
+      "matchType": "opponent-xref",
+      "uscfName": "ROBERT H SMITH",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Smith, Roger Christopher",
+      "displayName": "Roger Christopher Smith",
+      "uscfId": "14437543",
+      "matchType": "exact",
+      "uscfName": "Roger Christopher Smith",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Snyder, Larry",
+      "displayName": "Larry Snyder",
+      "uscfId": "10465117",
+      "matchType": "exact",
+      "uscfName": "LARRY SNYDER",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Solomon, Ethan",
+      "displayName": "Ethan Solomon",
+      "uscfId": "32786066",
+      "matchType": "exact",
+      "uscfName": "Ethan Israel Solomon",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Soloway, Jack March",
+      "displayName": "Jack March Soloway",
+      "uscfId": "15000121",
+      "matchType": "exact",
+      "uscfName": "Jack March Soloway",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Spliethof, Branum",
+      "displayName": "Branum Spliethof",
+      "uscfId": "32661549",
+      "matchType": "exact",
+      "uscfName": "Branum Edward Spliethof",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Srinivasan, Sivavishnu",
+      "displayName": "Sivavishnu Srinivasan",
+      "uscfId": "16778004",
+      "matchType": "exact",
+      "uscfName": "Sivavishnu Srinivasan",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sroka, Sylvester",
+      "displayName": "Sylvester Sroka",
+      "uscfId": "30812086",
+      "matchType": "exact",
+      "uscfName": "Sylvester Sroka",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Starr, Albert",
+      "displayName": "Albert Starr",
+      "uscfId": "12844781",
+      "matchType": "exact",
+      "uscfName": "ALBERT MARTIN STARR",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Starr, Albert Martin",
+      "displayName": "Albert Martin Starr",
+      "uscfId": "12844781",
+      "matchType": "exact",
+      "uscfName": "ALBERT MARTIN STARR",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Steger, Eric",
+      "displayName": "Eric Steger",
+      "uscfId": "12358270",
+      "matchType": "exact",
+      "uscfName": "Eric Steger",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Stevens, Adam Benjamin",
+      "displayName": "Adam Benjamin Stevens",
+      "uscfId": "30508143",
+      "matchType": "exact",
+      "uscfName": "Adam Benjamin Stevens",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Stevens, Zachary",
+      "displayName": "Zachary Stevens",
+      "uscfId": "14460843",
+      "matchType": "opponent-xref",
+      "uscfName": "Zack Stevens",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Stults, Sawyer",
+      "displayName": "Sawyer Stults",
+      "uscfId": "31608516",
+      "matchType": "exact",
+      "uscfName": "Sawyer Stults",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Suarez, Sebastian",
+      "displayName": "Sebastian Suarez",
+      "uscfId": "16875347",
+      "matchType": "exact",
+      "uscfName": "Sebastian Suarez",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Sundar, Neal",
+      "displayName": "Neal Sundar",
+      "uscfId": "17307025",
+      "matchType": "exact",
+      "uscfName": "Neal Sundar",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Swan, Mason James",
+      "displayName": "Mason James Swan",
+      "uscfId": "32825593",
+      "matchType": "exact",
+      "uscfName": "Mason James Swan",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Talamantez, Abel",
+      "displayName": "Abel Talamantez",
+      "uscfId": "12465386",
+      "matchType": "exact",
+      "uscfName": "Abel Talamantez",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Tam, Hoa Long",
+      "displayName": "Hoa Long Tam",
+      "uscfId": "16919862",
+      "matchType": "exact",
+      "uscfName": "HOA LONG TAM",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Tamondong, Cesar Bercilla",
+      "displayName": "Cesar Bercilla Tamondong",
+      "uscfId": "12439091",
+      "matchType": "exact",
+      "uscfName": "Cesar Bercilla Tamondong",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Thibault, William C",
+      "displayName": "William C Thibault",
+      "uscfId": "16716976",
+      "matchType": "exact",
+      "uscfName": "WILLIAM C THIBAULT",
+      "source": {
+        "eventId": "202310171652",
+        "eventName": "2023 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Tirouvingadame, Ar",
+      "displayName": "Ar Tirouvingadame",
+      "uscfId": "12842184",
+      "matchType": "opponent-xref",
+      "uscfName": "Arivoli Tirouvingadame",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Tirouvingadame, Arivoli",
+      "displayName": "Arivoli Tirouvingadame",
+      "uscfId": "12842184",
+      "matchType": "exact",
+      "uscfName": "Arivoli Tirouvingadame",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Tobias, Mason",
+      "displayName": "Mason Tobias",
+      "uscfId": "32440186",
+      "matchType": "exact",
+      "uscfName": "Mason Tobias",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Toczyski, David Paul",
+      "displayName": "David Paul Toczyski",
+      "uscfId": "30713291",
+      "matchType": "exact",
+      "uscfName": "David Paul Toczyski",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Toledo Guerrero, Fernando",
+      "displayName": "Fernando Toledo Guerrero",
+      "uscfId": "30689523",
+      "matchType": "exact",
+      "uscfName": "Fernando Toledo Guerrero",
+      "source": {
+        "eventId": "202312198952",
+        "eventName": "WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Tomar, Kshitij",
+      "displayName": "Kshitij Tomar",
+      "uscfId": "16314696",
+      "matchType": "exact",
+      "uscfName": "Kshitij Tomar",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Touset, Stephen",
+      "displayName": "Stephen Touset",
+      "uscfId": "14197801",
+      "matchType": "exact",
+      "uscfName": "STEPHEN TOUSET",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Tramm, Elijah",
+      "displayName": "Elijah Tramm",
+      "uscfId": "16188753",
+      "matchType": "exact",
+      "uscfName": "Elijah TRAMM",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Trosen, Lawrence R",
+      "displayName": "Lawrence R Trosen",
+      "uscfId": "14465442",
+      "matchType": "exact",
+      "uscfName": "Lawrence R Trosen",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Tsebrii, Maksym",
+      "displayName": "Maksym Tsebrii",
+      "uscfId": "32509962",
+      "matchType": "exact",
+      "uscfName": "Maksym Tsebrii",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Tsebrii, Max",
+      "displayName": "Max Tsebrii",
+      "uscfId": "32509962",
+      "matchType": "opponent-xref",
+      "uscfName": "Maksym Tsebrii",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Tsodikova, Natalya",
+      "displayName": "Natalya Tsodikova",
+      "uscfId": "12634942",
+      "matchType": "exact",
+      "uscfName": "NATALYA TSODIKOVA",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Tsolias, Yorgos",
+      "displayName": "Yorgos Tsolias",
+      "uscfId": "17266862",
+      "matchType": "exact",
+      "uscfName": "Yorgos Tsolias",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Turner, Robert",
+      "displayName": "Robert Turner",
+      "uscfId": "12407483",
+      "matchType": "exact",
+      "uscfName": "Robert Turner",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Uzakbaev, Nursultan",
+      "displayName": "Nursultan Uzakbaev",
+      "uscfId": "17137317",
+      "matchType": "exact",
+      "uscfName": "NURSULTAN UZAKBAEV",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Vandenhoven, Clarke Raymond",
+      "displayName": "Clarke Raymond Vandenhoven",
+      "uscfId": "30441457",
+      "matchType": "exact",
+      "uscfName": "Clarke Raymond VandenHoven",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Vasishta, Skanda",
+      "displayName": "Skanda Vasishta",
+      "uscfId": "30063323",
+      "matchType": "exact",
+      "uscfName": "Skanda Vasishta",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Vazquez, Dominic A",
+      "displayName": "Dominic A Vazquez",
+      "uscfId": "30703139",
+      "matchType": "exact",
+      "uscfName": "Dominic A Vazquez",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Viadiu-Ilarraza, Hector",
+      "displayName": "Hector Viadiu-Ilarraza",
+      "uscfId": "12586903",
+      "matchType": "exact",
+      "uscfName": "HECTOR VIADIU-ILARRAZA",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Viadiu, Hector",
+      "displayName": "Hector Viadiu",
+      "uscfId": "12586903",
+      "matchType": "opponent-xref",
+      "uscfName": "HECTOR VIADIU-ILARRAZA",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Walder, Michael",
+      "displayName": "Michael Walder",
+      "uscfId": "10345120",
+      "matchType": "exact",
+      "uscfName": "MICHAEL WALDER",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Walder, Michael/TA",
+      "displayName": "Michael/TA Walder",
+      "uscfId": "10345120",
+      "matchType": "first-name-only",
+      "uscfName": "MICHAEL WALDER",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Wang, Chase",
+      "displayName": "Chase Wang",
+      "uscfId": "15015852",
+      "matchType": "exact",
+      "uscfName": "Chase Wang",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Wardle, Braxton",
+      "displayName": "Braxton Wardle",
+      "uscfId": "31661706",
+      "matchType": "exact",
+      "uscfName": "Braxton Wardle",
+      "source": {
+        "eventId": "202410159362",
+        "eventName": "2024 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Weaver, Kyle",
+      "displayName": "Kyle Weaver",
+      "uscfId": "32642649",
+      "matchType": "exact",
+      "uscfName": "Kyle Weaver",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Wei, Brian",
+      "displayName": "Brian Wei",
+      "uscfId": "13978693",
+      "matchType": "exact",
+      "uscfName": "Brian Wei",
+      "source": {
+        "eventId": "202310171652",
+        "eventName": "2023 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Weigand, Henry",
+      "displayName": "Henry Weigand",
+      "uscfId": "31216727",
+      "matchType": "exact",
+      "uscfName": "Henry Weigand",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Wickliffe, Zachary",
+      "displayName": "Zachary Wickliffe",
+      "uscfId": "32140128",
+      "matchType": "exact",
+      "uscfName": "Zachary Wickliffe",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Widjaja, Luke",
+      "displayName": "Luke Widjaja",
+      "uscfId": "16010621",
+      "matchType": "exact",
+      "uscfName": "LUKE WIDJAJA",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Winslow, Elliott",
+      "displayName": "Elliott Winslow",
+      "uscfId": "10363365",
+      "matchType": "exact",
+      "uscfName": "Elliott Winslow",
+      "source": {
+        "eventId": "202602170253",
+        "eventName": "2026 New Year's Tuesday Night Marathon"
+      }
+    },
+    {
+      "name": "Wisnewski, Alex",
+      "displayName": "Alex Wisnewski",
+      "uscfId": "32080306",
+      "matchType": "exact",
+      "uscfName": "Alex Wisnewski",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Witkowski, Wallace",
+      "displayName": "Wallace Witkowski",
+      "uscfId": "12674345",
+      "matchType": "exact",
+      "uscfName": "Wallace M Witkowski",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Wong, Russell",
+      "displayName": "Russell Wong",
+      "uscfId": "12544182",
+      "matchType": "exact",
+      "uscfName": "RUSSELL WONG",
+      "source": {
+        "eventId": "202306130762",
+        "eventName": "2023 SUMMER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Wong, Wilson",
+      "displayName": "Wilson Wong",
+      "uscfId": "14507850",
+      "matchType": "exact",
+      "uscfName": "WILSON WONG",
+      "source": {
+        "eventId": "202408207372",
+        "eventName": "1ST JEREMY SILMAN MEMORIAL TUESDAY"
+      }
+    },
+    {
+      "name": "Xia, Yusheng",
+      "displayName": "Yusheng Xia",
+      "uscfId": "13471910",
+      "matchType": "exact",
+      "uscfName": "YUSHENG XIA",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Yamamoto, Craig",
+      "displayName": "Craig Yamamoto",
+      "uscfId": "12217820",
+      "matchType": "exact",
+      "uscfName": "CRAIG YAMAMOTO",
+      "source": {
+        "eventId": "202304187792",
+        "eventName": "2023 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Yan, Rayna",
+      "displayName": "Rayna Yan",
+      "uscfId": "30157975",
+      "matchType": "exact",
+      "uscfName": "Rayna Yan",
+      "source": {
+        "eventId": "202508195492",
+        "eventName": "2025 SUMMER TNM"
+      }
+    },
+    {
+      "name": "Yan, Ruiyang",
+      "displayName": "Ruiyang Yan",
+      "uscfId": "15462690",
+      "matchType": "exact",
+      "uscfName": "Ruiyang Yan",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Yang, Liwei",
+      "displayName": "Liwei Yang",
+      "uscfId": "31640875",
+      "matchType": "exact",
+      "uscfName": "Liwei Yang",
+      "source": {
+        "eventId": "202412178122",
+        "eventName": "2024 WINTER TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Zavgorodniy, Andrew",
+      "displayName": "Andrew Zavgorodniy",
+      "uscfId": "32143889",
+      "matchType": "exact",
+      "uscfName": "Andrew Zavgorodniy",
+      "source": {
+        "eventId": "202510141042",
+        "eventName": "2025 FALL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Zhanaidarov, Orynbay",
+      "displayName": "Orynbay Zhanaidarov",
+      "uscfId": "31676886",
+      "matchType": "exact",
+      "uscfName": "Orynbay Zhanaidarov",
+      "source": {
+        "eventId": "202506178322",
+        "eventName": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Zhao, Brandon",
+      "displayName": "Brandon Zhao",
+      "uscfId": "30108201",
+      "matchType": "exact",
+      "uscfName": "Brandon Zhao",
+      "source": {
+        "eventId": "202504151082",
+        "eventName": "2025 SPRING TUESDAY NIGHT MARATHON"
+      }
+    },
+    {
+      "name": "Zhou, Ivan",
+      "displayName": "Ivan Zhou",
+      "uscfId": "17352346",
+      "matchType": "exact",
+      "uscfName": "Ivan Zhou",
+      "source": {
+        "eventId": "202502184212",
+        "eventName": "2025 NEW YEAR TUESDAY NIGHT MARATHO"
+      }
+    },
+    {
+      "name": "Zhou, Tony",
+      "displayName": "Tony Zhou",
+      "uscfId": "32759538",
+      "matchType": "exact",
+      "uscfName": "Tony Zhou",
+      "source": {
+        "eventId": "202512160193",
+        "eventName": "2025 Winter Tuesday Night Marathon"
+      }
+    }
+  ],
+  "unmatched": [
+    {
+      "name": "Robins, Alex",
+      "displayName": "Alex Robins",
+      "norm": "robins,alex"
+    }
+  ],
+  "events": [
+    {
+      "eventId": "202602170253",
+      "name": "2026 New Year's Tuesday Night Marathon",
+      "startDate": "2026-01-06",
+      "endDate": "2026-02-17"
+    },
+    {
+      "eventId": "202512160193",
+      "name": "2025 Winter Tuesday Night Marathon",
+      "startDate": "2025-11-04",
+      "endDate": "2025-12-16"
+    },
+    {
+      "eventId": "202510141042",
+      "name": "2025 FALL TUESDAY NIGHT MARATHON",
+      "startDate": "2025-09-02",
+      "endDate": "2025-10-14"
+    },
+    {
+      "eventId": "202508195492",
+      "name": "2025 SUMMER TNM",
+      "startDate": "2025-07-08",
+      "endDate": "2025-08-19"
+    },
+    {
+      "eventId": "202506178322",
+      "name": "2ND SILMAN MEMORIAL TUESDAY NIGHT MARATHON",
+      "startDate": "2025-05-06",
+      "endDate": "2025-06-17"
+    },
+    {
+      "eventId": "202504151082",
+      "name": "2025 SPRING TUESDAY NIGHT MARATHON",
+      "startDate": "2025-03-04",
+      "endDate": "2025-04-15"
+    },
+    {
+      "eventId": "202502184212",
+      "name": "2025 NEW YEAR TUESDAY NIGHT MARATHO",
+      "startDate": "2025-01-07",
+      "endDate": "2025-02-18"
+    },
+    {
+      "eventId": "202412178122",
+      "name": "2024 WINTER TUESDAY NIGHT MARATHON",
+      "startDate": "2024-11-05",
+      "endDate": "2024-12-17"
+    },
+    {
+      "eventId": "202410159362",
+      "name": "2024 FALL TUESDAY NIGHT MARATHON",
+      "startDate": "2024-09-03",
+      "endDate": "2024-10-15"
+    },
+    {
+      "eventId": "202408207372",
+      "name": "1ST JEREMY SILMAN MEMORIAL TUESDAY",
+      "startDate": "2024-07-09",
+      "endDate": "2024-08-20"
+    },
+    {
+      "eventId": "202406180702",
+      "name": "2024 SUMMER TUESDAY NIGHT MARATHON",
+      "startDate": "2024-05-07",
+      "endDate": "2024-06-18"
+    },
+    {
+      "eventId": "202404169582",
+      "name": "2024 SPRING TUESDAY NIGHT MARATHON",
+      "startDate": "2024-03-05",
+      "endDate": "2024-04-16"
+    },
+    {
+      "eventId": "202401068012",
+      "name": "JEREMY SILMAN MEMORIAL",
+      "startDate": "2024-01-02",
+      "endDate": "2024-01-06"
+    },
+    {
+      "eventId": "202312198952",
+      "name": "WINTER TUESDAY NIGHT MARATHON",
+      "startDate": "2023-11-07",
+      "endDate": "2023-12-19"
+    },
+    {
+      "eventId": "202310171652",
+      "name": "2023 FALL TUESDAY NIGHT MARATHON",
+      "startDate": "2023-09-05",
+      "endDate": "2023-10-17"
+    },
+    {
+      "eventId": "202306130762",
+      "name": "2023 SUMMER TUESDAY NIGHT MARATHON",
+      "startDate": "2023-05-02",
+      "endDate": "2023-06-13"
+    },
+    {
+      "eventId": "202304187792",
+      "name": "2023 SPRING TUESDAY NIGHT MARATHON",
+      "startDate": "2023-03-07",
+      "endDate": "2023-04-18"
+    },
+    {
+      "eventId": "202302215292",
+      "name": "2023 NEW YEAR TUESDAY NIGHT MARATHON",
+      "startDate": "2023-01-10",
+      "endDate": "2023-02-21"
+    },
+    {
+      "eventId": "202208239302",
+      "name": "2ND PETER GREY TUESDAY NIGHT MARATHON",
+      "startDate": "2022-07-12",
+      "endDate": "2022-08-23"
+    },
+    {
+      "eventId": "202112210912",
+      "name": "NOV-DEC 2021 TUESDAY NIGHT MARATHON",
+      "startDate": "2021-11-02",
+      "endDate": "2021-12-21"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
 
 let currentPlayer = null;
+let currentUscfId = null;
 let cachedGames = null;
 let cachedStats = null;
 let activeTab = 'overview';
@@ -13,10 +14,11 @@ let activeTab = 'overview';
 /**
  * Open the player profile modal for a given player name.
  * @param {string} playerName - Display name (e.g., "John Boyer")
- * @param {object} [opts] - Optional: { uscfId, uscfUrl }
+ * @param {object} [opts] - Optional: { uscfId }
  */
-export async function openPlayerProfile(playerName) {
+export async function openPlayerProfile(playerName, { uscfId } = {}) {
     currentPlayer = playerName;
+    currentUscfId = uscfId || null;
     cachedGames = null;
     cachedStats = null;
     activeTab = 'overview';
@@ -28,6 +30,21 @@ export async function openPlayerProfile(playerName) {
     title.textContent = playerName;
     body.innerHTML = '<p class="profile-loading">Loading stats...</p>';
 
+    // If no uscfId was passed, try to look it up
+    let uscfRating = null;
+    if (!currentUscfId) {
+        try {
+            const { getPlayerUscfId, getPlayerRating } = await import('./browser-data.js');
+            currentUscfId = getPlayerUscfId(playerName);
+            uscfRating = getPlayerRating(playerName);
+        } catch { /* optional */ }
+    } else {
+        try {
+            const { getPlayerRating } = await import('./browser-data.js');
+            uscfRating = getPlayerRating(playerName);
+        } catch { /* optional */ }
+    }
+
     try {
         const games = await fetchAllPlayerGames(playerName);
         cachedGames = games;
@@ -35,9 +52,9 @@ export async function openPlayerProfile(playerName) {
             body.innerHTML = '<p class="profile-empty">No games found for this player.</p>';
             return;
         }
-        // Show rating from most recent game
-        const rating = getMostRecentRating(games, playerName);
-        title.textContent = rating ? `${playerName} (${rating})` : playerName;
+        // Prefer USCF current rating over game ELO snapshot
+        const rating = uscfRating || getMostRecentRating(games, playerName);
+        renderTitle(title, playerName, rating, currentUscfId);
         renderTabs(body);
         renderTab('overview');
     } catch (err) {
@@ -45,9 +62,19 @@ export async function openPlayerProfile(playerName) {
     }
 }
 
+function renderTitle(titleEl, playerName, rating, uscfId) {
+    const nameText = rating ? `${playerName} (${rating})` : playerName;
+    if (uscfId) {
+        titleEl.innerHTML = `${nameText} <a href="https://ratings.uschess.org/player/${uscfId}" target="_blank" rel="noopener" class="profile-uscf-link" title="USCF Profile">USCF</a>`;
+    } else {
+        titleEl.textContent = nameText;
+    }
+}
+
 export function closePlayerProfile() {
     closeModal('profile-modal');
     currentPlayer = null;
+    currentUscfId = null;
     cachedGames = null;
     cachedStats = null;
 }

@@ -2899,6 +2899,19 @@ select.editor-header-input {
     margin-bottom: 0.5rem;
 }
 
+.profile-uscf-link {
+    font-size: 0.65em;
+    font-weight: 500;
+    color: var(--accent-color);
+    text-decoration: none;
+    vertical-align: middle;
+    margin-left: 0.25em;
+}
+
+.profile-uscf-link:hover {
+    text-decoration: underline;
+}
+
 .profile-body {
     color: var(--text-muted);
     font-size: 0.9rem;

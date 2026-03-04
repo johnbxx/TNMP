@@ -10,6 +10,21 @@ import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import ecoEpd from './eco-epd.json';
 import { generateBoardSvg } from './og-board.js';
 
+/**
+ * Resolve a normalized player name to its canonical norm via alias lookup.
+ * Returns the canonical norm if found, otherwise returns the input unchanged.
+ */
+async function resolvePlayerNorm(norm, env) {
+    try {
+        // Check if this norm is a known alias
+        const row = await env.DB.prepare(
+            "SELECT name_norm FROM players WHERE name_norm = ? OR EXISTS (SELECT 1 FROM json_each(aliases) WHERE value = ?)"
+        ).bind(norm, norm).first();
+        if (row) return row.name_norm;
+    } catch { /* players table may not exist yet */ }
+    return norm;
+}
+
 // --- OG Game Endpoints ---
 
 const GAME_COLS = 'g.white, g.black, g.white_elo, g.black_elo, g.result, g.round, g.board, g.eco, g.opening_name, t.name as tournament_name';
@@ -135,8 +150,8 @@ export async function handleQuery(request, env) {
         params.push(resolved.slug);
     }
 
-    // Player filter
-    const norm = player ? normalizePlayerName(player) : null;
+    // Player filter (resolve aliases so old name variants still find games)
+    const norm = player ? await resolvePlayerNorm(normalizePlayerName(player), env) : null;
     if (norm) {
         if (color === 'white') { conditions.push('g.white_norm = ?'); params.push(norm); }
         else if (color === 'black') { conditions.push('g.black_norm = ?'); params.push(norm); }
@@ -144,7 +159,7 @@ export async function handleQuery(request, env) {
     }
 
     if (opponent && player) {
-        const oppNorm = normalizePlayerName(opponent);
+        const oppNorm = await resolvePlayerNorm(normalizePlayerName(opponent), env);
         conditions.push('(g.white_norm = ? OR g.black_norm = ?)');
         params.push(oppNorm, oppNorm);
     }
@@ -259,6 +274,7 @@ export async function handleTournaments(request, env) {
         tournaments: result.results.map(t => ({
             slug: t.slug, name: t.name, shortCode: t.short_code,
             startDate: t.start_date, totalRounds: t.total_rounds,
+            uscfEventId: t.uscf_event_id || null,
         })),
     }, 200, env, request);
 }
@@ -266,11 +282,26 @@ export async function handleTournaments(request, env) {
 // --- Players Endpoint ---
 
 export async function handlePlayers(request, env) {
+    // Try players table first, fall back to distinct names from games
+    try {
+        const result = await env.DB.prepare(
+            'SELECT name, uscf_id, rating FROM players ORDER BY name'
+        ).all();
+        if (result.results.length > 0) {
+            return corsResponse({
+                players: result.results.map(r => ({
+                    name: formatPlayerName(r.name),
+                    uscfId: r.uscf_id || null,
+                    rating: r.rating || null,
+                })),
+            }, 200, env, request);
+        }
+    } catch { /* players table may not exist yet */ }
     const result = await env.DB.prepare(
         'SELECT name FROM (SELECT white AS name FROM games UNION SELECT black AS name FROM games) ORDER BY name'
     ).all();
     return corsResponse({
-        players: result.results.map(r => formatPlayerName(r.name)),
+        players: result.results.map(r => ({ name: formatPlayerName(r.name), uscfId: null })),
     }, 200, env, request);
 }
 
@@ -309,13 +340,13 @@ export async function handlePlayerHistory(request, env) {
 
     if (!foundPlayer) return corsResponse({ error: 'Player not found in standings' }, 404, env, request);
 
-    // Build rank map from the found section (already fetched above)
+    // Build rank map from the found section (names already canonicalized at ingestion)
     const rankMap = {};
     if (foundSectionData?.players) {
         for (const p of foundSectionData.players) rankMap[p.rank] = { name: p.name, rating: p.rating, url: p.url };
     }
 
-    const norm = normalizePlayerName(playerName);
+    const norm = await resolvePlayerNorm(normalizePlayerName(playerName), env);
 
     // Fetch pairings colors + all player games in parallel (single D1 query for all rounds)
     const [pairingsColors, gameRows] = await Promise.all([

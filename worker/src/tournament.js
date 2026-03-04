@@ -204,7 +204,15 @@ export function computeAppState(cached, meta) {
     const roundDates = meta?.roundDates || [];
     const nextTournament = meta?.nextTournament || null;
     const totalRounds = meta?.totalRounds || 0;
-    const roundNumber = rawRound || totalRounds || null;
+    // Derive round from dates when HTML hasn't been parsed yet
+    let roundNumber = rawRound || null;
+    if (!roundNumber && roundDates.length > 0) {
+        const nowMs = Date.now();
+        for (let i = roundDates.length - 1; i >= 0; i--) {
+            if (nowMs >= new Date(roundDates[i]).getTime()) { roundNumber = i + 1; break; }
+        }
+        if (!roundNumber) roundNumber = 1;
+    }
 
     const timeState = getTimeState(roundDates, nextTournament);
     let state, info, offSeason = null;

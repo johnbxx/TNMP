@@ -112,16 +112,40 @@ export async function fetchTournamentList() {
 
 /**
  * Fetch distinct player names across all tournaments (cached after first call).
+ * Returns a flat array of name strings for autocomplete.
  */
 let allPlayers = null;
+let playerUscfIds = null;
+let playerRatings = null;
 
 export async function fetchPlayerList() {
     if (allPlayers) return allPlayers;
     const response = await fetch(`${WORKER_URL}/players`);
     if (!response.ok) throw new Error('Failed to fetch players');
     const data = await response.json();
-    allPlayers = data.players;
+    // Handle both old format (string[]) and new format ({ name, uscfId, rating }[])
+    if (data.players.length > 0 && typeof data.players[0] === 'object') {
+        playerUscfIds = {};
+        playerRatings = {};
+        allPlayers = data.players.map(p => {
+            if (p.uscfId) playerUscfIds[p.name] = p.uscfId;
+            if (p.rating) playerRatings[p.name] = p.rating;
+            return p.name;
+        });
+    } else {
+        allPlayers = data.players;
+    }
     return allPlayers;
+}
+
+/** Look up a player's USCF ID by display name (available after fetchPlayerList). */
+export function getPlayerUscfId(displayName) {
+    return playerUscfIds?.[displayName] || null;
+}
+
+/** Look up a player's current USCF rating by display name (available after fetchPlayerList). */
+export function getPlayerRating(displayName) {
+    return playerRatings?.[displayName] || null;
 }
 
 // --- Derived data helpers ---

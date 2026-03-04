@@ -1,7 +1,7 @@
 import { openGameViewer, openGameEditor, showExplorer, refreshExplorer, isExplorerMode, getSavedExplorerMoves } from './game-viewer.js';
 import { fitTextToContainer } from './ui.js';
 import { resultClass, resultSymbol, normalizeSection } from './utils.js';
-import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame, onGamesChange } from './browser-data.js';
+import { getGamesData, fetchGames, fetchTournamentList, fetchPlayerList, getPlayerUscfId, buildPlayerList, getActiveTournamentSlug, setActiveTournamentSlug, clearGamesData, getCachedGame, onGamesChange } from './browser-data.js';
 import { getTournamentMeta } from './config.js';
 import { openPlayerProfile } from './player-profile.js';
 
@@ -721,7 +721,8 @@ function renderBrowserContent(containerEl, roundNumbers) {
         const profileBtn = e.target.closest('[data-profile]');
         if (profileBtn) {
             autocomplete.classList.add('hidden');
-            openPlayerProfile(profileBtn.dataset.profile);
+            const name = profileBtn.dataset.profile;
+            openPlayerProfile(name, { uscfId: getPlayerUscfId(name) });
             return;
         }
         const item = e.target.closest('[data-player]');
@@ -1040,7 +1041,7 @@ function renderGamesList() {
     gamesEl.innerHTML = html;
 
     document.getElementById('browser-profile-btn')?.addEventListener('click', () => {
-        openPlayerProfile(_selectedPlayer);
+        openPlayerProfile(_selectedPlayer, { uscfId: getPlayerUscfId(_selectedPlayer) });
     });
 }
 

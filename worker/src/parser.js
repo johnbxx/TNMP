@@ -315,33 +315,36 @@ export function hasResults(html) {
         }
     }
 
-    if (!maxRoundTable) return false;
+    if (maxRoundTable) {
+        const rowRegex = /<tr>[\s\S]*?<\/tr>/gi;
+        let rowMatch;
+        let rowIndex = 0;
 
-    const rowRegex = /<tr>[\s\S]*?<\/tr>/gi;
-    let rowMatch;
-    let rowIndex = 0;
+        while ((rowMatch = rowRegex.exec(maxRoundTable)) !== null) {
+            if (rowIndex === 0 || /<th/i.test(rowMatch[0])) {
+                rowIndex++;
+                continue;
+            }
 
-    while ((rowMatch = rowRegex.exec(maxRoundTable)) !== null) {
-        if (rowIndex === 0 || /<th/i.test(rowMatch[0])) {
-            rowIndex++;
-            continue;
+            const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+            const cells = [];
+            let tdMatch;
+            while ((tdMatch = tdRegex.exec(rowMatch[0])) !== null) {
+                cells.push(tdMatch[1].replace(/<[^>]*>/g, ''));
+            }
+
+            if (cells.length < 4) break;
+
+            const res1 = cells[1].replace(/&nbsp;/g, '').trim();
+            const res2 = cells[3].replace(/&nbsp;/g, '').trim();
+            return res1 !== '' || res2 !== '';
         }
 
-        const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-        const cells = [];
-        let tdMatch;
-        while ((tdMatch = tdRegex.exec(rowMatch[0])) !== null) {
-            cells.push(tdMatch[1].replace(/<[^>]*>/g, ''));
-        }
-
-        if (cells.length < 4) break;
-
-        const res1 = cells[1].replace(/&nbsp;/g, '').trim();
-        const res2 = cells[3].replace(/&nbsp;/g, '').trim();
-        return res1 !== '' || res2 !== '';
+        return false;
     }
 
-    return false;
+    // No pairings tables (e.g. round 1) — check standings for filled result cells
+    return /<td class="result">[A-Z]\d/i.test(html);
 }
 
 /**

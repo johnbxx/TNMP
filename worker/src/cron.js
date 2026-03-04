@@ -77,9 +77,71 @@ export async function handleScheduled(env) {
 
     const slug = slugifyTournament(tournament.name);
 
-    // Parse and persist standings per section
+    // Load alias map and USCF ID→canonical name map for name canonicalization
+    const aliasMap = new Map();
+    const uscfIdMap = new Map(); // uscf_id → { name, norm, aliases }
     try {
-        const standings = parseStandings(parsed.strippedHtml);
+        const allPlayers = await env.DB.prepare(
+            "SELECT name, name_norm, uscf_id, aliases FROM players"
+        ).all();
+        for (const row of allPlayers.results) {
+            if (row.uscf_id) uscfIdMap.set(row.uscf_id, { name: row.name, norm: row.name_norm, aliases: JSON.parse(row.aliases || '[]') });
+            const aliases = JSON.parse(row.aliases || '[]');
+            for (const alias of aliases) {
+                aliasMap.set(alias, { name: row.name, norm: row.name_norm });
+            }
+        }
+    } catch { /* players table may not exist yet */ }
+
+    // Parse standings and build HTML name → USCF ID map (needed by canonicalize)
+    const htmlNameToUscfId = new Map();
+    let standings = [];
+    try {
+        standings = parseStandings(parsed.strippedHtml);
+        for (const section of standings) {
+            for (const p of section.players) {
+                if (p.id && p.name) htmlNameToUscfId.set(normalizePlayerName(p.name), p.id);
+            }
+        }
+    } catch (err) {
+        console.error('Failed to parse standings:', err.message);
+    }
+
+    // Resolve a player name: check alias map, then fall back to USCF ID from standings.
+    // If a new alias is discovered, persist it to D1 and update the alias map.
+    const newAliases = [];
+    function canonicalize(name) {
+        const norm = normalizePlayerName(name);
+        // 1. Known alias?
+        const alias = aliasMap.get(norm);
+        if (alias) return { name: alias.name, norm: alias.norm };
+        // 2. USCF ID match from standings?
+        const uscfId = htmlNameToUscfId.get(norm);
+        if (uscfId) {
+            const canonical = uscfIdMap.get(uscfId);
+            if (canonical && canonical.norm !== norm) {
+                // New alias discovered — add to maps and queue DB update
+                aliasMap.set(norm, { name: canonical.name, norm: canonical.norm });
+                canonical.aliases.push(norm);
+                newAliases.push({ uscfId, norm, canonicalName: canonical.name, aliases: canonical.aliases });
+                return { name: canonical.name, norm: canonical.norm };
+            }
+        }
+        return { name, norm };
+    }
+
+    // Canonicalize standings names and persist to KV
+    function formatDisplayName(dbName) {
+        const parts = dbName.split(',').map(s => s.trim());
+        return parts.length === 2 ? `${parts[1]} ${parts[0]}` : dbName;
+    }
+    try {
+        for (const section of standings) {
+            for (const p of section.players) {
+                const resolved = canonicalize(p.name);
+                if (resolved.name !== p.name) p.name = formatDisplayName(resolved.name);
+            }
+        }
         await Promise.all(standings.map(section =>
             env.SUBSCRIBERS.put(`standings:${slug}:${section.section}`, JSON.stringify(section))
         ));
@@ -121,6 +183,12 @@ export async function handleScheduled(env) {
                 // Skip if row exists with same result and already has a PGN
                 if (ex && ex.hasPgn && ex.result === g.result) continue;
 
+                // Canonicalize names via alias map + USCF ID lookup
+                const w = canonicalize(g.white);
+                const b = canonicalize(g.black);
+                const whiteName = w.name, whiteNorm = w.norm;
+                const blackName = b.name, blackNorm = b.norm;
+
                 const opening = classifyOpening(g.pgn);
                 stmts.push(
                     env.DB.prepare(
@@ -136,8 +204,8 @@ export async function handleScheduled(env) {
                           section=excluded.section, date=excluded.date, game_id=excluded.game_id, pgn=excluded.pgn`
                     ).bind(
                         slug, parseInt(roundNum), g.board,
-                        g.white, g.black,
-                        normalizePlayerName(g.white), normalizePlayerName(g.black),
+                        whiteName, blackName,
+                        whiteNorm, blackNorm,
                         g.whiteElo ? parseInt(g.whiteElo) : null,
                         g.blackElo ? parseInt(g.blackElo) : null,
                         g.result,
@@ -185,14 +253,18 @@ export async function handleScheduled(env) {
                     if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
                     const board = row.board ? parseInt(row.board, 10) || null : null;
                     if (!board) continue;
-                    const white = parsePlayerInfo(row.whiteName).name;
-                    const black = parsePlayerInfo(row.blackName).name;
+                    const wRaw = parsePlayerInfo(row.whiteName).name;
+                    const bRaw = parsePlayerInfo(row.blackName).name;
+                    const wc = canonicalize(wRaw);
+                    const bc = canonicalize(bRaw);
+                    const white = wc.name, whiteNorm = wc.norm;
+                    const black = bc.name, blackNorm = bc.norm;
                     shellStmts.push(
                         env.DB.prepare(
                             `INSERT OR IGNORE INTO games
                              (tournament_slug, round, board, white, black, white_norm, black_norm, result, section, pgn)
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
-                        ).bind(slug, rnd, board, white, black, normalizePlayerName(white), normalizePlayerName(black), parseGameResult(row.whiteResult, row.blackResult), section.section)
+                        ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm, parseGameResult(row.whiteResult, row.blackResult), section.section)
                     );
                 }
             }
@@ -204,6 +276,20 @@ export async function handleScheduled(env) {
             }
         } catch (err) {
             console.error('Failed to capture pairings colors:', err.message);
+        }
+    }
+
+    // Persist any newly discovered aliases
+    if (newAliases.length > 0) {
+        try {
+            const stmts = newAliases.map(a =>
+                env.DB.prepare('UPDATE players SET aliases = ? WHERE uscf_id = ?')
+                    .bind(JSON.stringify(a.aliases), a.uscfId)
+            );
+            await env.DB.batch(stmts);
+            console.log(`Auto-aliased ${newAliases.length} name(s): ${newAliases.map(a => `${a.norm} → ${a.canonicalName}`).join(', ')}`);
+        } catch (err) {
+            console.error('Failed to persist new aliases:', err.message);
         }
     }
 
