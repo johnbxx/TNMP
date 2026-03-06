@@ -395,7 +395,7 @@ export function showError(message) {
     document.getElementById('answer').textContent = '???';
     document.getElementById('meme').innerHTML = `
         <p class="meme-text">Couldn't check the page. Maybe try opening it directly?</p>
-        <p class="meme-text" style="font-size: 0.9rem; margin-top: 0.5rem;">${message}</p>
+        <p class="meme-text meme-text-small">${message}</p>
     `;
     document.getElementById('round-info').textContent = '';
 }

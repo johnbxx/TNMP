@@ -99,8 +99,8 @@
             <div class="setting-group">
                 <label for="player-name-input">Your Name</label>
                 <div class="setting-name-wrap">
-                    <input type="text" id="player-name-input" placeholder="Search for your name..." autocomplete="off" spellcheck="false">
-                    <div id="settings-autocomplete" class="browser-autocomplete hidden"></div>
+                    <input type="text" id="player-name-input" placeholder="Search for your name..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="settings-autocomplete">
+                    <div id="settings-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
                 </div>
                 <p class="setting-hint">Start typing to find your name, or enter it manually.</p>
             </div>
@@ -294,7 +294,7 @@
                     <textarea id="editor-import-text" class="editor-import-text" placeholder="Paste PGN text here, or drag .pgn files..." rows="10"></textarea>
                     <div class="editor-import-actions">
                         <label class="editor-h-btn editor-h-btn-secondary editor-file-btn">Choose files<input type="file" id="editor-import-file" accept=".pgn,.txt" multiple hidden></label>
-                        <span style="flex:1"></span>
+                        <span class="editor-import-spacer"></span>
                         <button data-action="editor-import-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
                         <button data-action="editor-import-ok" class="editor-h-btn">Import</button>
                     </div>
@@ -333,10 +333,10 @@
                 </div>
             </div>
             <div id="editor-dirty-dialog" class="editor-import-dialog hidden">
-                <div class="editor-import-content" style="max-width: 400px">
+                <div class="editor-import-content editor-dirty-content">
                     <h3>Unsaved Changes</h3>
-                    <p style="color: var(--text-secondary); margin: 0.5rem 0 1rem">You have unsaved edits. What would you like to do?</p>
-                    <div class="editor-import-actions" style="flex-wrap: wrap">
+                    <p class="editor-dirty-message">You have unsaved edits. What would you like to do?</p>
+                    <div class="editor-import-actions editor-dirty-actions">
                         <button data-action="dirty-copy-leave" class="editor-h-btn">Copy PGN & Leave</button>
                         <button data-action="dirty-discard" class="editor-h-btn editor-h-btn-secondary">Discard</button>
                         <button data-action="dirty-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>

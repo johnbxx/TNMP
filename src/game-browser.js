@@ -633,9 +633,9 @@ function renderBrowserContent(containerEl, roundNumbers) {
     const searchHtml = `
         <div class="browser-search" id="browser-search">
             <div class="browser-search-wrap">
-                <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false">
+                <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="browser-autocomplete">
                 <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
-                <div id="browser-autocomplete" class="browser-autocomplete hidden"></div>
+                <div id="browser-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
             </div>
             ${exploreBtn}${importBtn}${downloadBtn}
         </div>`;
@@ -689,6 +689,7 @@ function renderBrowserContent(containerEl, roundNumbers) {
         const query = searchInput.value.trim().toLowerCase();
         if (query.length === 0) {
             autocomplete.classList.add('hidden');
+            searchInput.setAttribute('aria-expanded', 'false');
             document.getElementById('browser-rounds')?.classList.remove('hidden');
             document.getElementById('browser-sections')?.classList.remove('hidden');
             if (_selectedPlayer) {
@@ -704,7 +705,7 @@ function renderBrowserContent(containerEl, roundNumbers) {
             autocomplete.innerHTML = '<div class="browser-ac-empty">No players found</div>';
         } else {
             autocomplete.innerHTML = matches.map(name =>
-                `<button type="button" class="browser-ac-item" data-player="${name}">${highlightMatch(name, query)}</button>`
+                `<button type="button" class="browser-ac-item" role="option" data-player="${name}">${highlightMatch(name, query)}</button>`
             ).join('');
             const exactMatch = matches.find(n => n.toLowerCase() === query);
             if (!getGamesData()?.query?.local && (matches.length === 1 || exactMatch)) {
@@ -715,12 +716,14 @@ function renderBrowserContent(containerEl, roundNumbers) {
             }
         }
         autocomplete.classList.remove('hidden');
+        searchInput.setAttribute('aria-expanded', 'true');
     });
 
     autocomplete.addEventListener('click', (e) => {
         const profileBtn = e.target.closest('[data-profile]');
         if (profileBtn) {
             autocomplete.classList.add('hidden');
+            searchInput.setAttribute('aria-expanded', 'false');
             const name = profileBtn.dataset.profile;
             openPlayerProfile(name, { uscfId: getPlayerUscfId(name) });
             return;
@@ -740,6 +743,7 @@ function renderBrowserContent(containerEl, roundNumbers) {
         }
         if (e.key === 'Escape') {
             autocomplete.classList.add('hidden');
+            searchInput.setAttribute('aria-expanded', 'false');
             return;
         }
         if (autocomplete.classList.contains('hidden')) return;
@@ -777,6 +781,8 @@ function renderBrowserContent(containerEl, roundNumbers) {
             if (!e.target.closest('#browser-search')) {
                 const ac = containerEl.querySelector('#browser-autocomplete');
                 if (ac) ac.classList.add('hidden');
+                const si = containerEl.querySelector('#browser-search-input');
+                if (si) si.setAttribute('aria-expanded', 'false');
             }
 
             // Chip clicks (tournament / color toggles)
@@ -921,6 +927,7 @@ async function selectPlayer(name, searchInput, autocomplete, clearBtn) {
     searchInput.value = name;
     searchInput.blur();
     autocomplete.classList.add('hidden');
+    searchInput.setAttribute('aria-expanded', 'false');
     clearBtn.classList.remove('hidden');
     document.getElementById('browser-rounds')?.classList.add('hidden');
     document.getElementById('browser-sections')?.classList.add('hidden');

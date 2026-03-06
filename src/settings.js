@@ -76,6 +76,7 @@ function initNameAutocomplete(input) {
         const query = input.value.trim().toLowerCase();
         if (query.length === 0) {
             dropdown.classList.add('hidden');
+            input.setAttribute('aria-expanded', 'false');
             return;
         }
 
@@ -90,10 +91,11 @@ function initNameAutocomplete(input) {
                 const before = name.slice(0, idx);
                 const match = name.slice(idx, idx + query.length);
                 const after = name.slice(idx + query.length);
-                return `<button type="button" class="browser-ac-item" data-player="${name}">${before}<strong>${match}</strong>${after}</button>`;
+                return `<button type="button" class="browser-ac-item" role="option" data-player="${name}">${before}<strong>${match}</strong>${after}</button>`;
             }).join('');
         }
         dropdown.classList.remove('hidden');
+        input.setAttribute('aria-expanded', 'true');
     });
 
     dropdown.addEventListener('click', (e) => {
@@ -101,6 +103,7 @@ function initNameAutocomplete(input) {
         if (!item) return;
         input.value = item.dataset.player;
         dropdown.classList.add('hidden');
+        input.setAttribute('aria-expanded', 'false');
     });
 
     input.addEventListener('keydown', (e) => {
@@ -125,8 +128,10 @@ function initNameAutocomplete(input) {
             const name = focused?.dataset.player || input.value.trim();
             if (focused) input.value = name;
             dropdown.classList.add('hidden');
+            input.setAttribute('aria-expanded', 'false');
         } else if (e.key === 'Escape') {
             dropdown.classList.add('hidden');
+            input.setAttribute('aria-expanded', 'false');
         }
     });
 
@@ -134,6 +139,7 @@ function initNameAutocomplete(input) {
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.setting-name-wrap')) {
             dropdown.classList.add('hidden');
+            input.setAttribute('aria-expanded', 'false');
         }
     });
 }
