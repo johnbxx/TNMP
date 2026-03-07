@@ -1985,25 +1985,25 @@ html.off-season .meme {
         width: 100%;
     }
     .viewer-toolbar {
-        gap: 0.15rem;
+        gap: 0.1rem;
         padding: 0.2rem;
     }
+    .viewer-toolbar-sep {
+        margin: 0;
+    }
     .viewer-tool-btn {
-        width: 2rem;
-        height: 2rem;
-        padding: 0.35rem;
+        width: 1.75rem;
+        height: 1.75rem;
+        padding: 0.3rem;
     }
     .viewer-nav-btn {
-        width: 2.25rem;
+        width: 2rem;
         height: 2.25rem;
         padding: 0.35rem;
     }
     #viewer-play {
         width: 2.5rem;
         height: 2.5rem;
-    }
-    .viewer-toolbar-sep {
-        margin: 0;
     }
 }
 

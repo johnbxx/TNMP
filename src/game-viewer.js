@@ -880,7 +880,8 @@ function forceCloseGamePanel() {
 
         panelMode = 'viewer';
         _currentGameId = null;
-        document.querySelector('.modal-content-viewer')?.classList.remove('explorer-active');
+        const modalEl = document.querySelector('.modal-content-viewer');
+        modalEl?.classList.remove('explorer-active', 'browser-only');
         restoreViewerToolbar();
         _savedExplorerMoves = null;
         hideBrowserPanel();
