@@ -1851,6 +1851,17 @@ html.off-season .meme {
         width: 98%;
         padding: 1rem;
     }
+    .modal-content-viewer.browser-only {
+        padding: 0;
+    }
+    .modal-content-viewer.browser-only h2 {
+        padding: 1rem 1rem 0.5rem;
+    }
+    .modal-content-viewer.browser-only .browser-search,
+    .modal-content-viewer.browser-only .browser-filters {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
     .viewer-board {
         max-width: 100%;
     }
@@ -1888,7 +1899,7 @@ html.off-season .meme {
     flex-direction: column;
     flex: 1;
     overflow: hidden;
-    padding: 1rem;
+    padding: 0;
 }
 .modal-content-viewer.browser-only .viewer-main {
     display: none;
