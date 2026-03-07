@@ -299,6 +299,21 @@ export async function handleTournamentHtml(request, env) {
 }
 
 export async function handleTournamentState(request, env) {
+    // Fast path: serve pre-computed state from cron (single KV read)
+    const cachedAppState = await env.SUBSCRIBERS.get('cache:appState', 'json');
+    if (cachedAppState) {
+        const { pairings, ...response } = cachedAppState;
+
+        const url = new URL(request.url);
+        const playerName = url.searchParams.get('player');
+        if (playerName && pairings?.length) {
+            response.pairing = findPairingInCache(pairings, playerName, response.round);
+        }
+
+        return corsResponse(response, 200, env, request);
+    }
+
+    // Fallback: compute on the fly (first deploy or KV cleared)
     const [cached, meta] = await Promise.all([
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
         getMetaOrResolve(env),
@@ -323,6 +338,34 @@ export async function handleTournamentState(request, env) {
     }
 
     return corsResponse(response, 200, env, request);
+}
+
+/**
+ * Find a player's pairing from the pre-computed pairings array.
+ * Case-insensitive substring match, same as findPlayerPairing.
+ */
+function findPairingInCache(pairings, playerName, round) {
+    const lower = playerName.toLowerCase();
+    for (const p of pairings) {
+        if (p.isBye && p.player.toLowerCase().includes(lower)) {
+            return { isBye: true, byeType: p.byeType, section: p.section, round };
+        }
+        if (p.white?.toLowerCase().includes(lower)) {
+            return {
+                board: p.board, color: 'White',
+                opponent: p.black, opponentRating: p.blackRating,
+                opponentUrl: p.blackUrl, section: p.section, round,
+            };
+        }
+        if (p.black?.toLowerCase().includes(lower)) {
+            return {
+                board: p.board, color: 'Black',
+                opponent: p.white, opponentRating: p.whiteRating,
+                opponentUrl: p.whiteUrl, section: p.section, round,
+            };
+        }
+    }
+    return null;
 }
 
 export async function handleOgState(request, env) {

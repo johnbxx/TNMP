@@ -6,7 +6,7 @@
  */
 
 import { slugifyTournament, normalizePlayerName, formatPlayerName, getTournamentSlug } from './helpers.js';
-import { resolveTournament } from './tournament.js';
+import { resolveTournament, computeAppState } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings, extractPairingsColors,
@@ -75,7 +75,45 @@ export async function handleScheduled(env) {
     }));
     console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(parsed.pgnColors).length} rounds of PGN colors).`);
 
+    // Pre-compute app state so /tournament-state is a single KV read
+    const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
+    const appState = computeAppState(cached, tournament);
     const slug = slugifyTournament(tournament.name);
+
+    // Extract all pairings into a flat array for per-player lookup
+    const allPairings = [];
+    for (const section of parsed.pairingsSections) {
+        for (const row of section.rows) {
+            const wInfo = parsePlayerInfo(row.whiteName);
+            const bInfo = parsePlayerInfo(row.blackName);
+            if (/^(bye|full point bye)$/i.test(wInfo.name)) continue;
+            if (/^(bye|full point bye)$/i.test(bInfo.name)) {
+                allPairings.push({
+                    player: wInfo.name, isBye: true,
+                    byeType: row.whiteResult === '1' ? 'full' : 'half',
+                    section: section.section,
+                });
+                continue;
+            }
+            const board = row.board ? parseInt(row.board, 10) || null : null;
+            allPairings.push({
+                board: board || 'TBD',
+                white: wInfo.name, whiteRating: wInfo.rating, whiteUrl: row.whiteUrl || null,
+                black: bInfo.name, blackRating: bInfo.rating, blackUrl: row.blackUrl || null,
+                section: section.section,
+            });
+        }
+    }
+
+    await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
+        state: appState.state, round: appState.round, info: appState.info,
+        tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
+        tournamentSlug: slug, roundDates: tournament.roundDates || [],
+        totalRounds: appState.totalRounds, nextTournament: tournament.nextTournament || null,
+        fetchedAt: new Date().toISOString(), offSeason: appState.offSeason,
+        pairings: allPairings,
+    }));
+    console.log(`Cached appState in KV (${allPairings.length} pairings).`);
 
     // Load alias map, USCF ID→canonical name map, and rating history for name canonicalization + ELO fallback
     const aliasMap = new Map();

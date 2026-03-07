@@ -2,14 +2,14 @@
  * Worker entry point — HTTP router and cron dispatch.
  *
  * All domain logic lives in focused modules:
- *   helpers.js    — response builders, name utils, rate limiting, constants
+ *   helpers.js    — response builders, name utils, constants
  *   tournament.js — tournament resolution, app state, tournament endpoints
  *   games.js      — D1 query endpoints, OG images, submissions, player history
  *   push.js       — push subscription CRUD, notification dispatch
  *   cron.js       — scheduled HTML fetching, caching, D1 ingestion, push dispatch
  */
 
-import { corsHeaders, corsResponse, checkRateLimit } from './helpers.js';
+import { corsHeaders, corsResponse } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handlePlayerHistory, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest } from './push.js';
@@ -31,9 +31,6 @@ export default {
         const path = url.pathname;
 
         try {
-            const rateLimited = await checkRateLimit(request, env, path);
-            if (rateLimited) return rateLimited;
-
             // Tournament & state
             if (path === '/tournament-html' && request.method === 'GET') return await handleTournamentHtml(request, env);
             if (path === '/tournament-state' && request.method === 'GET') return await handleTournamentState(request, env);
