@@ -643,33 +643,32 @@ function renderBrowserContent(containerEl, roundNumbers) {
     // Chips container (populated by renderChips when player is selected)
     const chipsHtml = '<div class="browser-chips hidden" id="browser-chips"></div>';
 
-    // Round tabs (hide in player mode; hide in local "All Events" mode — rounds aren't comparable across events)
+    // Round dropdown + section filters — combined into one row
     const isLocal = !!getGamesData()?.query?.local;
     const showRounds = !playerMode && roundNumbers.length > 0 && (!isLocal || _filterEvent);
-    let tabsHtml = '';
-    if (showRounds) {
-        tabsHtml = '<div class="browser-rounds" id="browser-rounds">';
-        for (const r of roundNumbers) {
-            const active = r === _selectedRound ? ' browser-round-active' : '';
-            const label = `R${r}`;
-            tabsHtml += `<button class="browser-round-btn${active}" data-round="${r}">${label}</button>`;
-        }
-        tabsHtml += '</div>';
-    }
-
-    // Section filters (only when viewing a single tournament's sections)
     const showSections = !playerMode && _sectionList.length > 1 && (!isLocal || _filterEvent);
-    let sectionsHtml = '';
-    if (showSections) {
-        sectionsHtml = '<div class="browser-sections" id="browser-sections">';
-        for (const s of _sectionList) {
-            const active = _visibleSections.has(s) ? ' browser-section-active' : '';
-            sectionsHtml += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
+
+    let filtersHtml = '';
+    if (showRounds || showSections) {
+        filtersHtml = '<div class="browser-filters" id="browser-filters">';
+        if (showRounds) {
+            filtersHtml += '<select class="browser-round-select" id="browser-round-select">';
+            for (const r of roundNumbers) {
+                const selected = r === _selectedRound ? ' selected' : '';
+                filtersHtml += `<option value="${r}"${selected}>R${r}</option>`;
+            }
+            filtersHtml += '</select>';
         }
-        sectionsHtml += '</div>';
+        if (showSections) {
+            for (const s of _sectionList) {
+                const active = _visibleSections.has(s) ? ' browser-section-active' : '';
+                filtersHtml += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
+            }
+        }
+        filtersHtml += '</div>';
     }
 
-    containerEl.innerHTML = searchHtml + chipsHtml + tabsHtml + sectionsHtml + '<div id="browser-games" class="browser-games"></div>';
+    containerEl.innerHTML = searchHtml + chipsHtml + filtersHtml + '<div class="browser-games-wrap raised-panel"><div id="browser-games" class="browser-games"></div></div>';
 
     // Populate chips and game list
     if (playerMode) renderChips();
@@ -690,16 +689,14 @@ function renderBrowserContent(containerEl, roundNumbers) {
         if (query.length === 0) {
             autocomplete.classList.add('hidden');
             searchInput.setAttribute('aria-expanded', 'false');
-            document.getElementById('browser-rounds')?.classList.remove('hidden');
-            document.getElementById('browser-sections')?.classList.remove('hidden');
+            document.getElementById('browser-filters')?.classList.remove('hidden');
             if (_selectedPlayer) {
                 clearPlayerMode();
                 clearBtn.classList.add('hidden');
             }
             return;
         }
-        document.getElementById('browser-rounds')?.classList.add('hidden');
-        document.getElementById('browser-sections')?.classList.add('hidden');
+        document.getElementById('browser-filters')?.classList.add('hidden');
         const matches = _playerList.filter(name => name.toLowerCase().includes(query)).slice(0, 8);
         if (matches.length === 0) {
             autocomplete.innerHTML = '<div class="browser-ac-empty">No players found</div>';
@@ -804,22 +801,6 @@ function renderBrowserContent(containerEl, roundNumbers) {
                 return;
             }
 
-            // Round tab clicks
-            const roundBtn = e.target.closest('.browser-round-btn[data-round]');
-            if (roundBtn) {
-                const r = parseInt(roundBtn.dataset.round, 10);
-                const isLocal = !!getGamesData()?.query?.local;
-                // Import mode: toggle (click again to deselect). TNM mode: always select.
-                _selectedRound = (isLocal && _selectedRound === r) ? null : r;
-                containerEl.querySelectorAll('.browser-round-btn').forEach(b =>
-                    b.classList.toggle('browser-round-active', parseInt(b.dataset.round) === _selectedRound)
-                );
-                _explorerGameIds = null;
-                renderGamesList();
-                syncExplorer();
-                return;
-            }
-
             // Section filter clicks
             const sectionBtn = e.target.closest('.browser-section-btn[data-section]');
             if (sectionBtn) {
@@ -862,6 +843,16 @@ function renderBrowserContent(containerEl, roundNumbers) {
                 } else {
                     openGameFromBrowser(gameId);
                 }
+            }
+        });
+
+        // Round dropdown change
+        containerEl.addEventListener('change', (e) => {
+            if (e.target.id === 'browser-round-select') {
+                _selectedRound = parseInt(e.target.value, 10);
+                _explorerGameIds = null;
+                renderGamesList();
+                syncExplorer();
             }
         });
     }
