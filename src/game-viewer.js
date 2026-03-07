@@ -1,4 +1,4 @@
-import { openModal, closeModal } from './modal.js';
+import { openModal, closeModal, onModalClose } from './modal.js';
 import { initViewer, destroyViewer, goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, isBranchPopoverOpen, branchPopoverNavigate, isCommentsHidden, isBranchMode } from './pgn-viewer.js';
 import { openEditor, closeEditor, editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, undo as editorUndo, deleteFromHere, isEditorDirty, copyPgn } from './pgn-editor.js';
 import { loadRoundHistory } from './history.js';
@@ -206,13 +206,16 @@ function renderExplorer() {
         const total = stats?.total || 0;
         const gameLabel = total === 1 ? 'game' : 'games';
         const moveCount = _explorerMoveHistory.length;
-        let title = 'Starting Position';
+        let title = '<span class="explorer-ply" data-ply="0">Starting Position</span>';
         if (moveCount > 0) {
             const parts = [];
             for (let i = 0; i < _explorerMoveHistory.length; i++) {
                 const moveNum = Math.floor(i / 2) + 1;
-                if (i % 2 === 0) parts.push(`${moveNum}.\u00A0${_explorerMoveHistory[i]}`);
-                else parts.push(_explorerMoveHistory[i]);
+                const san = _explorerMoveHistory[i];
+                const ply = i + 1;
+                const moveSpan = `<span class="explorer-ply" data-ply="${ply}">${san}</span>`;
+                if (i % 2 === 0) parts.push(`${moveNum}.\u00A0${moveSpan}`);
+                else parts.push(moveSpan);
             }
             title = parts.join(' ');
         }
@@ -230,6 +233,10 @@ function renderExplorer() {
                 <div class="explorer-count">${total} ${gameLabel}</div>
             </div>
         `;
+        headerEl.onclick = (e) => {
+            const plyEl = e.target.closest('[data-ply]');
+            if (plyEl) explorerGoToPly(parseInt(plyEl.dataset.ply, 10));
+        };
     }
 
     // Move table
@@ -334,6 +341,25 @@ export function explorerGoToStart() {
 
     const board = getBoard();
     if (board) board.position(START_FEN);
+
+    renderExplorer();
+    notifyExplorerPosition();
+}
+
+/**
+ * Go to a specific ply in the explorer (0 = starting position).
+ */
+function explorerGoToPly(ply) {
+    if (ply >= _explorerMoveHistory.length) return;
+    if (ply === 0) { explorerGoToStart(); return; }
+    const movesToKeep = _explorerMoveHistory.slice(0, ply);
+    _explorerChess = new Chess();
+    for (const san of movesToKeep) _explorerChess.move(san);
+    _explorerMoveHistory = movesToKeep;
+    _explorerSelectedRow = 0;
+
+    const board = getBoard();
+    if (board) board.position(_explorerChess.fen());
 
     renderExplorer();
     notifyExplorerPosition();
@@ -449,7 +475,11 @@ let _pendingAction = null;
 function checkDirtyAndProceed(action) {
     if (panelMode === 'editor' && isEditorDirty()) {
         _pendingAction = action;
-        document.getElementById('editor-dirty-dialog')?.classList.remove('hidden');
+        const dialog = document.getElementById('editor-dirty-dialog');
+        if (dialog) {
+            dialog.classList.remove('hidden');
+            dialog.onclick = (e) => { if (e.target === dialog) hideDirtyDialog(); };
+        }
         return false;
     }
     action();
@@ -832,26 +862,32 @@ export function closeGamePanel() {
 
 function forceCloseGamePanel() {
     const onCloseCallback = _onClose;
+    const closingMode = panelMode;
 
-    if (panelMode === 'editor') {
-        closeEditor();
-    } else if (panelMode === 'explorer') {
-        destroyExplorer();
-    } else {
-        destroyViewer();
-    }
-
-    panelMode = 'viewer';
-    _currentGameId = null;
-    document.querySelector('.modal-content-viewer')?.classList.remove('explorer-active');
-    restoreViewerToolbar();
+    // Start close animation first, then clean up DOM after animation ends
     _onPrev = null;
     _onNext = null;
     _onClose = null;
-    _savedExplorerMoves = null;
-    hideBrowserPanel();
+
+    onModalClose('viewer-modal', () => {
+        if (closingMode === 'editor') {
+            closeEditor();
+        } else if (closingMode === 'explorer') {
+            destroyExplorer();
+        } else {
+            destroyViewer();
+        }
+
+        panelMode = 'viewer';
+        _currentGameId = null;
+        document.querySelector('.modal-content-viewer')?.classList.remove('explorer-active');
+        restoreViewerToolbar();
+        _savedExplorerMoves = null;
+        hideBrowserPanel();
+        onCloseCallback?.();
+    });
+
     closeModal('viewer-modal');
-    onCloseCallback?.();
 }
 
 

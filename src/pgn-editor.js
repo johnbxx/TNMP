@@ -927,6 +927,7 @@ export function showImportDialog() {
     textarea.value = '';
     dialog.classList.remove('hidden');
     textarea.focus();
+    dialog.onclick = (e) => { if (e.target === dialog) hideImportDialog(); };
 }
 
 export function hideImportDialog() {
@@ -1038,6 +1039,7 @@ export function showHeaderEditor() {
 
     popup.classList.remove('hidden');
     document.getElementById('header-white').focus();
+    popup.onclick = (e) => { if (e.target === popup) hideHeaderEditor(); };
 }
 
 export function hideHeaderEditor() {

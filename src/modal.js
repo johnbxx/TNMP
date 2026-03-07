@@ -26,7 +26,7 @@ export function openModal(modalId, focusTarget) {
     if (!modal) return;
 
     previousFocus.set(modalId, document.activeElement);
-    modal.classList.remove('hidden');
+    modal.classList.remove('hidden', 'closing');
     document.body.style.overflow = 'hidden';
 
     const container = document.querySelector('.container');
@@ -46,23 +46,38 @@ export function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal || modal.classList.contains('hidden')) return;
 
-    modal.classList.add('hidden');
+    // Play closing animation, then hide
+    modal.classList.add('closing');
+    let done = false;
+    const onDone = () => {
+        if (done) return;
+        done = true;
+        modal.classList.remove('closing');
+        modal.classList.add('hidden');
 
-    const hook = closeHooks[modalId];
-    if (hook) hook();
+        const hook = closeHooks[modalId];
+        if (hook) hook();
 
-    const anyOpen = document.querySelector('.modal:not(.hidden)');
-    if (!anyOpen) {
-        document.body.style.overflow = '';
-        const container = document.querySelector('.container');
-        if (container) container.removeAttribute('aria-hidden');
+        const anyOpen = document.querySelector('.modal:not(.hidden)');
+        if (!anyOpen) {
+            document.body.style.overflow = '';
+            const container = document.querySelector('.container');
+            if (container) container.removeAttribute('aria-hidden');
+        }
+
+        const prev = previousFocus.get(modalId);
+        if (prev && typeof prev.focus === 'function') {
+            prev.focus();
+        }
+        previousFocus.delete(modalId);
+    };
+
+    // Listen for close animation end on content element
+    const content = modal.querySelector('.modal-content, .modal-content-viewer');
+    if (content) {
+        content.addEventListener('animationend', () => onDone(), { once: true });
     }
-
-    const prev = previousFocus.get(modalId);
-    if (prev && typeof prev.focus === 'function') {
-        prev.focus();
-    }
-    previousFocus.delete(modalId);
+    setTimeout(onDone, 200); // safety fallback
 }
 
 /**
