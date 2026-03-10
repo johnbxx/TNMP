@@ -183,7 +183,12 @@ export async function openGamePanel(opts = {}) {
     if (!playerColor) playerColor = 'White';
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
-    // Don't close explorer — its game ID filter is needed if user goes back to browser
+    // On desktop, close explorer (sidebar shows browser list alongside the game).
+    // On mobile, keep explorer alive so its game ID filter persists for back-navigation.
+    if (_gamesState?.explorerActive && isCombinedWidth()) {
+        games.closeExplorer();
+    }
+
     _hasGame = true;
     setToolbarButtons();
 
