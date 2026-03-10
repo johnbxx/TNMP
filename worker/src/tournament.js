@@ -4,7 +4,7 @@
  * Handles: /tournament-html, /tournament-state, /og-state, /health
  */
 
-import { corsResponse, mergeGameColors, slugifyTournament, getTournamentSlug, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL, META_CACHE_TTL } from './helpers.js';
+import { corsResponse, mergeGameColors, slugifyTournament, getTournamentSlug, normalizePlayerName, formatPlayerName, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL, META_CACHE_TTL } from './helpers.js';
 import { hasPairings, hasResults, findPlayerPairing, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
 
 // --- Tournament Resolution Helpers ---
@@ -345,22 +345,22 @@ export async function handleTournamentState(request, env) {
  * Case-insensitive substring match, same as findPlayerPairing.
  */
 function findPairingInCache(pairings, playerName, round) {
-    const lower = playerName.toLowerCase();
+    const norm = normalizePlayerName(playerName);
     for (const p of pairings) {
-        if (p.isBye && p.player.toLowerCase().includes(lower)) {
+        if (p.isBye && normalizePlayerName(p.player) === norm) {
             return { isBye: true, byeType: p.byeType, section: p.section, round };
         }
-        if (p.white?.toLowerCase().includes(lower)) {
+        if (p.white && normalizePlayerName(p.white) === norm) {
             return {
                 board: p.board, color: 'White',
-                opponent: p.black, opponentRating: p.blackRating,
+                opponent: formatPlayerName(p.black), opponentRating: p.blackRating,
                 opponentUrl: p.blackUrl, section: p.section, round,
             };
         }
-        if (p.black?.toLowerCase().includes(lower)) {
+        if (p.black && normalizePlayerName(p.black) === norm) {
             return {
                 board: p.board, color: 'Black',
-                opponent: p.white, opponentRating: p.whiteRating,
+                opponent: formatPlayerName(p.white), opponentRating: p.whiteRating,
                 opponentUrl: p.whiteUrl, section: p.section, round,
             };
         }
