@@ -53,6 +53,16 @@ export function corsResponse(data, status, env, request) {
 
 // --- Player Name Utilities ---
 
+/**
+ * Title-case a name: "JOHN BOYER" → "John Boyer", "O'BRIEN" → "O'Brien".
+ * Handles comma-separated "LAST, FIRST" format.
+ */
+export function titleCaseName(name) {
+    return name.replace(/\w\S*/g, w =>
+        w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    );
+}
+
 export function normalizePlayerName(name) {
     const t = name.trim();
     const parts = t.split(/,\s*/);
@@ -70,6 +80,24 @@ export function formatPlayerName(name) {
     const parts = name.split(/,\s*/);
     if (parts.length >= 2) return `${parts[1]} ${parts[0]}`;
     return name;
+}
+
+/**
+ * Normalize a section name from the tournament page.
+ * Fixes common issues: "u" prefix → "U", truncated ranges like "1600-199" → "1600-1999".
+ */
+export function normalizeSection(section) {
+    if (!section) return section;
+    let s = section.trim().replace(/^u(?=\d)/i, 'U');
+    // Fix truncated rating ranges: "1600-199" → "1600-1999"
+    // Rating band upper bounds are always X99 (e.g., 1999, 2199). If upper bound has
+    // fewer than 4 digits, reconstruct it from the lower bound's thousands digit + "999".
+    s = s.replace(/^(\d{4})-(\d{1,3})$/, (_, lo, hi) => {
+        const loThousands = Math.floor(parseInt(lo) / 1000);
+        const candidate = loThousands * 1000 + 999;
+        return candidate > parseInt(lo) ? `${lo}-${candidate}` : `${lo}-${hi}`;
+    });
+    return s;
 }
 
 export function buildPlayerNamePatterns(playerName) {

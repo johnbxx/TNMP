@@ -8,7 +8,7 @@
  *   4. Pure utilities (message composition, tournament list, round dates, PGN extraction)
  */
 
-import { pacificDatetime } from './helpers.js';
+import { pacificDatetime, normalizeSection } from './helpers.js';
 
 const SITE_URL = 'https://tnmpairings.com';
 
@@ -56,10 +56,10 @@ function parsePairingsTable(tableHtml) {
     while ((m = regex.exec(tableHtml)) !== null) {
         rows.push({
             board: decodeEntities(m[1]),
-            whiteResult: m[2].trim(),
+            whiteResult: decodeEntities(m[2]),
             whiteName: m[4].trim(),
             whiteUrl: m[3] || null,
-            blackResult: m[5].trim(),
+            blackResult: decodeEntities(m[5]),
             blackName: m[7].trim(),
             blackUrl: m[6] || null,
         });
@@ -126,8 +126,7 @@ export function parseTournamentPage(html) {
             if (eventMatch) {
                 const colonIdx = eventMatch[1].indexOf(':');
                 if (colonIdx >= 0) {
-                    section = eventMatch[1].substring(colonIdx + 1).trim();
-                    section = section.replace(/^u(?=\d)/i, 'U');
+                    section = normalizeSection(eventMatch[1].substring(colonIdx + 1));
                 }
             }
 
@@ -175,7 +174,7 @@ export function parseTournamentPage(html) {
             if (m) {
                 const round = parseInt(m[1], 10);
                 if (roundNumber === null || round > roundNumber) roundNumber = round;
-                pairingsSections.push({ round, section: m[2].trim(), rows: parsePairingsTable(table) });
+                pairingsSections.push({ round, section: normalizeSection(m[2]), rows: parsePairingsTable(table) });
             }
         } else if (/Standings/i.test(h3Text)) {
             standingsParts.push(h3 + table);
@@ -220,14 +219,19 @@ function findMaxRound(sections) {
 function checkResults(sections) {
     if (sections.length === 0) return false;
     const maxRound = findMaxRound(sections);
+    let totalGames = 0;
+    let gamesWithResults = 0;
     for (const s of sections) {
         if (s.round !== maxRound) continue;
         if (/extra games/i.test(s.section)) continue;
-        if (s.rows.length === 0) continue;
-        const row = s.rows[0];
-        return row.whiteResult.trim() !== '' || row.blackResult.trim() !== '';
+        for (const row of s.rows) {
+            if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
+            totalGames++;
+            if (row.whiteResult.trim() !== '' || row.blackResult.trim() !== '') gamesWithResults++;
+        }
     }
-    return false;
+    // Require at least half of non-bye games to have results
+    return totalGames > 0 && gamesWithResults >= totalGames / 2;
 }
 
 /**

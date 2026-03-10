@@ -365,16 +365,15 @@ export async function handlePlayerHistory(request, env) {
     const rounds = {};
     for (let i = 0; i < foundPlayer.rounds.length; i++) {
         const roundData = foundPlayer.rounds[i];
-        if (!roundData) continue;
         const roundNum = i + 1;
-        const code = roundData.result;
+        const code = roundData?.result || null;
 
         if (code === 'H' || code === 'B' || code === 'U') {
             rounds[roundNum] = { result: code, isBye: true, byeType: byeTypes[code], color: null, opponent: null, opponentRating: null, board: null };
             continue;
         }
 
-        const opponent = rankMap[roundData.opponentRank];
+        const opponent = roundData ? rankMap[roundData.opponentRank] : null;
         let color = null, board = null, gameId = null;
 
         // D1 lookup (single query above), then pairingsColors fallback for very recent rounds

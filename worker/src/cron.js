@@ -5,7 +5,7 @@
  * Called by the worker's scheduled() entry point.
  */
 
-import { slugifyTournament, normalizePlayerName, formatPlayerName, getTournamentSlug } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, formatPlayerName, titleCaseName, normalizeSection, getTournamentSlug } from './helpers.js';
 import { resolveTournament, computeAppState } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
@@ -186,7 +186,18 @@ export async function handleScheduled(env) {
                 return { name: canonical.name, norm: canonical.norm };
             }
         }
-        return { name, norm };
+        // Fallback: title-case the raw name and ensure "Last, First" format
+        const tc = titleCaseName(name);
+        const parts = tc.split(/,\s*/);
+        if (parts.length >= 2) return { name: tc, norm };
+        // "First Last" → "Last, First"
+        const words = tc.split(/\s+/);
+        if (words.length >= 2) {
+            const last = words[words.length - 1];
+            const first = words.slice(0, -1).join(' ');
+            return { name: `${last}, ${first}`, norm };
+        }
+        return { name: tc, norm };
     }
 
     // Canonicalize standings names and persist to KV
@@ -308,18 +319,21 @@ export async function handleScheduled(env) {
                     if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
                     const board = row.board ? parseInt(row.board, 10) || null : null;
                     if (!board) continue;
-                    const wRaw = parsePlayerInfo(row.whiteName).name;
-                    const bRaw = parsePlayerInfo(row.blackName).name;
-                    const wc = canonicalize(wRaw);
-                    const bc = canonicalize(bRaw);
+                    const wInfo = parsePlayerInfo(row.whiteName);
+                    const bInfo = parsePlayerInfo(row.blackName);
+                    const wc = canonicalize(wInfo.name);
+                    const bc = canonicalize(bInfo.name);
                     const white = wc.name, whiteNorm = wc.norm;
                     const black = bc.name, blackNorm = bc.norm;
                     shellStmts.push(
                         env.DB.prepare(
                             `INSERT OR IGNORE INTO games
-                             (tournament_slug, round, board, white, black, white_norm, black_norm, result, section, pgn)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
-                        ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm, parseGameResult(row.whiteResult, row.blackResult), section.section)
+                             (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, pgn)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
+                        ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm,
+                            wInfo.rating || ratingAtDate(white, null),
+                            bInfo.rating || ratingAtDate(black, null),
+                            parseGameResult(row.whiteResult, row.blackResult), normalizeSection(section.section))
                     );
                 }
             }
