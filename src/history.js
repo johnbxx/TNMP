@@ -41,12 +41,7 @@ export function clearRoundHistory() {
  */
 export async function fetchPlayerHistory(playerName, tournamentName) {
     try {
-        let queryName = playerName;
-        try {
-            const { getPlayerDbName } = await import('./browser-data.js');
-            queryName = getPlayerDbName(playerName);
-        } catch { /* fallback to display name */ }
-        const response = await fetch(`${WORKER_URL}/player-history?name=${encodeURIComponent(queryName)}`);
+        const response = await fetch(`${WORKER_URL}/player-history?name=${encodeURIComponent(playerName)}`);
         if (!response.ok) {
             console.log(`Player history fetch returned ${response.status}`);
             return loadRoundHistory();

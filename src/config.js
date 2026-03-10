@@ -47,19 +47,10 @@ export const STATE = {
 };
 
 // Runtime app state (written by app.js, read by ui/share/countdown/debug)
-let _currentState = null;
-let _currentPairing = null;
-let _lastRoundNumber = 1;
-let _roundInfo = '';
+let _appState = { state: null, pairing: null, lastRoundNumber: 1, roundInfo: '' };
 
-export function getCurrentState() { return _currentState; }
-export function setCurrentState(state) { _currentState = state; }
-export function getCurrentPairing() { return _currentPairing; }
-export function setCurrentPairing(pairing) { _currentPairing = pairing; }
-export function getLastRoundNumber() { return _lastRoundNumber; }
-export function setLastRoundNumber(n) { _lastRoundNumber = n; }
-export function getRoundInfo() { return _roundInfo; }
-export function setRoundInfo(info) { _roundInfo = info; }
+export function getAppState() { return _appState; }
+export function setAppState(partial) { _appState = { ..._appState, ...partial }; }
 
 // Debug PGN for testing the game viewer
 export const DEBUG_PGN = `[Event "2026 New Year TNM: 1600-1999"]

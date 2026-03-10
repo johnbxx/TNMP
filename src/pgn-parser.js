@@ -254,14 +254,26 @@ export function buildCleanPgn(pgn, mainLineMoves) {
 
 /**
  * Find the index where movetext begins (after the last header line).
- * Returns the character index after the last ]\n (or ]\r\n), or -1 if no headers found.
+ * Scans forward through lines matching [Tag "value"] rather than using
+ * lastIndexOf, which fails when movetext contains ]\n (e.g. {[#]\n}).
  */
 function findHeaderEnd(pgn) {
-    let i = pgn.lastIndexOf(']\n');
-    if (i >= 0) return i + 2;
-    i = pgn.lastIndexOf(']\r\n');
-    if (i >= 0) return i + 3;
-    return -1;
+    let end = -1;
+    let pos = 0;
+    while (pos < pgn.length) {
+        // Skip whitespace/blank lines
+        while (pos < pgn.length && (pgn[pos] === ' ' || pgn[pos] === '\t' || pgn[pos] === '\r' || pgn[pos] === '\n')) pos++;
+        if (pos >= pgn.length || pgn[pos] !== '[') break;
+        // Find end of line
+        let eol = pgn.indexOf('\n', pos);
+        if (eol === -1) eol = pgn.length;
+        const line = pgn.slice(pos, eol).trim();
+        // Must look like a header: [Word "..."]
+        if (!/^\[\w+\s+".*"\]\s*$/.test(line)) break;
+        end = eol + 1;
+        pos = end;
+    }
+    return end > 0 ? end : -1;
 }
 
 /**

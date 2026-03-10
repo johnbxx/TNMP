@@ -230,8 +230,7 @@
                     <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
                     <div id="viewer-moves" class="viewer-moves"></div>
                 </div>
-                <!-- Viewer toolbar (visible in viewer mode) -->
-                <div id="viewer-toolbar" class="viewer-toolbar raised-panel">
+                <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
                 <div class="viewer-tool-group">
                     <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg></button>
                     <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg></button>
@@ -247,7 +246,6 @@
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-tool-group">
-                    <button id="viewer-edit" data-action="viewer-edit" class="viewer-tool-btn hidden" aria-label="Edit game" data-tooltip="Edit"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
                     <button data-action="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess" data-tooltip="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
                     <div class="share-btn-wrapper">
                         <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
@@ -258,31 +256,12 @@
                             <button class="share-option" data-action="share-native">Share...</button>
                         </div>
                     </div>
+                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg></button>
                 </div>
-                </div>
-                <!-- Editor toolbar (hidden by default, visible in editor mode) -->
-                <div id="editor-toolbar" class="viewer-toolbar raised-panel hidden">
-                    <div class="viewer-tool-group">
-                        <button data-action="editor-back" class="viewer-tool-btn" aria-label="Back to viewer" data-tooltip="Back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></button>
-                    </div>
-                    <div class="viewer-toolbar-sep"></div>
-                    <div class="viewer-nav-group">
-                        <button data-action="editor-start" class="viewer-nav-btn" aria-label="Go to start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
-                        <button data-action="editor-prev" class="viewer-nav-btn" aria-label="Previous move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
-                        <button data-action="editor-next" class="viewer-nav-btn" aria-label="Next move"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></svg></button>
-                        <button data-action="editor-end" class="viewer-nav-btn" aria-label="Go to end"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></svg></button>
-                    </div>
-                    <div class="viewer-toolbar-sep"></div>
-                    <div class="viewer-tool-group">
-                        <button data-action="editor-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
-                        <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg></button>
-                        <button data-action="editor-import" class="viewer-tool-btn" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>
-                        <button id="editor-copy" data-action="editor-copy" class="viewer-tool-btn" aria-label="Copy PGN" data-tooltip="Copy PGN"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
-                    </div>
                 </div>
             </div>
-            <!-- Editor overlays (always in DOM, hidden unless editor mode) -->
-            <div id="editor-promotion" class="editor-promotion hidden">
+            <!-- Panel overlays (always in DOM, shown contextually) -->
+            <div id="board-promotion" class="board-promotion hidden">
                 <button class="promo-btn" data-piece="q"><img alt="Queen"></button>
                 <button class="promo-btn" data-piece="r"><img alt="Rook"></button>
                 <button class="promo-btn" data-piece="b"><img alt="Bishop"></button>
@@ -305,26 +284,26 @@
                     <h3 class="editor-header-title">Game Info</h3>
                     <div class="editor-header-fields">
                         <label for="header-white">White</label>
-                        <input type="text" id="header-white" class="editor-header-input" placeholder="First Last">
+                        <input type="text" id="header-white" class="editor-header-input" data-header="White" placeholder="First Last">
                         <label for="header-black">Black</label>
-                        <input type="text" id="header-black" class="editor-header-input" placeholder="First Last">
+                        <input type="text" id="header-black" class="editor-header-input" data-header="Black" placeholder="First Last">
                         <label for="header-result">Result</label>
-                        <select id="header-result" class="editor-header-input">
+                        <select id="header-result" class="editor-header-input" data-header="Result">
                             <option value="*">*</option>
                             <option value="1-0">1-0</option>
                             <option value="0-1">0-1</option>
                             <option value="1/2-1/2">1/2-1/2</option>
                         </select>
                         <label for="header-date">Date</label>
-                        <input type="text" id="header-date" class="editor-header-input" placeholder="YYYY.MM.DD">
+                        <input type="text" id="header-date" class="editor-header-input" data-header="Date" placeholder="YYYY.MM.DD">
                         <label for="header-white-elo">White Elo</label>
-                        <input type="text" id="header-white-elo" class="editor-header-input" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
+                        <input type="text" id="header-white-elo" class="editor-header-input" data-header="WhiteElo" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
                         <label for="header-black-elo">Black Elo</label>
-                        <input type="text" id="header-black-elo" class="editor-header-input" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
+                        <input type="text" id="header-black-elo" class="editor-header-input" data-header="BlackElo" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
                         <label for="header-event">Event</label>
-                        <input type="text" id="header-event" class="editor-header-input" placeholder="Tournament name">
+                        <input type="text" id="header-event" class="editor-header-input" data-header="Event" placeholder="Tournament name">
                         <label for="header-round">Round</label>
-                        <input type="text" id="header-round" class="editor-header-input" placeholder="1 or 1.5">
+                        <input type="text" id="header-round" class="editor-header-input" data-header="Round" placeholder="1 or 1.5">
                     </div>
                     <div class="editor-header-actions">
                         <button type="button" data-action="header-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>

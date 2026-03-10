@@ -5,46 +5,27 @@
 import { WORKER_URL } from './config.js';
 
 const GAMES_CACHE_KEY = 'gamesData';
-
-/**
- * Internal state.
- * gamesData.games is always a flat array of game objects from /query.
- */
-let gamesData = null;
+let tournamentData = null;
+let playerData = null;
 let tournamentList = null;
 let activeTournamentSlug = null;
 let fetchGeneration = 0;
-
-// --- Change notification ---
-
 let _onChange = null;
-
-/** Register a callback to be called whenever gamesData changes. */
 export function onGamesChange(fn) { _onChange = fn; }
-
-// --- Getters / setters ---
-
-export function getGamesData() { return gamesData; }
+export function getTournamentData() { return tournamentData; }
+export function getPlayerData() { return playerData; }
+export function getGamesData() { return playerData || tournamentData; } // convenience: active slot
 export function getActiveTournamentSlug() { return activeTournamentSlug; }
 export function setActiveTournamentSlug(slug) { activeTournamentSlug = slug; }
-export function clearGamesData() { gamesData = null; }
+export function clearTournamentData() { tournamentData = null; }
+export function clearPlayerData() { playerData = null; }
 
-/**
- * Directly inject game data (e.g., from PGN import), bypassing fetchGames().
- * Bumps fetchGeneration so any in-flight fetches won't overwrite this data.
- */
+// Inject data directly (e.g., PGN import). Bumps generation to discard in-flight fetches.
 export function setGamesData(data) {
     fetchGeneration++;
-    gamesData = data;
+    tournamentData = data;
 }
 
-// --- Fetching ---
-
-/**
- * Fetch games from /query with arbitrary parameters.
- * @param {object} [queryParams] - Key/value pairs for the query string
- * @param {object} [opts] - Options: { cache: boolean } — cache to localStorage
- */
 export async function fetchGames(queryParams = {}, { cache = false } = {}) {
     const gen = ++fetchGeneration;
     const params = new URLSearchParams();
@@ -59,23 +40,27 @@ export async function fetchGames(queryParams = {}, { cache = false } = {}) {
     const data = await response.json();
 
     // Discard result if a newer fetch was started while we were awaiting
-    if (gen !== fetchGeneration) return gamesData;
+    if (gen !== fetchGeneration) return getGamesData();
 
-    gamesData = { games: data.games, query: queryParams };
+    const result = { games: data.games, query: queryParams };
+
+    // Route to the correct slot based on query type
+    if (queryParams.player) {
+        playerData = result;
+    } else {
+        tournamentData = result;
+    }
 
     if (cache) {
-        try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(gamesData)); } catch { /* quota */ }
+        try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify(result)); } catch { /* quota */ }
     }
     _onChange?.();
-    return gamesData;
+    return result;
 }
 
-/**
- * Prefetch game data in the background so the browser opens instantly.
- * Loads from localStorage first, then refreshes from the network.
- */
+// Load from localStorage, then refresh from network in background.
 export function prefetchGames() {
-    if (gamesData) return;
+    if (tournamentData) return;
     // Load from localStorage immediately
     try {
         const cached = localStorage.getItem(GAMES_CACHE_KEY);
@@ -85,7 +70,7 @@ export function prefetchGames() {
             if (parsed.rounds && !parsed.games) {
                 localStorage.removeItem(GAMES_CACHE_KEY);
             } else {
-                gamesData = parsed;
+                tournamentData = parsed;
             }
         }
     } catch {
@@ -98,9 +83,6 @@ export function prefetchGames() {
     fetchPlayerList().catch(() => {});
 }
 
-/**
- * Fetch the list of all tournaments (cached after first call).
- */
 export async function fetchTournamentList() {
     if (tournamentList) return tournamentList;
     const response = await fetch(`${WORKER_URL}/tournaments`);
@@ -110,10 +92,6 @@ export async function fetchTournamentList() {
     return tournamentList;
 }
 
-/**
- * Fetch distinct player names across all tournaments (cached after first call).
- * Returns a flat array of name strings for autocomplete.
- */
 let allPlayers = null;
 let playerIndex = null; // display name → { dbName, uscfId, rating }
 
@@ -138,41 +116,25 @@ export async function fetchPlayerList() {
     return allPlayers;
 }
 
-/** Look up a player's DB name ("LastName, FirstName") by display name. */
-export function getPlayerDbName(displayName) {
-    return playerIndex?.[displayName]?.dbName || displayName;
+export function getPlayerInfo(displayName) {
+    return playerIndex?.[displayName] ?? null;
 }
 
-/** Look up a player's USCF ID by display name (available after fetchPlayerList). */
-export function getPlayerUscfId(displayName) {
-    return playerIndex?.[displayName]?.uscfId || null;
-}
-
-/** Look up a player's current USCF rating by display name (available after fetchPlayerList). */
-export function getPlayerRating(displayName) {
-    return playerIndex?.[displayName]?.rating || null;
-}
-
-// --- Derived data helpers ---
-
-/**
- * Look up a cached game by gameId.
- */
 export function getCachedGame(gameId) {
-    if (!gamesData?.games || !gameId) return null;
-    return gamesData.games.find(g => g.gameId === gameId) || null;
+    if (!gameId) return null;
+    // Search player data first (more specific), then tournament data
+    return playerData?.games?.find(g => g.gameId === gameId)
+        || tournamentData?.games?.find(g => g.gameId === gameId)
+        || null;
 }
 
-/**
- * Build sorted, unique list of player names across all games.
- */
 export function buildPlayerList() {
-    if (!gamesData?.games) return [];
+    const games = tournamentData?.games;
+    if (!games) return [];
     const names = new Set();
-    for (const g of gamesData.games) {
+    for (const g of games) {
         if (g.white) names.add(g.white);
         if (g.black) names.add(g.black);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
 }
-

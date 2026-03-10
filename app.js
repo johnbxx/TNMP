@@ -1,4 +1,4 @@
-import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setCurrentState, setCurrentPairing, setLastRoundNumber, setRoundInfo, DEBUG_PGN } from './src/config.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setAppState, DEBUG_PGN } from './src/config.js';
 import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
@@ -7,13 +7,19 @@ import { previewState } from './src/debug.js';
 import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/history.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
-import { openGameViewer, closeGamePanel, openGameEditor, handlePanelKeydown, editCurrentGame, editorBackToViewer, explorerBackToBrowser, dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel, explorerGoToStart, explorerGoBack, explorerGoForward } from './src/game-viewer.js';
-import { editorGoToStart, editorGoToPrev, editorGoToNext, editorGoToEnd, editorFlipBoard, toggleNag, showImportDialog, hideImportDialog, doImport, copyPgn, showHeaderEditor, hideHeaderEditor, saveHeaderEditor } from './src/pgn-editor.js';
-import { goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode, getGamePgn, getGameMoves } from './src/pgn-viewer.js';
-import { getCurrentNodeId, getNodes } from './src/board-core.js';
+import {
+    openGamePanel as openGameViewer, closeGamePanel, handlePanelKeydown,
+    explorerBackToBrowser,
+    dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel,
+    explorerGoToStart, explorerGoBack, explorerGoForward,
+    goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode,
+    getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
+    toggleNag, showImportDialog, hideImportDialog, doImport,
+    showHeaderEditor, hideHeaderEditor, saveHeaderEditor,
+    launchExplorer,
+} from './src/game-panel.js';
 import { showToast } from './src/toast.js';
-import { prefetchGames, getFilteredGames, getCachedGame, getActiveFilter, launchExplorer } from './src/game-browser.js';
-import { fetchGames } from './src/browser-data.js';
+import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames } from './src/games.js';
 import { formatName, getHeader } from './src/utils.js';
 
 function downloadPgn(pgnText, filename) {
@@ -37,8 +43,9 @@ function sectionForFilename(s) {
 
 function renderTrackerIfReady(roundHistory, roundNumber, state) {
     if (state === 'off_season' || !CONFIG.playerName || !Object.keys(roundHistory.rounds).length) return;
-    const lastRound = Math.max(...Object.keys(roundHistory.rounds).map(Number));
-    renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, state, lastRound);
+    const completedRounds = Object.entries(roundHistory.rounds).filter(([, r]) => r.result).map(([n]) => Number(n));
+    const autoSelect = completedRounds.length ? Math.max(...completedRounds) : null;
+    renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, state, autoSelect);
 }
 
 function renderState(stateData, roundHistory) {
@@ -60,27 +67,26 @@ function renderState(stateData, roundHistory) {
     const info = stateData.info;
     const roundNumber = stateData.round || 0;
 
-    setCurrentState(state);
-    setRoundInfo(info || '');
+    setAppState({ state, roundInfo: info || '' });
     if (state !== 'no') stopCountdown();
 
     if (state === 'off_season') {
         const offSeasonOpts = stateData.offSeason?.targetDate
             ? { targetDate: stateData.offSeason.targetDate }
             : null;
-        setCurrentPairing(null);
+        setAppState({ pairing: null });
         showState(STATE.OFF_SEASON, info, offSeasonOpts);
     } else if (state === 'too_early' || state === 'no') {
-        setCurrentPairing(null);
+        setAppState({ pairing: null });
         showState(state, info);
     } else {
         // yes, in_progress, results
-        setLastRoundNumber(roundNumber || 1);
+        setAppState({ lastRoundNumber: roundNumber || 1 });
         const pairingInfo = stateData.pairing || null;
         if (pairingInfo) {
             roundHistory = updateRoundHistory(roundNumber, pairingInfo, getTournamentMeta().name);
         }
-        setCurrentPairing(pairingInfo);
+        setAppState({ pairing: pairingInfo });
         showState(state, info, pairingInfo);
         if (pairingInfo) saveLivePairingHtml();
     }
@@ -238,14 +244,8 @@ const ACTIONS = {
     // Browser
     'browser-explore': launchExplorer,
     // Editor
-    'editor-back': editorBackToViewer,
-    'editor-start': editorGoToStart, 'editor-prev': editorGoToPrev,
-    'editor-next': editorGoToNext, 'editor-end': editorGoToEnd,
-    'editor-flip': editorFlipBoard, 'editor-import': showImportDialog,
-    'editor-copy': copyPgn,
     'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
     'browser-import': showImportDialog,
-    'viewer-edit': editCurrentGame,
     'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': hideHeaderEditor,
     'dirty-copy-leave': dirtyDialogCopyLeave, 'dirty-discard': dirtyDialogDiscard, 'dirty-cancel': dirtyDialogCancel,
     // Share popover
@@ -289,7 +289,7 @@ document.addEventListener('click', (e) => {
     if (debugBtn) { previewState(debugBtn.dataset.debug, debugBtn.dataset.variant); return; }
 
     if (e.target.closest('#debug-game-viewer')) { openGameViewer({ pgn: DEBUG_PGN, orientation: 'Black' }); return; }
-    if (e.target.closest('#debug-pgn-editor')) { openGameEditor({}); return; }
+    if (e.target.closest('#debug-pgn-editor')) { openGameViewer({ pgn: '*' }); return; }
 });
 
 // Delegated hold-to-repeat for [data-hold] buttons (survives innerHTML rebuilds)
@@ -340,12 +340,12 @@ async function handleShareAction(action) {
 }
 
 function handleBrowserExport() {
-    const gameIds = getFilteredGames();
-    if (!gameIds.length) { showToast('No games to export'); return; }
-    const games = gameIds.map(id => getCachedGame(id)).filter(g => g?.pgn);
+    const state = getGamesState();
+    if (!state.gameIdList.length) { showToast('No games to export'); return; }
+    const games = state.gameIdList.map(id => getCachedGame(id)).filter(g => g?.pgn);
     if (!games.length) { showToast('No PGN data available'); return; }
     const slug = getTournamentMeta().slug;
-    const filter = getActiveFilter();
+    const filter = state.activeFilter;
     const prefix = slug || 'games';
     let filename;
     if (filter?.type === 'player') filename = `${prefix}-${filter.label.replace(/\s+/g, '-')}.pgn`;

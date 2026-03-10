@@ -4,7 +4,7 @@
  */
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { getPlayerDbName, getPlayerUscfId, getPlayerRating } from './browser-data.js';
+import { getPlayerInfo } from './games.js';
 
 let currentPlayer = null;
 let currentUscfId = null;
@@ -32,8 +32,9 @@ export async function openPlayerProfile(playerName, { uscfId } = {}) {
     body.innerHTML = '<p class="profile-loading">Loading stats...</p>';
 
     // If no uscfId was passed, try to look it up
-    if (!currentUscfId) currentUscfId = getPlayerUscfId(playerName);
-    const uscfRating = getPlayerRating(playerName);
+    const info = getPlayerInfo(playerName);
+    if (!currentUscfId) currentUscfId = info?.uscfId;
+    const uscfRating = info?.rating;
 
     try {
         const games = await fetchAllPlayerGames(playerName);
@@ -73,7 +74,7 @@ export function closePlayerProfile() {
  * Fetch all games for a player across all tournaments, paginating if needed.
  */
 async function fetchAllPlayerGames(playerName) {
-    const dbName = getPlayerDbName(playerName);
+    const dbName = getPlayerInfo(playerName)?.dbName || playerName;
     const allGames = [];
     let offset = 0;
     const limit = 500;
@@ -452,11 +453,10 @@ export function initPlayerProfile() {
     // Close profile and open the game browser with given query
     async function browseTo(query) {
         closePlayerProfile();
-        const [{ openGameBrowser }, { openGameViewer }] = await Promise.all([
-            import('./game-browser.js'), import('./game-viewer.js')
-        ]);
-        await openGameViewer();
-        openGameBrowser(query);
+        const { openGamePanel } = await import('./game-panel.js');
+        const games = await import('./games.js');
+        await openGamePanel();
+        games.openBrowser(query);
     }
 
     // Clicks within profile body — tournament rows, opponent rows, stat rows

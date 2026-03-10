@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { formatName, resultClass, resultSymbol } from './utils.js';
-import { _highlightMatch } from './game-browser.js';
 
 describe('formatName', () => {
     it('converts "Last, First" to "First Last"', () => {
@@ -74,28 +73,3 @@ describe('resultSymbol', () => {
     });
 });
 
-describe('highlightMatch', () => {
-    it('wraps matching substring in <strong> tags', () => {
-        expect(_highlightMatch('John Boyer', 'boy')).toBe('John <strong>Boy</strong>er');
-    });
-
-    it('matches case-insensitively (query expected pre-lowercased)', () => {
-        expect(_highlightMatch('John Boyer', 'john')).toBe('<strong>John</strong> Boyer');
-    });
-
-    it('returns name unchanged when no match', () => {
-        expect(_highlightMatch('John Boyer', 'xyz')).toBe('John Boyer');
-    });
-
-    it('highlights at the start of the string', () => {
-        expect(_highlightMatch('John Boyer', 'john')).toBe('<strong>John</strong> Boyer');
-    });
-
-    it('highlights at the end of the string', () => {
-        expect(_highlightMatch('John Boyer', 'yer')).toBe('John Bo<strong>yer</strong>');
-    });
-
-    it('highlights the entire string', () => {
-        expect(_highlightMatch('John', 'john')).toBe('<strong>John</strong>');
-    });
-});

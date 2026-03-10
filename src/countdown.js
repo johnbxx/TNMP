@@ -1,4 +1,4 @@
-import { STATE, getCurrentState } from './config.js';
+import { STATE, getAppState } from './config.js';
 
 // Countdown timer internals
 let countdownSeconds = 60;
@@ -17,7 +17,7 @@ export function updateCountdownDisplay() {
         el.textContent = countdownSeconds;
     }
     if (countdownContainer) {
-        const shouldShow = getCurrentState() === STATE.NO;
+        const shouldShow = getAppState().state === STATE.NO;
         countdownContainer.style.display = shouldShow ? 'block' : 'none';
     }
 }
@@ -84,7 +84,7 @@ export function startCountdown(checkPairings) {
     }
     resetCountdown();
     countdownInterval = setInterval(() => {
-        if (getCurrentState() !== STATE.NO) {
+        if (getAppState().state !== STATE.NO) {
             stopCountdown();
             return;
         }

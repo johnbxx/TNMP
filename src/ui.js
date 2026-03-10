@@ -1,4 +1,4 @@
-import { STATE, CONFIG, getTournamentMeta, getLastRoundNumber } from './config.js';
+import { STATE, CONFIG, getTournamentMeta, getAppState } from './config.js';
 import { getRandomMeme } from './memes.js';
 import { stopOffSeasonCountdown, startOffSeasonCountdown, updateCountdownDisplay } from './countdown.js';
 import { resultDisplay } from './utils.js';
@@ -140,7 +140,7 @@ export function showState(state, info, pairingInfo = null) {
         [STATE.YES]:         { className: 'yes',         answer: 'YES' },
         [STATE.NO]:          { className: 'no',          answer: 'NO' },
         [STATE.TOO_EARLY]:   { className: 'too-early',   answer: 'CHILL' },
-        [STATE.IN_PROGRESS]: { className: 'in-progress', answer: `ROUND ${getLastRoundNumber()}` },
+        [STATE.IN_PROGRESS]: { className: 'in-progress', answer: `ROUND ${getAppState().lastRoundNumber}` },
         [STATE.RESULTS]:     { className: 'results',     answer: 'COMPLETE' },
         [STATE.OFF_SEASON]:  { className: 'off-season',  answer: 'REST' },
     };
@@ -263,30 +263,24 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
         let iconHtml = '';
 
         if (round && round.result) {
-            // Completed round with result
             if (round.result === 'W') resultClass = 'tracker-win';
             else if (round.result === 'L') resultClass = 'tracker-loss';
             else if (round.result === 'D') resultClass = 'tracker-draw';
             else if (round.result === 'H' || round.result === 'B' || round.result === 'U') resultClass = 'tracker-bye';
-
-            if (round.isBye) {
-                iconHtml = '<img class="tracker-icon" src="pieces/Duck.webp" alt="Bye">';
-            } else if (round.color === 'White') {
-                iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
-            } else if (round.color === 'Black') {
-                iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
-            }
             className += ' tracker-completed';
         } else if (isInProgress) {
             resultClass = 'tracker-current';
-            if (round && round.color === 'White') {
-                iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
-            } else if (round && round.color === 'Black') {
-                iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
-            }
             className += ' tracker-active';
         } else {
             className += ' tracker-future';
+        }
+
+        if (round?.isBye) {
+            iconHtml = '<img class="tracker-icon" src="pieces/Duck.webp" alt="Bye">';
+        } else if (round?.color === 'White') {
+            iconHtml = '<img class="tracker-icon" src="pieces/wK.webp" alt="White">';
+        } else if (round?.color === 'Black') {
+            iconHtml = '<img class="tracker-icon" src="pieces/bK.webp" alt="Black">';
         }
 
         if (isSelected) className += ' tracker-selected';
@@ -415,10 +409,10 @@ document.getElementById('pairing-info')?.addEventListener('click', (e) => {
     if (!btn) return;
     const gameId = btn.dataset.gameId;
     if (!gameId) return;
-    import('./game-browser.js').then(({ getCachedGame, openGameWithPlayerNav }) => {
+    import('./game-panel.js').then(({ getCachedGame, openGameWithPlayerNav, openGamePanel }) => {
         const game = getCachedGame(gameId);
         if (!game) return;
         if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
-        else import('./game-viewer.js').then(({ openGameViewer }) => openGameViewer({ game }));
+        else openGamePanel({ game });
     });
 });

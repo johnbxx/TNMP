@@ -1,11 +1,9 @@
-import { STATE, getCurrentState, getCurrentPairing, getRoundInfo } from './config.js';
+import { STATE, getAppState } from './config.js';
 import { resultDisplay } from './utils.js';
 import { showToast } from './toast.js';
 
 function getShareText() {
-    const roundInfo = getRoundInfo();
-    const state = getCurrentState();
-    const pairing = getCurrentPairing();
+    const { state, pairing, roundInfo } = getAppState();
 
     let text;
     let pairingText = '';

@@ -3,7 +3,7 @@ import { showToast } from './toast.js';
 import { clearRoundHistory } from './history.js';
 import { openModal, closeModal } from './modal.js';
 import { checkPushStatus, syncPushSubscription } from './push.js';
-import { fetchPlayerList } from './browser-data.js';
+import { fetchPlayerList } from './games.js';
 
 export function initDarkMode() {
     const stored = localStorage.getItem('darkMode');
