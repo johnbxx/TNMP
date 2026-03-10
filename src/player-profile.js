@@ -4,7 +4,7 @@
  */
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { getPlayerInfo } from './games.js';
+import { getPlayerInfo, fetchPlayerList } from './games.js';
 
 let currentPlayer = null;
 let currentUscfId = null;
@@ -31,9 +31,13 @@ export async function openPlayerProfile(playerName, { uscfId } = {}) {
     title.textContent = playerName;
     body.innerHTML = '<p class="profile-loading">Loading stats...</p>';
 
-    // If no uscfId was passed, try to look it up
-    const info = getPlayerInfo(playerName);
-    if (!currentUscfId) currentUscfId = info?.uscfId;
+    // Look up USCF ID + rating from the player index (lazy-load if needed)
+    let info = getPlayerInfo(playerName);
+    if (!info) {
+        await fetchPlayerList().catch(() => {});
+        info = getPlayerInfo(playerName);
+    }
+    if (!currentUscfId) currentUscfId = info?.uscfId ?? null;
     const uscfRating = info?.rating;
 
     try {
