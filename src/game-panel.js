@@ -70,14 +70,10 @@ pgn.onChange((state) => {
 });
 
 games.onChange((state) => {
-    const wasExplorer = _gamesState?.explorerActive;
     _gamesState = state;
     renderBrowserPanel(state);
-    if (state.explorerActive) {
-        if (!wasExplorer && _hasGame) {
-            pgn.destroyGame();
-            _hasGame = false;
-        }
+    // Explorer takes over the board/moves only when no game is loaded
+    if (state.explorerActive && !_hasGame) {
         setToolbarButtons();
         document.getElementById('editor-comment-input')?.classList.add('hidden');
         renderExplorerHeader(state);
@@ -187,10 +183,7 @@ export async function openGamePanel(opts = {}) {
     if (!playerColor) playerColor = 'White';
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
-    if (_gamesState?.explorerActive) {
-        games.closeExplorer();
-    }
-
+    // Don't close explorer — its game ID filter is needed if user goes back to browser
     _hasGame = true;
     setToolbarButtons();
 
@@ -279,7 +272,8 @@ function showBrowserView() {
     }
     const modal = document.querySelector('.modal-content-viewer');
     if (modal) modal.classList.add('browser-only');
-    games.openBrowser();
+    // Don't call games.openBrowser() — that resets filters.
+    // The browser panel is already rendered with explorer-filtered games.
 }
 
 export function explorerBackToBrowser() {
@@ -512,7 +506,19 @@ export function launchExplorer({ restore = false } = {}) {
     const modal = document.querySelector('.modal-content-viewer');
     if (modal) modal.classList.remove('browser-only');
 
-    if (!restore && _gamesState?.explorerActive) return;
+    if (!restore && _gamesState?.explorerActive) {
+        // Explorer already running (e.g., returning from a game on mobile) — just re-render
+        if (_hasGame) {
+            pgn.destroyGame();
+            _hasGame = false;
+            setToolbarButtons();
+            renderExplorerHeader(_gamesState);
+            renderExplorerMoveList();
+            board.setPosition(_gamesState.explorerFen, false);
+            board.highlightSquares(null, null);
+        }
+        return;
+    }
 
     _hasGame = false;
     games.launchExplorer({
@@ -733,6 +739,12 @@ function renderExplorerMoveListHtml(stats) {
         html += '<div class="explorer-empty">No continuations found</div>';
     } else {
         html += '<div class="explorer-empty">No games at this position</div>';
+    }
+
+    // Mobile: show a button to view filtered games (on desktop the sidebar is visible)
+    const total = stats?.total || 0;
+    if (total > 0) {
+        html += `<button class="explorer-view-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
     }
 
     return html;

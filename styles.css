@@ -3606,6 +3606,22 @@ select.editor-header-input {
     flex-shrink: 0;
 }
 
+.explorer-view-games {
+    display: block;
+    width: 100%;
+    padding: 0.6rem;
+    margin-top: 0.25rem;
+    background: var(--surface-raised);
+    color: var(--accent);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: center;
+}
+.explorer-view-games:hover { background: var(--surface-hover); }
+@media (min-width: 1000px) { .explorer-view-games { display: none; } }
+
 .explorer-empty {
     text-align: center;
     color: var(--text-faint);

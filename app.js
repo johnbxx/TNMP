@@ -43,8 +43,9 @@ function sectionForFilename(s) {
 
 function renderTrackerIfReady(roundHistory, roundNumber, state) {
     if (state === 'off_season' || !CONFIG.playerName || !Object.keys(roundHistory.rounds).length) return;
+    const isLive = state === STATE.YES || state === STATE.IN_PROGRESS;
     const completedRounds = Object.entries(roundHistory.rounds).filter(([, r]) => r.result).map(([n]) => Number(n));
-    const autoSelect = completedRounds.length ? Math.max(...completedRounds) : null;
+    const autoSelect = isLive && roundNumber ? roundNumber : (completedRounds.length ? Math.max(...completedRounds) : null);
     renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, state, autoSelect);
 }
 
@@ -241,6 +242,7 @@ const ACTIONS = {
     'explorer-start': explorerGoToStart, 'explorer-prev': explorerGoBack,
     'explorer-next': explorerGoForward, 'explorer-flip': flipBoard,
     'explorer-back': explorerBackToBrowser,
+    'explorer-view-games': explorerBackToBrowser,
     // Browser
     'browser-explore': launchExplorer,
     // Editor
