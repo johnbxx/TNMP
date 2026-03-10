@@ -66,54 +66,7 @@ export async function handleScheduled(env) {
     // Parse the full HTML in one pass
     const parsed = parseTournamentPage(html);
 
-    // Cache the stripped HTML for the frontend
-    await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
-        html: parsed.strippedHtml,
-        fetchedAt: new Date().toISOString(),
-        round: parsed.roundNumber,
-        gameColors: parsed.pgnColors,
-    }));
-    console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(parsed.pgnColors).length} rounds of PGN colors).`);
-
-    // Pre-compute app state so /tournament-state is a single KV read
-    const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
-    const appState = computeAppState(cached, tournament);
-    const slug = slugifyTournament(tournament.name);
-
-    // Extract all pairings into a flat array for per-player lookup
-    const allPairings = [];
-    for (const section of parsed.pairingsSections) {
-        for (const row of section.rows) {
-            const wInfo = parsePlayerInfo(row.whiteName);
-            const bInfo = parsePlayerInfo(row.blackName);
-            if (/^(bye|full point bye)$/i.test(wInfo.name)) continue;
-            if (/^(bye|full point bye)$/i.test(bInfo.name)) {
-                allPairings.push({
-                    player: wInfo.name, isBye: true,
-                    byeType: row.whiteResult === '1' ? 'full' : 'half',
-                    section: section.section,
-                });
-                continue;
-            }
-            const board = row.board ? parseInt(row.board, 10) || null : null;
-            allPairings.push({
-                board: board || 'TBD',
-                white: wInfo.name, whiteRating: wInfo.rating, whiteUrl: row.whiteUrl || null,
-                black: bInfo.name, blackRating: bInfo.rating, blackUrl: row.blackUrl || null,
-                section: section.section,
-            });
-        }
-    }
-
-    await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
-        state: appState.state, round: appState.round, info: appState.info,
-        tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
-        tournamentSlug: slug, roundDates: tournament.roundDates || [],
-        totalRounds: appState.totalRounds, nextTournament: tournament.nextTournament || null,
-        fetchedAt: new Date().toISOString(), offSeason: appState.offSeason,
-        pairings: allPairings,
-    }));
-    console.log(`Cached appState in KV (${allPairings.length} pairings).`);
+    // --- Set up canonicalization infrastructure BEFORE any store operations ---
 
     // Load alias map, USCF ID→canonical name map, and rating history for name canonicalization + ELO fallback
     const aliasMap = new Map();
@@ -200,9 +153,77 @@ export async function handleScheduled(env) {
         return { name: tc, norm };
     }
 
-    // Canonicalize standings names and persist to KV
+    /** Canonicalize player names in a pgnColors/pairingsColors object. */
+    function canonicalizeColors(colors) {
+        const result = {};
+        for (const [rnd, games] of Object.entries(colors)) {
+            result[rnd] = games.map(g => ({
+                ...g,
+                white: canonicalize(g.white).name,
+                black: canonicalize(g.black).name,
+            }));
+        }
+        return result;
+    }
+
+    // --- Now safe to store: all names go through canonicalize() ---
+
+    // Cache the stripped HTML for the frontend
+    await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
+        html: parsed.strippedHtml,
+        fetchedAt: new Date().toISOString(),
+        round: parsed.roundNumber,
+        gameColors: canonicalizeColors(parsed.pgnColors),
+    }));
+    console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(parsed.pgnColors).length} rounds of PGN colors).`);
+
+    // Pre-compute app state so /tournament-state is a single KV read
+    const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
+    const appState = computeAppState(cached, tournament);
+    const slug = slugifyTournament(tournament.name);
+
+    // Extract all pairings into a flat array for per-player lookup
+    const allPairings = [];
+    for (const section of parsed.pairingsSections) {
+        for (const row of section.rows) {
+            const wInfo = parsePlayerInfo(row.whiteName);
+            const bInfo = parsePlayerInfo(row.blackName);
+            if (/^(bye|full point bye)$/i.test(wInfo.name)) continue;
+            if (/^(bye|full point bye)$/i.test(bInfo.name)) {
+                const wc = canonicalize(wInfo.name);
+                allPairings.push({
+                    player: wc.name, isBye: true,
+                    byeType: row.whiteResult === '1' ? 'full' : 'half',
+                    section: normalizeSection(section.section),
+                });
+                continue;
+            }
+            const wc = canonicalize(wInfo.name);
+            const bc = canonicalize(bInfo.name);
+            const board = row.board ? parseInt(row.board, 10) || null : null;
+            allPairings.push({
+                board: board || 'TBD',
+                white: wc.name, whiteRating: wInfo.rating, whiteUrl: row.whiteUrl || null,
+                black: bc.name, blackRating: bInfo.rating, blackUrl: row.blackUrl || null,
+                section: normalizeSection(section.section),
+            });
+        }
+    }
+
+    await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
+        state: appState.state, round: appState.round, info: appState.info,
+        tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
+        tournamentSlug: slug, roundDates: tournament.roundDates || [],
+        totalRounds: appState.totalRounds, nextTournament: tournament.nextTournament || null,
+        fetchedAt: new Date().toISOString(), offSeason: appState.offSeason,
+        pairings: allPairings,
+    }));
+    console.log(`Cached appState in KV (${allPairings.length} pairings).`);
+
+    // Canonicalize standings names + section titles and persist to KV
     try {
         for (const section of standings) {
+            section.section = normalizeSection(section.section);
             for (const p of section.players) {
                 const resolved = canonicalize(p.name);
                 if (resolved.name !== p.name) p.name = formatPlayerName(resolved.name);
@@ -277,7 +298,7 @@ export async function handleScheduled(env) {
                         g.result,
                         opening ? opening.eco : g.eco,
                         opening ? opening.name : null,
-                        g.section, g.date, g.gameId || null, g.pgn
+                        normalizeSection(g.section), g.date, g.gameId || null, g.pgn
                     )
                 );
                 if (ex) updatedCount++;
@@ -297,7 +318,7 @@ export async function handleScheduled(env) {
     // Capture pairings colors persistently
     if (parsed.hasPairings) {
         try {
-            const newColors = extractPairingsColors(parsed.pairingsSections);
+            const newColors = canonicalizeColors(extractPairingsColors(parsed.pairingsSections));
             const existing = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json') || {};
             let updated = false;
             for (const [rnd, games] of Object.entries(newColors)) {
