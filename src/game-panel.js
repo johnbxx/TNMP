@@ -10,10 +10,11 @@
  */
 
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { loadRoundHistory } from './history.js';
 import { openPlayerProfile } from './player-profile.js';
-import { nagToHtml, splitPgn, pgnToGameObject } from './pgn-parser.js';
+import { nagToHtml, splitPgn, pgnToGameObject, extractMoveText } from './pgn-parser.js';
 import { formatName, resultClass, resultSymbol } from './utils.js';
+import { CONFIG, SUBMISSIONS_ENABLED } from './config.js';
+import { showToast } from './toast.js';
 import { classifyFen, loadEcoData } from './eco.js';
 import { scorePercent } from './games.js';
 import * as games from './games.js';
@@ -26,8 +27,6 @@ loadEcoData();
 document.getElementById('editor-comment-input')?.addEventListener('input', (e) => {
     pgn.setComment(pgn.getCurrentNodeId(), e.target.value);
 });
-
-export { prefetchGames, getCachedGame } from './games.js';
 
 // ─── 1. State ──────────────────────────────────────────────────────
 
@@ -57,6 +56,8 @@ let _nagTargetNodeId = null;
 let _ctxTargetNodeId = null;
 let _ctxAnchorEl = null;
 let _longPressTimer = null;
+let _browserListenerAC = null; // AbortController for browser panel listeners
+let _pendingSubmission = null; // { gameId, round, board } when previewing before submit
 
 // ─── 2. onChange Handlers ──────────────────────────────────────────
 
@@ -67,6 +68,8 @@ pgn.onChange((state) => {
     }
     updatePlayButton(state.isPlaying);
     syncCommentInput();
+    const headerEl = document.getElementById('viewer-header');
+    if (headerEl && _hasGame) headerEl.innerHTML = buildGameHeaderHtml(_panel.meta);
 });
 
 games.onChange((state) => {
@@ -175,10 +178,8 @@ export async function openGamePanel(opts = {}) {
     }
 
     let playerColor = opts.orientation;
-    if (!playerColor && game?.round) {
-        const history = loadRoundHistory();
-        const roundData = history?.rounds?.[game.round];
-        playerColor = roundData?.color || 'White';
+    if (!playerColor && game?.blackNorm && CONFIG.playerName) {
+        playerColor = game.blackNorm === games.normalizeKey(CONFIG.playerName) ? 'Black' : 'White';
     }
     if (!playerColor) playerColor = 'White';
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
@@ -219,6 +220,7 @@ function forceCloseGamePanel() {
     const onCloseCallback = _panel.onClose;
     _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
     _hasGame = false;
+    _pendingSubmission = null;
 
     onModalClose('viewer-modal', () => {
         pgn.destroyGame();
@@ -254,6 +256,9 @@ function forceCloseGamePanel() {
 
 function setToolbarButtons() {
     document.getElementById('panel-toolbar')?.classList.toggle('hidden', !_hasGame);
+    // Show/hide submit button based on pending submission state
+    const submitBtn = document.getElementById('viewer-submit');
+    if (submitBtn) submitBtn.classList.toggle('hidden', !_pendingSubmission);
 }
 
 function showBrowserView() {
@@ -261,6 +266,7 @@ function showBrowserView() {
         pgn.destroyGame();
         board.destroy();
         _hasGame = false;
+    _pendingSubmission = null;
         setToolbarButtons();
         games.launchExplorer({
             restoreMoves: _gamesState?.explorerMoveHistory,
@@ -516,6 +522,7 @@ export function launchExplorer({ restore = false } = {}) {
         if (_hasGame) {
             pgn.destroyGame();
             _hasGame = false;
+    _pendingSubmission = null;
             setToolbarButtons();
             renderExplorerHeader(_gamesState);
             renderExplorerMoveList();
@@ -526,6 +533,7 @@ export function launchExplorer({ restore = false } = {}) {
     }
 
     _hasGame = false;
+    _pendingSubmission = null;
     games.launchExplorer({
         restoreMoves: restore ? _gamesState?.explorerMoveHistory : undefined,
     });
@@ -912,6 +920,7 @@ function varLength(nodes, startId) {
 function renderGameRow(game, boardLabel = null) {
     const hasPgn = game.hasPgn ?? !!game.pgn;
     const isPairing = !hasPgn && game.result === '*';
+    const isSubmittable = SUBMISSIONS_ENABLED && !hasPgn && !isPairing;
     const whiteClass = resultClass(game.result, 'white', 'browser');
     const blackClass = resultClass(game.result, 'black', 'browser');
     const whiteScore = resultSymbol(game.result, 'white');
@@ -937,9 +946,10 @@ function renderGameRow(game, boardLabel = null) {
     const whiteEloHtml = game.whiteElo ? `<span class="browser-elo">${game.whiteElo}</span>` : '<span class="browser-elo browser-elo-unrated">unr.</span>';
     const blackEloHtml = game.blackElo ? `<span class="browser-elo">${game.blackElo}</span>` : '<span class="browser-elo browser-elo-unrated">unr.</span>';
 
+    const clickable = hasPgn || SUBMISSIONS_ENABLED;
     return `
-        <div class="browser-game-row${isPairing ? ' browser-pairing-row' : ''}" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" role="${isPairing ? 'listitem' : 'button'}" ${isPairing ? '' : 'tabindex="0"'}>
-            <span class="browser-board">${boardLabel || game.board || '?'}</span>
+        <div class="browser-game-row${isPairing ? ' browser-pairing-row' : ''}" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" role="${clickable ? 'button' : 'listitem'}" ${clickable ? 'tabindex="0"' : ''}>
+            <span class="browser-board">${boardLabel || game.board || '?'}${isSubmittable ? ` <svg class="browser-submit-icon${game.submission ? ' submitted' : ''}" data-tooltip="${game.submission ? 'Submitted, awaiting review' : 'Awaiting submission'}" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>` : ''}</span>
             <div class="browser-player browser-player-white">
                 <span class="browser-name">${game.white}</span>
                 ${whiteEloHtml}
@@ -1042,6 +1052,12 @@ function renderPgnMoveList() {
     const { nodes, currentNodeId, commentsHidden } = _pgnState;
     if (!nodes || nodes.length === 0) {
         container.innerHTML = '';
+        return;
+    }
+
+    // Empty game (just root node, no moves) — show "Add Moves" prompt if submissions enabled
+    if (SUBMISSIONS_ENABLED && nodes[0].mainChild === null && _panel.meta?.hasPgn === false) {
+        container.innerHTML = '<div class="viewer-add-moves"><button class="viewer-add-moves-btn" data-action="submit-add-moves">Add Moves</button><p>Paste or upload a PGN to contribute moves for this game.</p></div>';
         return;
     }
 
@@ -1297,6 +1313,11 @@ function wireViewerHeader() {
 }
 
 function wireBrowserListeners(panelEl) {
+    // Abort any previous listeners on the persistent panelEl container
+    _browserListenerAC?.abort();
+    _browserListenerAC = new AbortController();
+    const signal = _browserListenerAC.signal;
+
     const searchInput = panelEl.querySelector('#browser-search-input');
     const autocomplete = panelEl.querySelector('#browser-autocomplete');
     const clearBtn = panelEl.querySelector('#browser-search-clear');
@@ -1331,7 +1352,7 @@ function wireBrowserListeners(panelEl) {
         }
         autocomplete.classList.remove('hidden');
         searchInput.setAttribute('aria-expanded', 'true');
-    });
+    }, { signal });
 
     autocomplete?.addEventListener('click', (e) => {
         const profileBtn = e.target.closest('[data-profile]');
@@ -1345,7 +1366,7 @@ function wireBrowserListeners(panelEl) {
         const item = e.target.closest('[data-player]');
         if (!item) return;
         doSelectPlayer(item.dataset.player, searchInput, autocomplete, clearBtn);
-    });
+    }, { signal });
 
     searchInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -1377,7 +1398,7 @@ function wireBrowserListeners(panelEl) {
             idx = idx > 0 ? idx - 1 : items.length - 1;
             items[idx].classList.add('browser-ac-focused');
         }
-    });
+    }, { signal });
 
     clearBtn?.addEventListener('click', () => {
         searchInput.value = '';
@@ -1385,7 +1406,7 @@ function wireBrowserListeners(panelEl) {
         autocomplete.classList.add('hidden');
         searchInput.focus();
         games.clearPlayerMode();
-    });
+    }, { signal });
 
     panelEl.addEventListener('click', (e) => {
         if (!e.target.closest('#browser-search')) {
@@ -1420,11 +1441,11 @@ function wireBrowserListeners(panelEl) {
         if (row) {
             const gameId = row.dataset.gameId;
             const hasPgn = row.dataset.hasPgn === '1';
-            if (hasPgn) {
+            if (hasPgn || SUBMISSIONS_ENABLED) {
                 openGameFromBrowser(gameId);
             }
         }
-    });
+    }, { signal });
 
     panelEl.addEventListener('change', (e) => {
         if (e.target.id === 'browser-round-select') {
@@ -1433,7 +1454,7 @@ function wireBrowserListeners(panelEl) {
         if (e.target.dataset?.chip === 'tournament-select') {
             games.setTournamentFilter(e.target.value);
         }
-    });
+    }, { signal });
 }
 
 function doSelectPlayer(name, searchInput, autocomplete, clearBtn) {
@@ -1456,19 +1477,7 @@ export const flipBoard = () => board.flip();
 export const toggleAutoPlay = () => pgn.toggleAutoPlay();
 export const toggleComments = () => pgn.toggleComments();
 export const toggleBranchMode = () => pgn.toggleBranchMode();
-export const getGameMoves = () => {
-    const nodes = pgn.getNodes();
-    if (!nodes || nodes.length === 0) return null;
-    const moves = [];
-    let id = nodes[0].mainChild;
-    while (id !== null) {
-        const n = nodes[id];
-        if (!n || n.deleted) break;
-        moves.push(n.san);
-        id = n.mainChild;
-    }
-    return moves.join(' ') || null;
-};
+export const getGameMoves = () => pgn.getReadablePgn() || null;
 
 // NAG picker
 export function toggleNag(nagNum) {
@@ -1479,8 +1488,10 @@ export function toggleNag(nagNum) {
     }
 }
 
-// Import dialog
+// Import / Submit dialog
 let _importWired = false;
+let _submitMode = false; // true = submitting moves for an existing game
+
 function wireImportDialog() {
     if (_importWired) return;
     _importWired = true;
@@ -1509,25 +1520,67 @@ function wireImportDialog() {
         textarea.value = texts.join('\n\n');
     });
 }
+
+function setImportDialogMode(submit) {
+    _submitMode = submit;
+    const titleEl = document.querySelector('#editor-import-dialog h3');
+    const okBtn = document.querySelector('[data-action="editor-import-ok"]');
+    if (titleEl) titleEl.textContent = submit ? 'Submit Moves' : 'Import PGN';
+    if (okBtn) okBtn.textContent = submit ? 'Submit' : 'Import';
+}
+
 export function showImportDialog() {
     const dialog = document.getElementById('editor-import-dialog');
     const textarea = document.getElementById('editor-import-text');
     if (!dialog || !textarea) return;
     wireImportDialog();
+    setImportDialogMode(false);
     textarea.value = '';
     dialog.classList.remove('hidden');
     textarea.focus();
     dialog.onclick = (e) => { if (e.target === dialog) hideImportDialog(); };
 }
+
+export function showSubmitDialog() {
+    const dialog = document.getElementById('editor-import-dialog');
+    const textarea = document.getElementById('editor-import-text');
+    if (!dialog || !textarea) return;
+    wireImportDialog();
+    setImportDialogMode(true);
+    textarea.value = '';
+    textarea.placeholder = 'Paste movetext or PGN here, or drag a .pgn file...';
+    dialog.classList.remove('hidden');
+    textarea.focus();
+    dialog.onclick = (e) => { if (e.target === dialog) hideImportDialog(); };
+}
+
 export function hideImportDialog() {
     document.getElementById('editor-import-dialog')?.classList.add('hidden');
     const textarea = document.getElementById('editor-import-text');
-    if (textarea) textarea.value = '';
+    if (textarea) {
+        textarea.value = '';
+        textarea.placeholder = 'Paste PGN text here, or drag .pgn files...';
+    }
+    _submitMode = false;
 }
+
 export function doImport() {
+    if (_submitMode) return doPreview();
+
     const textarea = document.getElementById('editor-import-text');
-    const text = textarea?.value?.trim();
+    let text = textarea?.value?.trim();
     if (!text) return;
+
+    // Wrap bare movetext (no headers) with minimal PGN headers.
+    // Multiple games separated by blank lines each get their own headers.
+    if (!text.startsWith('[')) {
+        text = text.split(/\n\s*\n/).filter(s => s.trim()).map(fragment => {
+            const t = fragment.trim();
+            const resultMatch = t.match(/(1-0|0-1|1\/2-1\/2)\s*$/);
+            const result = resultMatch ? resultMatch[1] : '*';
+            return `[White "?"]\n[Black "?"]\n[Result "${result}"]\n\n${t}`;
+        }).join('\n\n');
+    }
 
     const pgnStrings = splitPgn(text);
     if (pgnStrings.length === 0) return;
@@ -1537,6 +1590,78 @@ export function doImport() {
 
     games.setGamesData({ games: importedGames, query: { local: true } });
     openImportedGames(importedGames);
+}
+
+function doPreview() {
+    const textarea = document.getElementById('editor-import-text');
+    let text = textarea?.value?.trim();
+    if (!text) return;
+
+    const meta = _panel.meta;
+    const game = games.getCachedGame(_panel.gameId);
+    if (!game) return;
+
+    hideImportDialog();
+
+    // Extract just the movetext if pasted text includes headers
+    const moveText = extractMoveText(text.startsWith('[') ? splitPgn(text)[0] || text : text);
+    const headers = [
+        `[White "${game.white}"]`,
+        `[Black "${game.black}"]`,
+        `[Result "${game.result}"]`,
+    ];
+    const fullPgn = headers.join('\n') + '\n\n' + moveText;
+
+    // Load into viewer for review — user can annotate before submitting
+    _hasGame = true;
+    _pendingSubmission = { gameId: _panel.gameId, round: meta.round, board: meta.board };
+    pgn.initGame(fullPgn, { onPositionChange });
+    setToolbarButtons();
+    renderPgnMoveList();
+
+    const headerEl = document.getElementById('viewer-header');
+    if (headerEl) headerEl.innerHTML = buildGameHeaderHtml(_panel.meta);
+
+    board.createBoard('viewer-board', {
+        onMove: onBoardMove,
+        orientation: 'white',
+        fen: pgn.getCurrentFen(),
+    });
+    board.resize();
+
+    showToast('Review and annotate, then hit Submit.');
+}
+
+export async function submitGame() {
+    if (!_pendingSubmission) return;
+
+    // Grab the current PGN (includes any annotations the user added)
+    const fullPgn = pgn.getPgn();
+    const { round, board: boardNum } = _pendingSubmission;
+
+    // TODO: POST to /submit-game when feature is live
+    // For now, dummy mode — mark locally and toast
+    console.log('[Submit] Would POST:', { pgn: fullPgn, round, board: boardNum, submittedBy: CONFIG.playerName });
+    const game = games.getCachedGame(_pendingSubmission.gameId);
+    if (game) game.submission = { status: 'pending', submittedBy: CONFIG.playerName };
+    // updateCachedGame triggers notifyChange → browser re-renders with green icon
+    games.updateCachedGame(_pendingSubmission.gameId, {});
+    showToast('(Demo) Submission received! Pending review.');
+
+    _pendingSubmission = null;
+    setToolbarButtons();
+}
+
+// Debug: inject skeleton games for testing submission workflow
+export function debugInjectSkeletons() {
+    const skeletons = [
+        { gameId: 'skel-1', white: 'Boyer, John', black: 'Ploquin, Phil', whiteElo: '1740', blackElo: '1660', result: '1-0', round: 5, board: 1, hasPgn: false, pgn: null, eco: null, openingName: null, tournament: '2026 Spring TNM', section: 'Open', date: '2026-03-10' },
+        { gameId: 'skel-2', white: 'Smith, Alice', black: 'Jones, Bob', whiteElo: '1800', blackElo: '1550', result: '0-1', round: 5, board: 2, hasPgn: false, pgn: null, eco: null, openingName: null, tournament: '2026 Spring TNM', section: 'Open', date: '2026-03-10' },
+        { gameId: 'skel-3', white: 'Lee, Carol', black: 'Davis, Dan', whiteElo: '1600', blackElo: '1700', result: '*', round: 5, board: 3, hasPgn: false, pgn: null, eco: null, openingName: null, tournament: '2026 Spring TNM', section: 'Open', date: '2026-03-10' },
+    ];
+    games.setGamesData({ games: skeletons, query: { local: true } });
+    openImportedGames(skeletons);
+    showToast('Injected 3 skeleton games (2 with results, 1 pairing).');
 }
 
 // Header editor
@@ -1562,6 +1687,7 @@ export function saveHeaderEditor() {
         else delete headers[input.dataset.header];
     }
     pgn.setHeaders(headers);
+    if (_panel.gameId) games.updateCachedGame(_panel.gameId, headers);
     hideHeaderEditor();
 }
 

@@ -97,7 +97,8 @@ function buildMoveTree(moves, fen) {
             const node = {
                 id: result.length, parentId: prevId,
                 fen: engine.fen(), san: m.san, from: move.from, to: move.to,
-                comment: m.comment, nags: m.nags,
+                comment: m.comment, annotations: m.annotations || null,
+                nags: m.nags,
                 mainChild: null, children: [], ply: ply + 1,
             };
             result.push(node);
@@ -114,6 +115,19 @@ function buildMoveTree(moves, fen) {
     }
     walk(moves, 0, 0);
     return result;
+}
+
+function serializeAnnotations(annotations) {
+    if (!annotations) return '';
+    const parts = [];
+    if (annotations.clk) parts.push(`[%clk ${annotations.clk}]`);
+    if (annotations.eval != null) parts.push(`[%eval ${annotations.eval}]`);
+    if (annotations.arrows) parts.push(`[%cal ${annotations.arrows.join(',')}]`);
+    if (annotations.squares) parts.push(`[%csl ${annotations.squares.join(',')}]`);
+    for (const [k, v] of Object.entries(annotations)) {
+        if (!['clk', 'eval', 'arrows', 'squares'].includes(k)) parts.push(`[%${k} ${v}]`);
+    }
+    return parts.join(' ');
 }
 
 function serializeTree(nodes, headers) {
@@ -142,7 +156,13 @@ function serializeTree(nodes, headers) {
             forceNum = false;
             parts.push(node.san);
             if (node.nags) for (const nag of node.nags) parts.push(`$${nag}`);
-            if (node.comment) { parts.push(`{${node.comment}}`); forceNum = true; }
+            if (node.comment || node.annotations) {
+                const annStr = serializeAnnotations(node.annotations);
+                const text = node.comment && annStr ? `${node.comment} ${annStr}`
+                    : node.comment || annStr;
+                parts.push(`{${text}}`);
+                forceNum = true;
+            }
             const parent = nodes[node.parentId];
             if (!skipSiblings && parent && parent.children.length > 1) {
                 for (const altId of parent.children) {
@@ -367,6 +387,62 @@ export function setHeaders(h) {
 
 export function getPgn() {
     return serializeTree(_nodes, _headers);
+}
+
+export function getReadablePgn() {
+    const lines = [];
+    const sanitize = v => String(v).replace(/"/g, '');
+    const order = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
+    const written = new Set();
+    for (const key of order) {
+        if (_headers[key] != null) { lines.push(`[${key} "${sanitize(_headers[key])}"]`); written.add(key); }
+    }
+    for (const [key, value] of Object.entries(_headers)) {
+        if (!written.has(key) && value != null) lines.push(`[${key} "${sanitize(value)}"]`);
+    }
+    if (_nodes[0].mainChild === null) return lines.join('\n') + '\n';
+    const moves = walkReadable(_nodes, _nodes[0].mainChild);
+    const result = _headers.Result || '*';
+    const fullText = moves + ' ' + result;
+    if (lines.length > 0) lines.push('');
+    lines.push(fullText);
+    return lines.join('\n') + '\n';
+}
+
+function walkReadable(nodes, startId) {
+    const parts = [];
+    let id = startId;
+    let forceNum = true;
+    let isFirst = true;
+    while (id !== null) {
+        const node = nodes[id];
+        if (!node || node.deleted) break;
+        const moveNum = Math.floor((node.ply - 1) / 2) + 1;
+        const isWhite = node.ply % 2 === 1;
+        if (isWhite) parts.push(`${moveNum}.`);
+        else if (forceNum) parts.push(`${moveNum}...`);
+        forceNum = false;
+        let san = node.san;
+        if (node.nags) {
+            for (const nag of node.nags) {
+                san += NAG_INFO[nag]?.[0] || `$${nag}`;
+            }
+        }
+        parts.push(san);
+        if (node.comment) { parts.push(`{${node.comment}}`); forceNum = true; }
+        const parent = nodes[node.parentId];
+        if (!isFirst && parent && parent.children.length > 1) {
+            for (const altId of parent.children) {
+                if (altId !== id && !nodes[altId].deleted) {
+                    parts.push(`(${walkReadable(nodes, altId)})`);
+                }
+            }
+            forceNum = true;
+        }
+        isFirst = false;
+        id = node.mainChild;
+    }
+    return parts.join(' ');
 }
 
 export function getCurrentFen() { return _nodes[_currentNodeId]?.fen || _startingFen; }

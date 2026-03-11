@@ -26,7 +26,7 @@ function decodeEntities(str) {
         .trim();
 }
 
-const ROW_REGEX = /<tr>[\s\t]*<td[^>]*>([\d\s&nbsp;]*)<\/td>[\s\t]*<td[^>]*>([^<]*)<\/td>[\s\t]*<td[^>]*>(?:<a\s+href="([^"]*)"[^>]*>)?([^<]+)(?:<\/a>)?<\/td>[\s\t]*<td[^>]*>([^<]*)<\/td>[\s\t]*<td[^>]*>(?:<a\s+href="([^"]*)"[^>]*>)?([^<]+)(?:<\/a>)?<\/td>[\s\t]*<\/tr>/gi;
+const ROW_REGEX = /<tr>[\s\t]*<td[^>]*>([\d\s&nbsp;]*)<\/td>[\s\t]*<td[^>]*>([^<]*)<\/td>[\s\t]*<td[^>]*>([\s\S]*?)<\/td>[\s\t]*<td[^>]*>([^<]*)<\/td>[\s\t]*<td[^>]*>([\s\S]*?)<\/td>[\s\t]*<\/tr>/gi;
 
 function escapeRegex(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -42,6 +42,9 @@ export function parseGameResult(whiteResult, blackResult) {
     if (wr === '1' && br === '0') return '1-0';
     if (wr === '0' && br === '1') return '0-1';
     if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) return '1/2-1/2';
+    // Forfeits: "1 X" = forfeit win, "0 F" = forfeit loss
+    if (/^1\s*X?$/i.test(wr) && /^0\s*F?$/i.test(br)) return '1-0';
+    if (/^0\s*F?$/i.test(wr) && /^1\s*X?$/i.test(br)) return '0-1';
     return '*';
 }
 
@@ -49,19 +52,31 @@ export function parseGameResult(whiteResult, blackResult) {
  * Parse pairings table rows from a table HTML string.
  * Returns array of { board, whiteResult, whiteName, whiteUrl, blackResult, blackName, blackUrl }.
  */
+function parseNameCell(cellHtml) {
+    const linkMatch = cellHtml.match(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
+    const url = linkMatch ? linkMatch[1] : null;
+    const uscfId = url?.match(/\/player\/(\d+)/)?.[1] || null;
+    const text = (linkMatch ? linkMatch[2] : cellHtml).replace(/<[^>]*>/g, '').trim();
+    return { name: text, url, uscfId };
+}
+
 function parsePairingsTable(tableHtml) {
     const rows = [];
     const regex = new RegExp(ROW_REGEX.source, 'gi');
     let m;
     while ((m = regex.exec(tableHtml)) !== null) {
+        const white = parseNameCell(m[3]);
+        const black = parseNameCell(m[5]);
         rows.push({
             board: decodeEntities(m[1]),
             whiteResult: decodeEntities(m[2]),
-            whiteName: m[4].trim(),
-            whiteUrl: m[3] || null,
-            blackResult: decodeEntities(m[5]),
-            blackName: m[7].trim(),
-            blackUrl: m[6] || null,
+            whiteName: white.name,
+            whiteUrl: white.url,
+            whiteUscfId: white.uscfId,
+            blackResult: decodeEntities(m[4]),
+            blackName: black.name,
+            blackUrl: black.url,
+            blackUscfId: black.uscfId,
         });
     }
     return rows;
@@ -365,39 +380,32 @@ export function findPlayerPairing(html, playerName) {
         const tableHtml = match[0];
         if (!playerRegex.test(tableHtml)) continue;
 
-        const rowRegex = new RegExp(ROW_REGEX.source, 'gi');
-        let rowMatch;
-
-        while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
-            const board = rowMatch[1].replace(/&nbsp;/g, '').trim();
-            const whiteResult = rowMatch[2].trim();
-            const whiteName = rowMatch[4].trim();
-            const whiteUrl = rowMatch[3] || null;
-            const blackResult = rowMatch[5].trim();
-            const blackName = rowMatch[7].trim();
-            const blackUrl = rowMatch[6] || null;
+        const rows = parsePairingsTable(tableHtml);
+        for (const row of rows) {
+            const whiteName = row.whiteName;
+            const blackName = row.blackName;
 
             if (playerRegex.test(whiteName)) {
                 if (/^(bye|full point bye)$/i.test(blackName)) {
-                    return { isBye: true, byeType: whiteResult === '1' ? 'full' : 'half', section };
+                    return { isBye: true, byeType: row.whiteResult === '1' ? 'full' : 'half', section };
                 }
                 const opponentInfo = parsePlayerInfo(blackName);
                 return {
-                    board: board || 'TBD', color: 'White',
+                    board: row.board || 'TBD', color: 'White',
                     opponent: opponentInfo.name, opponentRating: opponentInfo.rating,
-                    opponentUrl: blackUrl, section,
+                    opponentUrl: row.blackUrl, section,
                 };
             }
 
             if (playerRegex.test(blackName)) {
                 if (/^(bye|full point bye)$/i.test(whiteName)) {
-                    return { isBye: true, byeType: blackResult === '1' ? 'full' : 'half', section };
+                    return { isBye: true, byeType: row.blackResult === '1' ? 'full' : 'half', section };
                 }
                 const opponentInfo = parsePlayerInfo(whiteName);
                 return {
-                    board: board || 'TBD', color: 'Black',
+                    board: row.board || 'TBD', color: 'Black',
                     opponent: opponentInfo.name, opponentRating: opponentInfo.rating,
-                    opponentUrl: whiteUrl, section,
+                    opponentUrl: row.whiteUrl, section,
                 };
             }
         }

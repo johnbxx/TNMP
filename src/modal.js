@@ -1,5 +1,5 @@
 /**
- * Shared modal helpers: open/close, focus trapping, backdrop/button/Escape dismiss.
+ * Shared modal helpers: open/close, focus trapping, Escape/backdrop/button dismiss.
  */
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -142,4 +142,14 @@ document.addEventListener('click', (e) => {
         if (current) closeModal(current.id);
         setTimeout(() => openModal(switchBtn.dataset.switchModal), 300);
     }
+});
+
+// Escape key → close the topmost visible modal
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modals = document.querySelectorAll('.modal:not(.hidden)');
+    if (modals.length === 0) return;
+    const topModal = modals[modals.length - 1];
+    if (topModal.hasAttribute('data-manual-close')) return;
+    closeModal(topModal.id);
 });

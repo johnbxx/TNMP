@@ -4,7 +4,6 @@ import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.j
 import { shareStatus } from './src/share.js';
 import { openSettings, saveSettings, initDarkMode } from './src/settings.js';
 import { previewState } from './src/debug.js';
-import { loadRoundHistory, updateRoundHistory, fetchPlayerHistory } from './src/history.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
 import {
@@ -14,13 +13,14 @@ import {
     explorerGoToStart, explorerGoBack, explorerGoForward,
     goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode,
     getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
-    toggleNag, showImportDialog, hideImportDialog, doImport,
+    toggleNag, showImportDialog, showSubmitDialog, hideImportDialog, doImport, submitGame,
     showHeaderEditor, hideHeaderEditor, saveHeaderEditor,
-    launchExplorer,
+    launchExplorer, debugInjectSkeletons,
 } from './src/game-panel.js';
 import { showToast } from './src/toast.js';
-import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames } from './src/games.js';
+import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './src/games.js';
 import { formatName, getHeader } from './src/utils.js';
+import { initPlayerProfile } from './src/player-profile.js';
 
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
@@ -39,17 +39,82 @@ function sectionForFilename(s) {
     return s.replace(/[^a-zA-Z0-9]/g, '');
 }
 
-// --- Main check logic ---
+// --- Info text (computed client-side from state + round + tournament context) ---
 
-function renderTrackerIfReady(roundHistory, roundNumber, state) {
-    if (state === 'off_season' || !CONFIG.playerName || !Object.keys(roundHistory.rounds).length) return;
-    const isLive = state === STATE.YES || state === STATE.IN_PROGRESS;
-    const completedRounds = Object.entries(roundHistory.rounds).filter(([, r]) => r.result).map(([n]) => Number(n));
-    const autoSelect = isLive && roundNumber ? roundNumber : (completedRounds.length ? Math.max(...completedRounds) : null);
-    renderRoundTracker(roundHistory, getTournamentMeta().totalRounds || 7, roundNumber, state, autoSelect);
+function getInfoText(state, round, tournamentName, roundDates) {
+    const totalRounds = roundDates?.length || 0;
+    switch (state) {
+        case 'yes': return `Round ${round} pairings are up!`;
+        case 'no': return 'Waiting for pairings to be posted...';
+        case 'too_early': return 'Pairings are posted Monday at 8PM Pacific. Check back then!';
+        case 'in_progress': return `Round ${round} is being played right now!`;
+        case 'results': {
+            const isFinal = totalRounds > 0 && round >= totalRounds;
+            if (isFinal) return `${tournamentName} is complete! Final standings are posted.`;
+            return round
+                ? `Round ${round} is complete. Check back Monday for next week's pairings!`
+                : 'The round is complete. Check back Monday for next week\'s pairings!';
+        }
+        case 'off_season': {
+            const r1 = roundDates?.[0];
+            const r1Date = r1 ? new Date(r1) : null;
+            if (r1Date && r1Date.getTime() > Date.now()) {
+                const dateStr = r1Date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+                return `${tournamentName || 'The next TNM'} starts ${dateStr}. Round 1 pairings will be posted onsite.`;
+            }
+            return 'Check back for the next TNM schedule.';
+        }
+        default: return '';
+    }
 }
 
-function renderState(stateData, roundHistory) {
+// --- Build round tracker data from /query response ---
+
+function buildTrackerRounds(games, byes, playerNorm) {
+    const rounds = {};
+    for (const g of games) {
+        const isWhite = g.whiteNorm === playerNorm;
+        let result = null;
+        if (g.result === '1-0') result = isWhite ? 'W' : 'L';
+        else if (g.result === '0-1') result = isWhite ? 'L' : 'W';
+        else if (g.result === '1/2-1/2') result = 'D';
+        // result stays null for '*' (pending)
+
+        rounds[g.round] = {
+            color: isWhite ? 'White' : 'Black',
+            opponent: isWhite ? g.black : g.white,
+            opponentRating: isWhite ? g.blackElo : g.whiteElo,
+            board: g.board,
+            gameId: g.gameId,
+            result,
+            isBye: false,
+        };
+    }
+    if (byes) {
+        const byeResults = { full: 'B', half: 'H', zero: 'U' };
+        for (const b of byes) {
+            rounds[b.round] = {
+                isBye: true,
+                byeType: b.type,
+                result: byeResults[b.type] || null,
+                color: null, opponent: null, opponentRating: null, board: null, gameId: null,
+            };
+        }
+    }
+    return rounds;
+}
+
+// --- Main check logic ---
+
+function renderTracker(trackerRounds, totalRounds, roundNumber, state) {
+    if (state === 'off_season' || !CONFIG.playerName || !Object.keys(trackerRounds).length) return;
+    const isLive = state === STATE.YES || state === STATE.IN_PROGRESS;
+    const activeRounds = Object.entries(trackerRounds).filter(([, r]) => r.result || r.color || r.opponent).map(([n]) => Number(n));
+    const autoSelect = isLive && roundNumber ? roundNumber : (activeRounds.length ? Math.max(...activeRounds) : null);
+    renderRoundTracker({ rounds: trackerRounds }, totalRounds || 7, roundNumber, state, autoSelect);
+}
+
+function renderState(stateData, trackerRounds) {
     // Update tournament metadata
     if (stateData.tournamentName || stateData.roundDates) {
         const prev = getTournamentMeta();
@@ -58,23 +123,35 @@ function renderState(stateData, roundHistory) {
             slug: stateData.tournamentSlug || prev.slug,
             url: stateData.tournamentUrl || prev.url,
             roundDates: stateData.roundDates || prev.roundDates,
-            totalRounds: stateData.totalRounds || prev.totalRounds,
-            nextTournament: stateData.nextTournament || prev.nextTournament,
         });
         updateTournamentLink();
     }
 
     const state = stateData.state;
-    const info = stateData.info;
     const roundNumber = stateData.round || 0;
+    const meta = getTournamentMeta();
+    const info = getInfoText(state, roundNumber, meta.name, meta.roundDates);
 
     setAppState({ state, roundInfo: info || '' });
     if (state !== 'no') stopCountdown();
 
+    // Build pairing info from tracker data for the current round
+    const currentRound = trackerRounds?.[roundNumber];
+    let pairingInfo = null;
+    if (currentRound && !currentRound.isBye) {
+        pairingInfo = {
+            board: currentRound.board, color: currentRound.color,
+            opponent: currentRound.opponent, opponentRating: currentRound.opponentRating,
+            round: roundNumber,
+        };
+        if (currentRound.result) pairingInfo.playerResult = currentRound.result;
+    } else if (currentRound?.isBye) {
+        pairingInfo = { isBye: true, byeType: currentRound.byeType, round: roundNumber };
+    }
+
     if (state === 'off_season') {
-        const offSeasonOpts = stateData.offSeason?.targetDate
-            ? { targetDate: stateData.offSeason.targetDate }
-            : null;
+        const r1 = meta.roundDates?.[0];
+        const offSeasonOpts = r1 && new Date(r1).getTime() > Date.now() ? { targetDate: r1 } : null;
         setAppState({ pairing: null });
         showState(STATE.OFF_SEASON, info, offSeasonOpts);
     } else if (state === 'too_early' || state === 'no') {
@@ -82,12 +159,7 @@ function renderState(stateData, roundHistory) {
         showState(state, info);
     } else {
         // yes, in_progress, results
-        setAppState({ lastRoundNumber: roundNumber || 1 });
-        const pairingInfo = stateData.pairing || null;
-        if (pairingInfo) {
-            roundHistory = updateRoundHistory(roundNumber, pairingInfo, getTournamentMeta().name);
-        }
-        setAppState({ pairing: pairingInfo });
+        setAppState({ lastRoundNumber: roundNumber || 1, pairing: pairingInfo });
         showState(state, info, pairingInfo);
         if (pairingInfo) saveLivePairingHtml();
     }
@@ -96,7 +168,7 @@ function renderState(stateData, roundHistory) {
     const btn = document.getElementById('check-btn');
     if (!btn.onclick) btn.onclick = wrappedCheckPairings;
 
-    renderTrackerIfReady(roundHistory, roundNumber, state);
+    renderTracker(trackerRounds || {}, meta.roundDates?.length || 7, roundNumber, state);
 }
 
 /**
@@ -104,7 +176,7 @@ function renderState(stateData, roundHistory) {
  */
 function stateChanged(a, b) {
     if (!a || !b) return true;
-    return a.state !== b.state || a.round !== b.round || a.info !== b.info;
+    return a.state !== b.state || a.round !== b.round;
 }
 
 async function checkPairings() {
@@ -118,7 +190,7 @@ async function checkPairings() {
     } catch { /* corrupt */ }
 
     if (cachedState) {
-        renderState(cachedState, loadRoundHistory());
+        renderState(cachedState, {});
     } else {
         showLoading();
     }
@@ -126,10 +198,7 @@ async function checkPairings() {
     // Fetch fresh state from server
     let serverState = null;
     try {
-        const url = CONFIG.playerName
-            ? `${WORKER_URL}/tournament-state?player=${encodeURIComponent(CONFIG.playerName)}`
-            : `${WORKER_URL}/tournament-state`;
-        const data = await (await fetch(url)).json();
+        const data = await (await fetch(`${WORKER_URL}/tournament-state`)).json();
         if (data.state) {
             serverState = data;
             localStorage.setItem('lastTournamentState', JSON.stringify(data));
@@ -141,16 +210,21 @@ async function checkPairings() {
         return;
     }
 
-    // Fetch player history + re-render if state changed (skip in offseason — no active tournament)
-    let roundHistory = loadRoundHistory();
-    if (CONFIG.playerName && serverState.state !== 'off_season') {
-        roundHistory = await fetchPlayerHistory(CONFIG.playerName, getTournamentMeta().name);
+    // Fetch player's games + byes for round tracker
+    let trackerRounds = {};
+    if (CONFIG.playerName && serverState.state !== 'off_season' && serverState.tournamentSlug) {
+        try {
+            const playerNorm = normalizeKey(CONFIG.playerName);
+            const qUrl = `${WORKER_URL}/query?player=${encodeURIComponent(CONFIG.playerName)}&tournament=${encodeURIComponent(serverState.tournamentSlug)}`;
+            const qData = await (await fetch(qUrl)).json();
+            trackerRounds = buildTrackerRounds(qData.games || [], qData.byes || [], playerNorm);
+        } catch { /* network failure */ }
     }
 
     if (stateChanged(cachedState, serverState)) {
-        renderState(serverState, roundHistory);
+        renderState(serverState, trackerRounds);
     } else {
-        renderTrackerIfReady(roundHistory, serverState.round || 0, serverState.state);
+        renderTracker(trackerRounds, serverState.roundDates?.length || 7, serverState.round || 0, serverState.state);
     }
 }
 
@@ -247,7 +321,7 @@ const ACTIONS = {
     'browser-explore': launchExplorer,
     // Editor
     'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
-    'browser-import': showImportDialog,
+    'browser-import': showImportDialog, 'submit-add-moves': showSubmitDialog, 'viewer-submit': submitGame,
     'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': hideHeaderEditor,
     'dirty-copy-leave': dirtyDialogCopyLeave, 'dirty-discard': dirtyDialogDiscard, 'dirty-cancel': dirtyDialogCancel,
     // Share popover
@@ -374,8 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelector('[data-action="share-native"]')?.classList.add('hidden');
     }
 
-    // Player Profile init
-    import('./src/player-profile.js').then(m => m.initPlayerProfile());
+    initPlayerProfile();
 
     // First-visit onboarding
     if (!localStorage.getItem('hasVisited')) {
@@ -386,6 +459,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         setTimeout(() => openModal('about-modal'), 500);
     }
+
+    // Debug helpers (console access)
+    window.debugInjectSkeletons = debugInjectSkeletons;
 
     // App bootstrap
     wrappedCheckPairings();
@@ -404,8 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchGames({ gameId, include: 'pgn' }).then(() => {
             const game = getCachedGame(gameId);
             if (game) {
-                const pName = CONFIG.playerName?.toLowerCase();
-                const orientation = pName && game.black?.toLowerCase() === pName ? 'Black' : 'White';
+                const pNorm = CONFIG.playerName ? normalizeKey(CONFIG.playerName) : null;
+                const orientation = pNorm && game.blackNorm === pNorm ? 'Black' : 'White';
                 openGameViewer({ game, orientation });
             }
             window.history.replaceState({}, '', window.location.pathname);

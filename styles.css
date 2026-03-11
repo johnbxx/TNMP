@@ -1828,6 +1828,34 @@ html.off-season .meme {
     display: none;
 }
 
+/* Add Moves prompt (submission workflow) */
+.viewer-add-moves {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+.viewer-add-moves p { margin: 0; }
+.viewer-add-moves-btn {
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.viewer-add-moves-btn:hover { opacity: 0.85; }
+.viewer-submit-btn { color: var(--accent); }
+.viewer-submit-btn:hover { background: var(--accent); color: #fff; }
+.browser-submit-icon { color: #e5a100; flex-shrink: 0; }
+.browser-submit-icon.submitted { color: #4caf50; }
+
 /* View Game button in round detail */
 .view-game-btn {
     margin-top: 0.75rem;

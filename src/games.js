@@ -26,13 +26,27 @@ let _fetchGeneration = 0;
 
 // Player index (populated by fetchPlayerList)
 let _allPlayers = null;         // string[]
-let _playerIndex = null;        // displayName → { dbName, uscfId, rating }
+let _playerIndex = null;        // normalizedKey → { displayName, dbName, uscfId, rating }
+
+/** Normalize any name format → canonical key ("boyer,john"). */
+function normalizeKey(name) {
+    const t = name.trim();
+    const parts = t.split(/,\s*/);
+    if (parts.length >= 2) return t.toLowerCase().replace(/\s+/g, '');
+    const words = t.split(/\s+/);
+    if (words.length >= 2) {
+        return `${words[words.length - 1]},${words.slice(0, -1).join(' ')}`.toLowerCase().replace(/\s+/g, '');
+    }
+    return t.toLowerCase();
+}
+
+export { normalizeKey };
 
 // Filters
 const EMPTY_FILTERS = {
-    player: null, playerLower: null,
+    player: null, playerNorm: null,
     round: null, tournament: null, color: null,
-    eco: null, opponent: null, opponentLower: null, event: null,
+    eco: null, opponent: null, opponentNorm: null, event: null,
 };
 let _filters = { ...EMPTY_FILTERS };
 let _playerList = [];           // searchable player names for current dataset
@@ -141,13 +155,28 @@ export function getCachedGame(gameId) {
         || null;
 }
 
-export function getPlayerInfo(displayName) {
-    return _playerIndex?.[displayName] ?? null;
+/** Update a cached game's metadata from edited PGN headers. */
+export function updateCachedGame(gameId, headers) {
+    const game = getCachedGame(gameId);
+    if (!game) return;
+    if (headers.White) game.white = headers.White;
+    if (headers.Black) game.black = headers.Black;
+    if (headers.Result) game.result = headers.Result;
+    if (headers.WhiteElo) game.whiteElo = headers.WhiteElo;
+    if (headers.BlackElo) game.blackElo = headers.BlackElo;
+    if (headers.ECO) game.eco = headers.ECO;
+    if (headers.Opening) game.openingName = headers.Opening;
+    notifyChange();
+}
+
+export function getPlayerInfo(name) {
+    if (!_playerIndex || !name) return null;
+    return _playerIndex[normalizeKey(name)] ?? null;
 }
 
 export function getOrientationForGame(game) {
-    if (!_filters.player || !game) return 'White';
-    if (game.black.toLowerCase() === _filters.playerLower) return 'Black';
+    if (!_filters.playerNorm || !game) return 'White';
+    if (game.blackNorm === _filters.playerNorm) return 'Black';
     return 'White';
 }
 
@@ -169,7 +198,7 @@ export async function openBrowser(query = null) {
         _filters.eco = query.eco ? new Set(query.eco) : null;
         const opp = query.opponent || null;
         _filters.opponent = opp;
-        _filters.opponentLower = opp?.toLowerCase() ?? null;
+        _filters.opponentNorm = opp ? normalizeKey(opp) : null;
     } else if (!query) {
         resetBrowserState();
     }
@@ -245,7 +274,7 @@ export async function switchDataSource(value, currentSlug) {
         _playerList = buildPlayerListFromGames();
     } else {
         const previousPlayer = _filters.player;
-        const previousPlayerLower = _filters.playerLower;
+        const previousPlayerNorm = _filters.playerNorm;
         const isCurrentTournament = value === currentSlug;
         _activeTournamentSlug = isCurrentTournament ? null : value;
         _tournamentData = null;
@@ -258,7 +287,7 @@ export async function switchDataSource(value, currentSlug) {
         _loading = false;
 
         const newPlayerList = buildPlayerListFromGames();
-        if (previousPlayer && newPlayerList.some(p => p.toLowerCase() === previousPlayerLower)) {
+        if (previousPlayer && newPlayerList.some(p => normalizeKey(p) === previousPlayerNorm)) {
             setPlayer(previousPlayer);
         }
 
@@ -449,7 +478,8 @@ export async function fetchPlayerList() {
     const data = await response.json();
     _playerIndex = {};
     _allPlayers = data.players.map(p => {
-        _playerIndex[p.name] = {
+        _playerIndex[normalizeKey(p.dbName || p.name)] = {
+            displayName: p.name,
             dbName: p.dbName || p.name,
             uscfId: p.uscfId || null,
             rating: p.rating || null,
@@ -474,7 +504,7 @@ function isLocalMode() { return !!_tournamentData?.query?.local; }
 
 function setPlayer(name) {
     _filters.player = name;
-    _filters.playerLower = name?.toLowerCase() ?? null;
+    _filters.playerNorm = name ? normalizeKey(name) : null;
 }
 
 function resetBrowserState() {
@@ -504,23 +534,23 @@ function resolveDefaultRound(forceReset = false) {
 
 function isPlayerDataLoaded() {
     if (!_playerData?.games?.length) return false;
-    return _playerData.query?.player?.toLowerCase() === _filters.playerLower;
+    return normalizeKey(_playerData.query?.player || '') === _filters.playerNorm;
 }
 
 function getVisibleGames(opts = {}) {
     let games = (_filters.player ? _playerData : _tournamentData)?.games || [];
-    const { playerLower, tournament, color, eco, opponentLower, event, round } = _filters;
+    const { playerNorm, tournament, color, eco, opponentNorm, event, round } = _filters;
     const explorerGameIds = opts.skipExplorer ? null : _explorer?.gameIds;
 
-    if (playerLower) {
+    if (playerNorm) {
         games = games.filter(g => {
-            const wLower = g.white.toLowerCase();
-            const bLower = g.black.toLowerCase();
-            if (wLower !== playerLower && bLower !== playerLower) return false;
+            const wNorm = g.whiteNorm;
+            const bNorm = g.blackNorm;
+            if (wNorm !== playerNorm && bNorm !== playerNorm) return false;
             if (tournament && (g.tournamentSlug || g.tournament) !== tournament) return false;
-            if (color && (color === 'white' ? wLower !== playerLower : bLower !== playerLower)) return false;
+            if (color && (color === 'white' ? wNorm !== playerNorm : bNorm !== playerNorm)) return false;
             if (eco && !(g.eco && eco.has(g.eco))) return false;
-            if (opponentLower && wLower !== opponentLower && bLower !== opponentLower) return false;
+            if (opponentNorm && wNorm !== opponentNorm && bNorm !== opponentNorm) return false;
             if (explorerGameIds && (!g.pgn ? _explorer.moveHistory.length > 0 : !(g.gameId && explorerGameIds.has(g.gameId)))) return false;
             return true;
         });
@@ -645,6 +675,7 @@ function parseResult(result) {
     if (result === '1-0') return { w: 1, d: 0, b: 0 };
     if (result === '0-1') return { w: 0, d: 0, b: 1 };
     if (result === '1/2-1/2') return { w: 0, d: 1, b: 0 };
+    if (result === '*') return { w: 0, d: 0, b: 0 };
     return null;
 }
 

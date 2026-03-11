@@ -633,7 +633,7 @@
         <ul>
           <li>Vanilla JS PWA — no framework</li>
           <li>Vite build with hashed assets</li>
-          <li><code>app.js</code> → 17 ES modules in <code>src/</code></li>
+          <li><code>app.js</code> → 15 ES modules in <code>src/</code></li>
           <li>Chess.js + Chessboard2 for game viewer</li>
           <li>PGN editor with move validation</li>
           <li>Game browser with filters + PGN import</li>
@@ -657,7 +657,7 @@
       <div class="box c-green" id="o-worker" style="--area:worker">
         <h3>⚙️ Worker <span class="badge" style="background:rgba(63,185,80,0.15);color:var(--green)">Cloudflare Workers</span></h3>
         <ul>
-          <li>HTTP API: 16 endpoints (tournament, games, push, OG)</li>
+          <li>HTTP API: 17 endpoints (tournament, games, push, OG)</li>
           <li>Cron: 3 schedules (pairings, results, cache refresh)</li>
           <li>Regex parser for MI website</li>
           <li>Web Push (VAPID JWT + AES-128-GCM encryption)</li>
@@ -675,7 +675,6 @@
           <li>Tournament HTML cache</li>
           <li>Standings data</li>
           <li>Notification state</li>
-          <li>Rate limits (auto-expire)</li>
           <li>OG image blobs</li>
         </ul>
       </div>
@@ -733,7 +732,7 @@
           <ul>
             <li><code>config.js</code> — constants, state getters/setters</li>
             <li><code>history.js</code> — round history, server sync</li>
-            <li><code>browser-data.js</code> — /query fetch/cache layer</li>
+            <li><code>games.js</code> — /query fetch/cache, filters, explorer trie</li>
           </ul>
         </div>
       </div>
@@ -758,30 +757,21 @@
           </ul>
         </div>
 
-        <div class="fe-cluster c-pink" id="fd-browser">
-          <h4 style="color:var(--pink)">Game Browser</h4>
-          <ul>
-            <li><code>game-browser.js</code> — round tabs, player search, section filters</li>
-            <li>Embedded side panel (desktop) or mobile-first browser view</li>
-            <li>Tournament/event dropdown, PGN import/export</li>
-          </ul>
-        </div>
-
-        <div class="fe-cluster c-pink" id="fd-viewer">
+        <div class="fe-cluster c-pink" id="fd-panel">
           <h4 style="color:var(--pink)">Game Panel</h4>
           <ul>
-            <li><code>game-viewer.js</code> — panel orchestrator, viewer/editor mode switching</li>
-            <li><code>pgn-viewer.js</code> — replay engine, auto-play, branches</li>
-            <li><code>board-core.js</code> — shared board + move tree infrastructure</li>
+            <li><code>game-panel.js</code> — modal lifecycle, viewer/editor/browser</li>
+            <li>Mode switching, embedded browser sidebar (desktop)</li>
+            <li>Receives state via <code>onChange</code>, routes actions to data</li>
           </ul>
         </div>
 
-        <div class="fe-cluster c-pink" id="fd-editor">
-          <h4 style="color:var(--pink)">PGN Editor</h4>
+        <div class="fe-cluster c-pink" id="fd-data-layers">
+          <h4 style="color:var(--pink)">Data Layers</h4>
           <ul>
-            <li><code>pgn-editor.js</code> — drag-drop, validation, annotations</li>
-            <li><code>pgn-parser.js</code> — tokenizer + serializer</li>
-            <li>Reuses <code>board-core.js</code> from viewer</li>
+            <li><code>pgn.js</code> — move tree, navigation, annotations, serialization</li>
+            <li><code>board.js</code> — chess board renderer, drag-drop, legality</li>
+            <li><code>pgn-parser.js</code> — PGN tokenizer + serializer</li>
           </ul>
         </div>
       </div>
@@ -876,72 +866,69 @@
     </div>
   </div>
 
-  <div class="section-label">Game Viewer &amp; Editor</div>
+  <div class="section-label">Game Panel &amp; Data Layers</div>
   <div class="module-grid">
     <div class="module-card" style="border-left:3px solid var(--pink)">
-      <h4 style="color:var(--pink)">game-viewer.js</h4>
-      <div class="path">src/game-viewer.js</div>
-      <p>Orchestrates the unified viewer/editor panel. Mode switching (viewer ↔ editor), embedded browser panel, dirty editor warnings, keyboard dispatch, panel close cleanup.</p>
+      <h4 style="color:var(--pink)">game-panel.js</h4>
+      <div class="path">src/game-panel.js</div>
+      <p>View/controller for the unified game panel. Orchestrates modal lifecycle, viewer↔editor mode switching, embedded browser sidebar, keyboard dispatch. Receives state from <code>games.js</code> via <code>onChange</code> — never calls getters.</p>
       <div class="exports">
-        <span>openGameViewer()</span>
-        <span>openGameEditor()</span>
-        <span>openImportedGames()</span>
+        <span>openGamePanel()</span>
         <span>closeGamePanel()</span>
+        <span>openGameWithPlayerNav()</span>
         <span>handlePanelKeydown()</span>
-        <span>editCurrentGame()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--pink)">
-      <h4 style="color:var(--pink)">pgn-viewer.js</h4>
-      <div class="path">src/pgn-viewer.js</div>
-      <p>Interactive PGN replay. Parse PGN → build move tree → render board. Move navigation, auto-play, comments toggle, branch/variation support.</p>
-      <div class="exports">
-        <span>initViewer()</span>
-        <span>destroyViewer()</span>
         <span>goToStart/Prev/Next/End()</span>
         <span>flipBoard()</span>
         <span>toggleAutoPlay()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--pink)">
-      <h4 style="color:var(--pink)">pgn-editor.js</h4>
-      <div class="path">src/pgn-editor.js</div>
-      <p>Interactive PGN editor for entering games. Drag-drop pieces, move validation via Chess.js, undo stack, NAG annotations, PGN import, game submission to worker.</p>
-      <div class="exports">
-        <span>openEditor()</span>
-        <span>closeEditor()</span>
-        <span>undo()</span>
-        <span>submitGame()</span>
         <span>toggleNag()</span>
+        <span>launchExplorer()</span>
       </div>
     </div>
 
     <div class="module-card" style="border-left:3px solid var(--pink)">
-      <h4 style="color:var(--pink)">board-core.js</h4>
-      <div class="path">src/board-core.js</div>
-      <p>Shared chess board infrastructure. Move tree building, FEN computation, board creation/destruction, move table rendering. Used by both viewer and editor.</p>
+      <h4 style="color:var(--pink)">games.js</h4>
+      <div class="path">src/games.js</div>
+      <p>Pure data layer. Fetches <code>/query</code>, caches games, builds indexes by round/player/section, opening explorer trie, player search, tournament switching. Zero DOM. Pushes complete state via <code>onChange(callback)</code>.</p>
       <div class="exports">
-        <span>buildMoveTree()</span>
-        <span>goToNode()</span>
-        <span>createBoard()</span>
-        <span>renderMoveTable()</span>
-        <span>syncDesktopLayout()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--pink)">
-      <h4 style="color:var(--pink)">game-browser.js</h4>
-      <div class="path">src/game-browser.js</div>
-      <p>Unified game browser. Round tabs, player search, section filters, tournament/event dropdown. PGN import/export. Embedded side panel on desktop. Single render pipeline for local imports and server data.</p>
-      <div class="exports">
-        <span>openGameBrowser()</span>
-        <span>openGameFromBrowser()</span>
-        <span>openGameWithPlayerNav()</span>
-        <span>renderBrowserInPanel()</span>
-        <span>hideBrowserPanel()</span>
+        <span>onChange()</span>
+        <span>getState()</span>
+        <span>fetchGames()</span>
         <span>prefetchGames()</span>
+        <span>getCachedGame()</span>
+        <span>getPlayerInfo()</span>
+        <span>normalizeKey()</span>
+        <span>selectPlayer()</span>
+        <span>switchDataSource()</span>
+        <span>launchExplorer()</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="border-left:3px solid var(--pink)">
+      <h4 style="color:var(--pink)">pgn.js</h4>
+      <div class="path">src/pgn.js</div>
+      <p>Pure data layer for the move tree. Manages navigation, variations, annotations, comments, auto-play, branch mode, PGN serialization. Receives user moves from <code>board.js</code> via <code>playMove(san)</code>. Zero DOM.</p>
+      <div class="exports">
+        <span>initGame()</span>
+        <span>destroyGame()</span>
+        <span>getState()</span>
+        <span>playMove()</span>
+        <span>goToPrevious/goToNext()</span>
+        <span>toggleAutoPlay()</span>
+        <span>toggleBranchMode()</span>
+        <span>toggleNag()</span>
+        <span>toPgn()</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="border-left:3px solid var(--pink)">
+      <h4 style="color:var(--pink)">board.js</h4>
+      <div class="path">src/board.js</div>
+      <p>Chess board renderer. Accepts positions, renders via chessboard-element, handles drag-drop/click-to-move, validates legality via chess.js. Reports user moves via <code>onMove</code> callback. Zero knowledge of PGN tree.</p>
+      <div class="exports">
+        <span>setPosition()</span>
+        <span>highlightSquares()</span>
+        <span>setOnMove()</span>
+        <span>destroy()</span>
       </div>
     </div>
 
@@ -973,7 +960,7 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">player-profile.js</h4>
       <div class="path">src/player-profile.js</div>
-      <p>Player profile modal. Fetches all-time stats from <code>/query?player=NAME&amp;tournament=all</code>. Win/loss/draw record, rating history, game list.</p>
+      <p>Player profile modal. Fetches all-time stats from <code>/query?player=NAME&amp;tournament=all</code>. Win/loss/draw record, rating history, game list. Uses <code>normalizeKey()</code> for canonical name comparisons.</p>
       <div class="exports">
         <span>openPlayerProfile()</span>
       </div>
@@ -997,19 +984,6 @@
       <h4>toast.js</h4>
       <div class="path">src/toast.js</div>
       <p>Temporary toast messages ("Saved!", "Copied!").</p>
-    </div>
-    <div class="module-card" style="border-left:3px solid var(--cyan)">
-      <h4 style="color:var(--cyan)">browser-data.js</h4>
-      <div class="path">src/browser-data.js</div>
-      <p>Game data fetch/cache layer for game browser. Fetches <code>/query</code> endpoint, caches in localStorage, builds indexes by round/player/section/tournament.</p>
-      <div class="exports">
-        <span>fetchGames()</span>
-        <span>prefetchGames()</span>
-        <span>getGamesData()</span>
-        <span>getCachedGame()</span>
-        <span>fetchTournamentList()</span>
-        <span>buildPlayerList()</span>
-      </div>
     </div>
     <div class="module-card" style="border-left:3px solid var(--text-dim)">
       <h4>debug.js</h4>
@@ -1072,7 +1046,7 @@
         <div class="fe-cluster c-green" id="wd-router">
           <h4 style="color:var(--green)">Router</h4>
           <ul>
-            <li><code>index.js</code> — HTTP router (16 routes) + cron dispatcher</li>
+            <li><code>index.js</code> — HTTP router (17 routes) + cron dispatcher</li>
             <li>Routes HTTP to Tournament, Push, Game Data</li>
             <li><code>fetch()</code> and <code>scheduled()</code> entry points</li>
           </ul>
@@ -1119,7 +1093,7 @@
     <div class="fe-infra-bar">
       <span class="fe-infra-label">Infrastructure</span>
       <code>helpers.js</code>
-      <span class="fe-infra-note">— CORS, normalization, rate limiting, slug generation (shared by all modules)</span>
+      <span class="fe-infra-note">— CORS, name normalization, slug generation (shared by all modules)</span>
     </div>
   </div>
 
@@ -1128,7 +1102,7 @@
     <div class="module-card" style="border-left:3px solid var(--green)">
       <h4 style="color:var(--green)">index.js</h4>
       <div class="path">worker/src/index.js</div>
-      <p>HTTP router (16 routes) and cron dispatcher. CORS handling, rate limiting. Entry point for both <code>fetch</code> and <code>scheduled</code> events.</p>
+      <p>HTTP router (17 routes) and cron dispatcher. CORS handling. Entry point for both <code>fetch</code> and <code>scheduled</code> events.</p>
       <div class="exports">
         <span>fetch()</span>
         <span>scheduled()</span>
@@ -1205,9 +1179,10 @@
     <div class="module-card" style="border-left:3px solid var(--cyan)">
       <h4 style="color:var(--cyan)">games.js</h4>
       <div class="path">worker/src/games.js</div>
-      <p>D1-based game endpoints. Composable <code>/query</code> API with filters (player, tournament, round, section, hasPgn). Player history, OG image generation, ECO classification, game submissions.</p>
+      <p>D1-based game endpoints. Composable <code>/query</code> API with filters (player, tournament, round, section, hasPgn). Player list, player history, OG image generation, ECO classification, game submissions.</p>
       <div class="exports">
         <span>handleQuery()</span>
+        <span>handlePlayers()</span>
         <span>handlePlayerHistory()</span>
         <span>handleTournaments()</span>
         <span>handleSubmitGame()</span>
@@ -1241,12 +1216,12 @@
     <div class="module-card" style="border-left:3px solid var(--text-dim)">
       <h4>helpers.js</h4>
       <div class="path">worker/src/helpers.js</div>
-      <p>CORS headers, player name normalization, tournament slug generation, rate limiting, player name pattern matching.</p>
+      <p>CORS headers, player name normalization, tournament slug generation, player name pattern matching.</p>
       <div class="exports">
         <span>corsHeaders()</span>
         <span>normalizePlayerName()</span>
         <span>slugifyTournament()</span>
-        <span>checkRateLimit()</span>
+        <span>formatPlayerName()</span>
         <span>buildPlayerNamePatterns()</span>
       </div>
     </div>
@@ -1535,12 +1510,6 @@
         <td>None</td>
       </tr>
       <tr>
-        <td><code>ratelimit:{ip}:{endpoint}</code></td>
-        <td>Counter</td>
-        <td>Per-IP rate limit counter</td>
-        <td>5 min (auto-expire)</td>
-      </tr>
-      <tr>
         <td><code>og-image:{gameId}</code></td>
         <td>PNG blob</td>
         <td>Cached chess board image for social media previews</td>
@@ -1615,7 +1584,7 @@
       <tr>
         <td><code>gamesData</code></td>
         <td>Cached games from /query endpoint (flat array + query params)</td>
-        <td>browser-data.js</td>
+        <td>games.js</td>
       </tr>
       <tr>
         <td><code>pushEndpoint</code></td>
@@ -1674,8 +1643,14 @@
       <tr>
         <td><code>/query</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Primary game endpoint. Composable filters: <code>player</code>, <code>tournament</code>, <code>round</code>, <code>board</code>, <code>gameId</code>, <code>hasPgn</code>, <code>include=submissions</code></td>
-        <td>Game browser, player profiles, deep links</td>
+        <td>Primary game endpoint. Composable filters: <code>player</code>, <code>tournament</code>, <code>round</code>, <code>board</code>, <code>gameId</code>, <code>hasPgn</code>, <code>include=submissions</code>. Response includes <code>whiteNorm</code>/<code>blackNorm</code> canonical keys.</td>
+        <td>games.js, player profiles, deep links</td>
+      </tr>
+      <tr>
+        <td><code>/players</code></td>
+        <td><span class="method method-get">GET</span></td>
+        <td>List all players (name, dbName, uscfId, rating)</td>
+        <td>games.js (player search)</td>
       </tr>
       <tr>
         <td><code>/tournaments</code></td>
@@ -2008,15 +1983,15 @@ function drawFrontendArrows() {
     dim: '#8b949e'
   };
 
-  // ── Position State & Data: midpoint aligned with midpoint between Rendering and Browser ──
+  // ── Position State & Data: midpoint aligned with midpoint between Rendering and Panel ──
   const stateEl = document.getElementById('fd-state-data');
   const renderEl = document.getElementById('fd-rendering');
-  const browserEl = document.getElementById('fd-browser');
-  if (stateEl && renderEl && browserEl) {
+  const panelEl = document.getElementById('fd-panel');
+  if (stateEl && renderEl && panelEl) {
     stateEl.style.marginTop = '0px';  // reset first
     const renderMid = renderEl.getBoundingClientRect().top + renderEl.getBoundingClientRect().height / 2;
-    const browserMid = browserEl.getBoundingClientRect().top + browserEl.getBoundingClientRect().height / 2;
-    const targetMid = (renderMid + browserMid) / 2;
+    const panelMid = panelEl.getBoundingClientRect().top + panelEl.getBoundingClientRect().height / 2;
+    const targetMid = (renderMid + panelMid) / 2;
     const stateRect = stateEl.getBoundingClientRect();
     const currentMid = stateRect.top + stateRect.height / 2;
     const offset = targetMid - currentMid;
@@ -2026,13 +2001,11 @@ function drawFrontendArrows() {
   // ── Left → Right: sidebar modules feeding into main chain ──
   arrow('fd-user-features', 'right', 'fd-entry', 'left', c.purple, 'initialize', false, 0.5, 0.5);
   arrow('fd-state-data', 'right', 'fd-rendering', 'left', c.cyan, 'provides state', false, 0.4, 0.5);
-  arrow('fd-state-data', 'right', 'fd-browser', 'left', c.cyan, 'game index', false, 0.6, 0.5);
+  arrow('fd-state-data', 'right', 'fd-panel', 'left', c.cyan, 'onChange', false, 0.6, 0.5);
 
   // ── Main chain: vertical flow down the right column ──
   arrow('fd-entry', 'bottom', 'fd-rendering', 'top', c.blue, 'render UI', false, 0.5, 0.5);
-  arrow('fd-browser', 'bottom', 'fd-viewer', 'top', c.pink, 'open game + nav', false, 0.5, 0.5);
-  arrow('fd-viewer', 'bottom', 'fd-editor', 'top', c.pink, 'edit mode', true, 0.4, 0.4);
-  arrow('fd-editor', 'top', 'fd-viewer', 'bottom', c.pink, 'board-core', true, 0.7, 0.7);
+  arrow('fd-panel', 'bottom', 'fd-data-layers', 'top', c.pink, 'playMove / onMove', false, 0.5, 0.5);
 }
 
 /* ── Worker Dependency Arrows ── */

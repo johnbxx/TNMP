@@ -1,6 +1,5 @@
 import { CONFIG } from './config.js';
 import { showToast } from './toast.js';
-import { clearRoundHistory } from './history.js';
 import { openModal, closeModal } from './modal.js';
 import { checkPushStatus, syncPushSubscription } from './push.js';
 import { fetchPlayerList } from './games.js';
@@ -44,8 +43,6 @@ export function saveSettings(checkPairings) {
     closeModal('settings-modal');
 
     if (newName !== oldName) {
-        // Clear stale round history built for the old player name
-        clearRoundHistory();
         // Sync push subscription with new name
         syncPushSubscription();
         // Always re-check to rebuild pairing info and history for the new name

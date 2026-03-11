@@ -2,6 +2,9 @@ import { STATE, CONFIG, getTournamentMeta, getAppState } from './config.js';
 import { getRandomMeme } from './memes.js';
 import { stopOffSeasonCountdown, startOffSeasonCountdown, updateCountdownDisplay } from './countdown.js';
 import { resultDisplay } from './utils.js';
+import { openPlayerProfile } from './player-profile.js';
+import { getCachedGame } from './games.js';
+import { openGameWithPlayerNav, openGamePanel } from './game-panel.js';
 
 /** Set the state class on <html>, preserving the dark-mode class if present. */
 function setHtmlClass(stateClass) {
@@ -19,21 +22,6 @@ const COLOR_ICONS = {
     Black: 'pieces/bK.webp',
 };
 
-/**
- * Build pairing info HTML shared between showState() and showRoundDetail().
- * @param {object} opts
- * @param {number} [opts.round] - Round number
- * @param {number} [opts.board] - Board number
- * @param {boolean} [opts.isBye] - Is this a bye?
- * @param {string} [opts.byeType] - 'full', 'half', or undefined
- * @param {string} [opts.opponent] - Opponent name
- * @param {string} [opts.opponentRating] - Opponent rating
- * @param {string} [opts.opponentUrl] - Opponent profile URL
- * @param {string} [opts.color] - 'White' or 'Black'
- * @param {string} [opts.colorIcon] - Custom icon path (overrides color lookup)
- * @param {object} [opts.result] - { emoji, text } for result display
- * @param {string} [opts.extra] - Extra HTML appended at the end
- */
 function renderPairingHtml(opts) {
     const headerParts = [];
     if (opts.round) headerParts.push(`Round ${opts.round}`);
@@ -74,9 +62,7 @@ function renderPairingHtml(opts) {
 
 let fitAnswerRafId = null;
 
-// Shrink an element's font size until its text fits within its container width.
-// Returns a cancel function. Exported for reuse (game browser title, etc.).
-export function fitTextToContainer(el, { minSize = 16, widthFraction = 0.92 } = {}) {
+function fitTextToContainer(el, { minSize = 16, widthFraction = 0.92 } = {}) {
     if (!el || !el.textContent) return;
     el.style.fontSize = '';
 
@@ -200,8 +186,7 @@ export function showState(state, info, pairingInfo = null) {
     // Update button text based on state (onclick wired by app.js)
     const btn = document.getElementById('check-btn');
     if (state === STATE.OFF_SEASON) {
-        const linkUrl = getTournamentMeta().url
-            || getTournamentMeta().nextTournament?.url;
+        const linkUrl = getTournamentMeta().url;
         if (linkUrl) {
             btn.textContent = 'View Tournament Info';
             btn.onclick = () => window.open(linkUrl, '_blank');
@@ -230,13 +215,6 @@ export function hideOfflineBanner() {
     if (banner) banner.classList.remove('show');
 }
 
-/**
- * Render the round tracker bar showing tournament progress.
- * @param {object} roundHistory - { tournamentName, rounds: { [num]: { result, color, opponent, ... } } }
- * @param {number} totalRounds - Total rounds in tournament (default 7)
- * @param {number} currentRound - Current/latest round number
- * @param {string} currentState - Current app state (STATE.YES, STATE.IN_PROGRESS, etc.)
- */
 export function renderRoundTracker(roundHistory, totalRounds, currentRound, currentState, autoSelectRound = null) {
     const section = document.getElementById('tracker-section');
     const container = document.getElementById('round-tracker');
@@ -314,9 +292,6 @@ export function renderRoundTracker(roundHistory, totalRounds, currentRound, curr
     }
 }
 
-/**
- * Show detail for a historical round in the pairing-info area.
- */
 function showRoundDetail(roundNum, roundHistory, currentRound) {
     const pairingInfoEl = document.getElementById('pairing-info');
     if (!pairingInfoEl) return;
@@ -355,9 +330,6 @@ function showRoundDetail(roundNum, roundHistory, currentRound) {
     updateTrackerSelection();
 }
 
-/**
- * Update which tracker circle appears selected.
- */
 function updateTrackerSelection() {
     const container = document.getElementById('round-tracker');
     if (!container) return;
@@ -367,9 +339,6 @@ function updateTrackerSelection() {
     });
 }
 
-/**
- * Store the live pairing HTML so we can restore it after viewing history.
- */
 export function saveLivePairingHtml() {
     const pairingInfoEl = document.getElementById('pairing-info');
     if (pairingInfoEl && pairingInfoEl.innerHTML.trim()) {
@@ -395,24 +364,19 @@ export function showError(message) {
 }
 
 // --- Pairing info delegation (opponent profile + View Game) ---
-// Uses dynamic imports to avoid circular dependency (ui → game-viewer → game-browser → ui)
 document.getElementById('pairing-info')?.addEventListener('click', (e) => {
     const profileBtn = e.target.closest('.opponent-profile-btn');
     if (profileBtn) {
         e.preventDefault();
-        import('./player-profile.js').then(({ openPlayerProfile }) => {
-            openPlayerProfile(profileBtn.dataset.opponentName);
-        });
+        openPlayerProfile(profileBtn.dataset.opponentName);
         return;
     }
     const btn = e.target.closest('.view-game-btn');
     if (!btn) return;
     const gameId = btn.dataset.gameId;
     if (!gameId) return;
-    import('./game-panel.js').then(({ getCachedGame, openGameWithPlayerNav, openGamePanel }) => {
-        const game = getCachedGame(gameId);
-        if (!game) return;
-        if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
-        else openGamePanel({ game });
-    });
+    const game = getCachedGame(gameId);
+    if (!game) return;
+    if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
+    else openGamePanel({ game });
 });

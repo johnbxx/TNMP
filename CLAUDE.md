@@ -19,14 +19,12 @@ Two deployments on Cloudflare:
 | `app.js` | Entry point. Fetches `/tournament-state` from worker, renders UI, manages round history. First-visit About modal. Action dispatch table for toolbar buttons. |
 | `src/config.js` | Constants (`WORKER_URL`, `VAPID_PUBLIC_KEY`, `STATE` enum) and runtime state via getter/setter pairs (`tournamentMeta`, `currentState`, `currentPairing`, `lastRoundNumber`, `roundInfo`). `CONFIG.playerName` backed by localStorage. |
 | `src/ui.js` | `showState()` renders answer, meme, pairing info, round tracker. `renderRoundTracker()` shows tournament progress with clickable round circles. |
-| `src/game-viewer.js` | Orchestrates the viewer/editor panel. Opens modal, manages viewer↔editor mode switching, embedded browser panel, keyboard dispatch (`handlePanelKeydown`), panel close cleanup. |
-| `src/game-browser.js` | Game browser modal. Player/section/round filters, game card rendering, tournament dropdown, closure-based prev/next navigation. Embedded sidebar mode on desktop. |
-| `src/browser-data.js` | Data layer for game browser. Fetches `/query` endpoint, caches games, builds indexes by round/player/section. |
-| `src/pgn-viewer.js` | Read-only game viewer. Renders board + move list via `board-core.js`. Autoplay, comments toggle, branch mode, move navigation. |
-| `src/pgn-editor.js` | PGN editor. Extends `board-core.js` with drag-and-drop, move tree mutation, undo, NAG annotation, PGN serialization, game submission. |
-| `src/board-core.js` | Shared board infrastructure for viewer and editor. Chess.js integration, move tree, board rendering (via chessboard-element), position sync, navigation, highlights. |
+| `src/games.js` | Data layer. Fetches `/query`, caches games, builds indexes by round/player/section, opening explorer trie, player search, tournament switching. Pure data, zero DOM. Pushes complete state to consumers via `onChange(callback)`. Exports `normalizeKey()` for canonical name lookups. |
+| `src/game-panel.js` | View/controller for game viewer, editor, and browser. Orchestrates modal lifecycle, receives state via `onChange` callbacks, renders DOM, routes user actions to data modules. Viewer↔editor mode switching, embedded browser sidebar on desktop, keyboard dispatch. |
+| `src/pgn.js` | Pure data layer for the move tree. Manages navigation, variations, annotations, comments, auto-play, branch mode, PGN serialization. Receives user moves from board.js via `playMove(san)`. Zero DOM. |
+| `src/board.js` | Chess board renderer. Accepts positions, renders via chessboard-element, handles drag-drop/click-to-move, validates legality via chess.js. Reports user moves via `onMove` callback. Zero knowledge of PGN tree or game state. |
 | `src/pgn-parser.js` | Pure PGN tokenizer. Parses PGN movetext into annotated move tree with comments, NAGs, variations. |
-| `src/player-profile.js` | Player profile modal. Fetches `/query?player=NAME&tournament=all`, shows all-time stats and game history. |
+| `src/player-profile.js` | Player profile modal. Fetches `/query?player=NAME&tournament=all`, shows all-time stats and game history. Uses `normalizeKey()` for canonical name comparisons. |
 | `src/history.js` | Round history via localStorage + `/player-history` endpoint. `updateRoundHistory()`, `fetchPlayerHistory()`. |
 | `src/modal.js` | Modal open/close/trap-focus/close-hook infrastructure. |
 | `src/settings.js` | Settings modal. Player name, push notification toggle, notification preferences. |
@@ -35,7 +33,7 @@ Two deployments on Cloudflare:
 | `src/memes.js` | Random meme selection per state. |
 | `src/share.js` | Native Share API with clipboard fallback. |
 | `src/toast.js` | `showToast()` notification helper. |
-| `src/utils.js` | Shared utilities: `formatName()`, `resultClass()`, `resultSymbol()`, `normalizeSection()`, `getHeader()`. |
+| `src/utils.js` | Shared utilities: `formatName()`, `resultClass()`, `resultSymbol()`, `normalizeSection()`, `getHeader()`, `resultDisplay()`, `fenToEpd()`. |
 | `src/debug.js` | `previewState()` for debug panel. |
 
 ### Worker (`worker/src/`)
@@ -44,7 +42,7 @@ Two deployments on Cloudflare:
 |------|------|
 | `index.js` | HTTP router + cron dispatch. All domain logic lives in focused modules below. |
 | `tournament.js` | Tournament resolution, `getTimeState()`, `computeAppState()`. Handles `/tournament-html`, `/tournament-state`, `/og-state`, `/health`. |
-| `games.js` | D1 game query endpoints, OG image generation, submissions. Handles `/query`, `/tournaments`, `/player-history`, `/og-game`, `/og-game-image`, `/eco-classify`, `/submit-game`, `/backfill-eco`. |
+| `games.js` | D1 game query endpoints, OG image generation, submissions, player list. Handles `/query`, `/players`, `/tournaments`, `/player-history`, `/og-game`, `/og-game-image`, `/eco-classify`, `/submit-game`, `/backfill-eco`. |
 | `push.js` | Push subscription CRUD and notification dispatch. Handles `/push-subscribe`, `/push-unsubscribe`, `/push-status`, `/push-preferences`, `/push-test`. |
 | `cron.js` | Scheduled handler: HTML fetching, caching, D1 game ingestion, ECO classification, push dispatch. |
 | `parser.js` | Regex-based tournament HTML parser. `parseTournamentPage()`, `hasPairings()`, `hasResults()`, `findPlayerPairing()`, `extractPairingsColors()`, `parseStandings()`, `composeMessage()`, `composeResultsMessage()`, `parseTournamentList()`, `parseRoundDates()`, `extractTournamentName()`. |
@@ -94,8 +92,12 @@ Two deployments on Cloudflare:
 1. Worker cron fetches tournament page → parses with `parseTournamentPage()` → extracts pairings colors via `extractPairingsColors()` → ingests games into D1 with ECO classification → caches HTML + metadata in KV → dispatches push notifications if state changed
 2. Frontend fetches `/tournament-state` → gets fully computed state object (`state`, `round`, `pairing`, `tournamentName`, `roundDates`, etc.) — all parsing is server-side
 3. Frontend fetches `/player-history` → gets D1-backed round history (colors, results, boards, opponents)
-4. Game browser fetches `/query` → gets games from D1 with composable filters (player, tournament, round, section, hasPgn)
+4. `games.js` fetches `/query` → gets games from D1 with composable filters → caches locally → pushes state via `onChange` → `game-panel.js` renders
 5. `renderRoundTracker()` displays clickable round circles with result colors
+
+### Name Normalization
+
+Server stores canonical names in D1 (`white_norm="boyer,john"`). `/query` returns both display names (`white`, `black`) and canonical keys (`whiteNorm`, `blackNorm`). Frontend uses display names for rendering only. All filtering, lookups, and comparisons use canonical names. `normalizeKey()` in `games.js` converts any name format to a canonical key — used only at the boundary (user input → lookup key).
 
 ### PGN Parsing
 
@@ -122,7 +124,8 @@ Round result codes: `W`=win, `L`=loss, `D`=draw, `H`=half-point bye, `B`=full-po
 ### Games & Queries (D1-backed)
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/query` | GET | Composable game queries. Filters: `player`, `tournament`, `round`, `board`, `gameId`, `hasPgn`, `include=submissions`. |
+| `/query` | GET | Composable game queries. Filters: `player`, `tournament`, `round`, `board`, `gameId`, `hasPgn`, `include=submissions`. Response includes `whiteNorm`/`blackNorm` canonical keys. |
+| `/players` | GET | List all players (name, dbName, uscfId, rating). |
 | `/tournaments` | GET | List all tournaments from D1. |
 | `/player-history` | GET | Player's round history for the current tournament. |
 | `/og-game` | GET | OG metadata for a specific game (by `game_id`). |
@@ -140,7 +143,7 @@ Round result codes: `W`=win, `L`=loss, `D`=draw, `H`=half-point bye, `B`=full-po
 | `/push-preferences` | POST | Update notification prefs (`{endpoint, notifyPairings, notifyResults}`). |
 | `/push-test` | POST | Send test push notification (requires VAPID private key as auth). |
 
-All endpoints are rate-limited per IP (KV-based, 5-minute windows).
+All endpoints include CORS headers for `tnmpairings.com` + `localhost`.
 
 ## Storage
 
@@ -168,7 +171,6 @@ Primary game storage. Binding: `DB`. Migrations in `worker/migrations/`.
 | `state:previousTournament` | Previous tournament fallback when MI listing page delists finished tournaments. |
 | `state:lastCheck` | Last cron check. |
 | `standings:<slug>:<section>` | Current standings data per section. |
-| `ratelimit:<ip>:<endpoint>` | Rate limit counter (5min TTL, auto-expires). |
 
 **GAMES** (`dd3adec3b60b4002b71eaa1d1bae129e`):
 
@@ -204,8 +206,7 @@ Per-game OG images: `/og-game-image?game_id=...` generates SVG board images cach
 | **Settings** | Player name, push notification enable/disable, notification preferences. |
 | **About** | App description, Mechanics' Institute disclaimer, privacy summary, credits. Shown on first visit. |
 | **Privacy** | Full privacy policy. |
-| **Viewer** | Game viewer/editor panel with embedded browser sidebar on desktop. |
-| **Browser** | Game browser with tournament dropdown, player search, round tabs. |
+| **Game Panel** | Combined game viewer/editor/browser. Viewer↔editor mode switching, embedded browser sidebar on desktop, tournament dropdown, player search, round tabs. |
 
 All modals support Escape key to close. Footer links: View Tournament Page, Settings, About, Privacy.
 
@@ -229,7 +230,7 @@ npx vite build && npx wrangler pages deploy dist --project-name=tnmpairings
 
 ## Tests
 
-- Frontend: `src/history.test.js`, `src/game-browser.test.js`, `src/pgn-viewer.test.js`, `src/pgn-editor.test.js`, `src/memes.test.js`
+- Frontend: `src/history.test.js`, `src/memes.test.js`
 - Worker: `worker/src/parser.test.js`, `worker/src/index.test.js`
 - All tests use real tournament HTML fixtures in `test/fixtures/`.
 
@@ -237,9 +238,10 @@ npx vite build && npx wrangler pages deploy dist --project-name=tnmpairings
 
 - Vanilla JS, ES modules, no framework, no TypeScript.
 - All module state uses getter/setter pattern (no mutable `export let`).
-- Closure-based callbacks for cross-module communication (e.g., prev/next game navigation).
-- `board-core.js` is shared infrastructure; `pgn-viewer.js` and `pgn-editor.js` are thin layers on top.
-- `game-viewer.js` orchestrates the viewer/editor panel; `game-browser.js` owns game browsing and navigation.
+- Closure-based `onChange` callbacks for cross-module communication. `games.js` pushes state to `game-panel.js`; `pgn.js` and `board.js` communicate via `onMove`/`onPositionChange` callbacks.
+- `board.js` and `pgn.js` are pure data/rendering layers; `game-panel.js` wires them together and owns the DOM.
+- `games.js` is the single data layer for all game browsing, filtering, and player lookups. `game-panel.js` never calls getters — all state arrives via `onChange`.
+- Display names for rendering, canonical names (`normalizeKey()`) for all logic — no `.toLowerCase()` comparisons on display names.
 - Tests use real tournament HTML fixtures in `test/fixtures/`.
 - Vite hashes all built assets for cache busting.
 - CORS locked to `https://tnmpairings.com` + `http://localhost:*` for dev.

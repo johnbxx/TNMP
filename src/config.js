@@ -29,8 +29,6 @@ let _tournamentMeta = {
     slug: null,
     url: null,
     roundDates: [],
-    totalRounds: 0,
-    nextTournament: null,
 };
 
 export function getTournamentMeta() { return _tournamentMeta; }
@@ -51,6 +49,9 @@ let _appState = { state: null, pairing: null, lastRoundNumber: 1, roundInfo: '' 
 
 export function getAppState() { return _appState; }
 export function setAppState(partial) { _appState = { ..._appState, ...partial }; }
+
+// Feature gates
+export const SUBMISSIONS_ENABLED = true; // TODO: set false before deploy
 
 // Debug PGN for testing the game viewer
 export const DEBUG_PGN = `[Event "2026 New Year TNM: 1600-1999"]
