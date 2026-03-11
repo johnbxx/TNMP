@@ -337,7 +337,7 @@ export async function handleScheduled(env) {
         console.error('Failed to store games in D1:', err.message);
     }
 
-    // Insert shell records for games from pairings table
+    // Insert shell records for games from pairings table (skip if already in D1)
     if (parsed.hasPairings) {
         try {
             const shellStmts = [];
@@ -347,13 +347,20 @@ export async function handleScheduled(env) {
                     if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
                     const board = row.board ? parseInt(row.board, 10) || null : null;
                     if (!board) continue;
+
+                    const key = `${rnd}:${board}`;
+                    const ex = existingMap.get(key);
+                    const result = parseGameResult(row.whiteResult, row.blackResult);
+
+                    // Skip if game already exists (unless we have a new result for a pending game)
+                    if (ex && (ex.result !== '*' || result === '*')) continue;
+
                     const wInfo = parsePlayerInfo(row.whiteName);
                     const bInfo = parsePlayerInfo(row.blackName);
                     const wc = canonicalizeByIdOrName(row.whiteUscfId, wInfo.name);
                     const bc = canonicalizeByIdOrName(row.blackUscfId, bInfo.name);
                     const white = wc.name, whiteNorm = wc.norm;
                     const black = bc.name, blackNorm = bc.norm;
-                    const result = parseGameResult(row.whiteResult, row.blackResult);
                     shellStmts.push(
                         env.DB.prepare(
                             `INSERT INTO games
