@@ -371,15 +371,13 @@ document.addEventListener('click', (e) => {
 // Delegated hold-to-repeat for [data-hold] buttons (survives innerHTML rebuilds)
 {
     let timer = null;
-    let activeBtn = null;
-    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; activeBtn = null; };
+    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
     document.addEventListener('pointerdown', (e) => {
         const btn = e.target.closest('[data-hold][data-action]');
         if (!btn) return;
         const action = ACTIONS[btn.dataset.action];
         if (!action) return;
         e.preventDefault();
-        activeBtn = btn;
         action();
         timer = setTimeout(() => { timer = setInterval(action, 80); }, 400);
     });

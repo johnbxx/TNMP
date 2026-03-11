@@ -21,6 +21,7 @@ export default [
                 TextEncoder: 'readonly',
                 Uint8Array: 'readonly',
                 AbortSignal: 'readonly',
+                AbortController: 'readonly',
                 DOMParser: 'readonly',
                 HTMLElement: 'readonly',
                 Blob: 'readonly',
