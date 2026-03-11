@@ -361,18 +361,19 @@ export async function handleScheduled(env) {
                     const bc = canonicalizeByIdOrName(row.blackUscfId, bInfo.name);
                     const white = wc.name, whiteNorm = wc.norm;
                     const black = bc.name, blackNorm = bc.norm;
+                    const roundDate = tournament.roundDates?.[rnd - 1] || null;
                     shellStmts.push(
                         env.DB.prepare(
                             `INSERT INTO games
-                             (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, pgn)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                             (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, date, pgn)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                              ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
                               result = excluded.result
                               WHERE games.result = '*' AND excluded.result != '*'`
                         ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm,
-                            wInfo.rating || ratingAtDate(white, null),
-                            bInfo.rating || ratingAtDate(black, null),
-                            result, normalizeSection(section.section))
+                            wInfo.rating || ratingAtDate(white, roundDate),
+                            bInfo.rating || ratingAtDate(black, roundDate),
+                            result, normalizeSection(section.section), roundDate)
                     );
                 }
             }
