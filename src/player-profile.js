@@ -1,10 +1,7 @@
-/**
- * Player Profile modal — all-time stats for a TNM player.
- * Fetches from /query?player=NAME&tournament=all, aggregates client-side.
- */
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { getPlayerInfo, fetchPlayerList } from './games.js';
+import { getPlayerInfo, fetchPlayerList, normalizeKey, openBrowser } from './games.js';
+import { openGamePanel } from './game-panel.js';
 
 let currentPlayer = null;
 let currentUscfId = null;
@@ -12,11 +9,6 @@ let cachedGames = null;
 let cachedStats = null;
 let activeTab = 'overview';
 
-/**
- * Open the player profile modal for a given player name.
- * @param {string} playerName - Display name (e.g., "John Boyer")
- * @param {object} [opts] - Optional: { uscfId }
- */
 export async function openPlayerProfile(playerName, { uscfId } = {}) {
     currentPlayer = playerName;
     currentUscfId = uscfId || null;
@@ -74,9 +66,6 @@ export function closePlayerProfile() {
     cachedStats = null;
 }
 
-/**
- * Fetch all games for a player across all tournaments, paginating if needed.
- */
 async function fetchAllPlayerGames(playerName) {
     const dbName = getPlayerInfo(playerName)?.dbName || playerName;
     const allGames = [];
@@ -94,38 +83,28 @@ async function fetchAllPlayerGames(playerName) {
     return allGames;
 }
 
-/**
- * Get the most recent rating for a player from game data.
- * Games are sorted date DESC, so the first match is the most recent.
- */
 function getMostRecentRating(games, playerName) {
-    const pLower = playerName.toLowerCase();
+    const norm = normalizeKey(playerName);
     for (const game of games) {
-        if (game.white.toLowerCase() === pLower && game.whiteElo) return game.whiteElo;
-        if (game.black.toLowerCase() === pLower && game.blackElo) return game.blackElo;
+        if (game.whiteNorm === norm && game.whiteElo) return game.whiteElo;
+        if (game.blackNorm === norm && game.blackElo) return game.blackElo;
     }
     return null;
 }
 
-/**
- * Determine if player was white or black in a game.
- */
 function playerSide(game, playerName) {
-    const pLower = playerName.toLowerCase();
-    if (game.white.toLowerCase() === pLower) return 'white';
-    if (game.black.toLowerCase() === pLower) return 'black';
+    const norm = normalizeKey(playerName);
+    if (game.whiteNorm === norm) return 'white';
+    if (game.blackNorm === norm) return 'black';
     return null;
 }
 
-/**
- * Compute aggregate stats from games array.
- */
 function computeStats(games, playerName) {
     let wins = 0, losses = 0, draws = 0;
     let whiteWins = 0, whiteLosses = 0, whiteDraws = 0, whiteGames = 0;
     let blackWins = 0, blackLosses = 0, blackDraws = 0, blackGames = 0;
 
-    // By tournament: { slug: { name, wins, losses, draws, shortCode } }
+    // By tournament: { slug: { name, wins, losses, draws } }
     const tournamentMap = new Map();
 
     // By ECO: { code: { name, whiteWins, whiteLosses, whiteDraws, whiteGames, blackWins, ... } }
@@ -139,6 +118,8 @@ function computeStats(games, playerName) {
         if (!side) continue;
 
         const result = game.result;
+        if (!result || result === '*') continue; // skip unplayed/in-progress games
+
         const isWin = (side === 'white' && result === '1-0') || (side === 'black' && result === '0-1');
         const isLoss = (side === 'white' && result === '0-1') || (side === 'black' && result === '1-0');
         const isDraw = result === '1/2-1/2';
@@ -162,7 +143,7 @@ function computeStats(games, playerName) {
         // Tournament stats
         const slug = game.tournamentSlug;
         if (!tournamentMap.has(slug)) {
-            tournamentMap.set(slug, { name: game.tournament, shortCode: game.shortCode, wins: 0, losses: 0, draws: 0 });
+            tournamentMap.set(slug, { name: game.tournament, wins: 0, losses: 0, draws: 0 });
         }
         const t = tournamentMap.get(slug);
         if (isWin) t.wins++;
@@ -213,8 +194,6 @@ function computeStats(games, playerName) {
         opponents: opponentMap,
     };
 }
-
-// --- Rendering ---
 
 function renderTabs(body) {
     body.innerHTML = `
@@ -320,20 +299,11 @@ function renderOverview(container, stats) {
     `;
 }
 
-/**
- * Extract the opening family name (text before the first ":").
- * "Sicilian Defense: Najdorf Variation" → "Sicilian Defense"
- * "Italian Game" → "Italian Game"
- */
 function openingFamily(name) {
     const colon = name.indexOf(':');
     return colon > 0 ? name.slice(0, colon).trim() : name;
 }
 
-/**
- * Group ECO entries by opening family and aggregate stats for a given side.
- * Returns sorted array of { family, codes[], wins, losses, draws, total }.
- */
 function groupByFamily(entries, side) {
     const wKey = side === 'white' ? 'whiteWins' : 'blackWins';
     const lKey = side === 'white' ? 'whiteLosses' : 'blackLosses';
@@ -439,28 +409,13 @@ function renderOpponents(container, stats) {
     searchInput.addEventListener('input', () => renderOpponentList(searchInput.value.trim()));
 }
 
-// --- Init ---
-
 export function initPlayerProfile() {
     onModalClose('profile-modal', closePlayerProfile);
 
-    // Close on Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            const modal = document.getElementById('profile-modal');
-            if (modal && !modal.classList.contains('hidden')) {
-                closeModal('profile-modal');
-            }
-        }
-    });
-
-    // Close profile and open the game browser with given query
     async function browseTo(query) {
         closePlayerProfile();
-        const { openGamePanel } = await import('./game-panel.js');
-        const games = await import('./games.js');
         await openGamePanel();
-        games.openBrowser(query);
+        openBrowser(query);
     }
 
     // Clicks within profile body — tournament rows, opponent rows, stat rows

@@ -5,11 +5,11 @@
  * Called by the worker's scheduled() entry point.
  */
 
-import { slugifyTournament, normalizePlayerName, formatPlayerName, titleCaseName, normalizeSection, getTournamentSlug } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, getTournamentSlug } from './helpers.js';
 import { resolveTournament, computeAppState } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
-    parseTournamentPage, parseStandings, extractPairingsColors,
+    parseTournamentPage, parseStandings,
     parsePlayerInfo, parseGameResult, findPlayerPairingFromSections,
     findPlayerResultFromSections, composeMessage, composeResultsMessage,
 } from './parser.js';
@@ -119,6 +119,51 @@ export async function handleScheduled(env) {
         console.error('Failed to parse standings:', err.message);
     }
 
+    // Discover new players: any USCF ID in standings not already in uscfIdMap
+    const newPlayerIds = [];
+    for (const section of standings) {
+        for (const p of section.players) {
+            if (p.id && !uscfIdMap.has(p.id)) newPlayerIds.push(p.id);
+        }
+    }
+    if (newPlayerIds.length > 0) {
+        const unique = [...new Set(newPlayerIds)];
+        const newPlayerStmts = [];
+        for (const uscfId of unique) {
+            try {
+                const res = await fetch(`https://ratings-api.uschess.org/api/v1/members/${uscfId}/`);
+                if (!res.ok) continue;
+                const data = await res.json();
+                const last = titleCaseName((data.lastName || '').toLowerCase());
+                const first = titleCaseName((data.firstName || '').toLowerCase());
+                const name = `${last}, ${first}`;
+                const norm = normalizePlayerName(name);
+                const regular = data.ratings?.find(r => r.ratingSystem === 'R');
+                const rating = regular?.rating || null;
+
+                // Add to in-memory maps so canonicalize() works for this cron run
+                uscfIdMap.set(uscfId, { name, norm, aliases: [norm] });
+                aliasMap.set(norm, { name, norm });
+
+                newPlayerStmts.push(
+                    env.DB.prepare(
+                        `INSERT INTO players (name, name_norm, uscf_id, aliases, rating, rating_updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?)
+                         ON CONFLICT(name_norm) DO UPDATE SET
+                         uscf_id = COALESCE(excluded.uscf_id, players.uscf_id),
+                         rating = excluded.rating, rating_updated_at = excluded.rating_updated_at`
+                    ).bind(name, norm, uscfId, JSON.stringify([norm]), rating, new Date().toISOString())
+                );
+            } catch (err) {
+                console.error(`Failed to fetch US Chess data for ${uscfId}:`, err.message);
+            }
+        }
+        if (newPlayerStmts.length > 0) {
+            await env.DB.batch(newPlayerStmts);
+            console.log(`Created ${newPlayerStmts.length} new player(s) from US Chess: ${unique.slice(0, 5).join(', ')}${unique.length > 5 ? '...' : ''}`);
+        }
+    }
+
     // Resolve a player name: check alias map, then fall back to USCF ID from standings.
     // If a new alias is discovered, persist it to D1 and update the alias map.
     const newAliases = [];
@@ -153,90 +198,67 @@ export async function handleScheduled(env) {
         return { name: tc, norm };
     }
 
-    /** Canonicalize player names in a pgnColors/pairingsColors object. */
-    function canonicalizeColors(colors) {
-        const result = {};
-        for (const [rnd, games] of Object.entries(colors)) {
-            result[rnd] = games.map(g => ({
-                ...g,
-                white: canonicalize(g.white).name,
-                black: canonicalize(g.black).name,
-            }));
+    /** Resolve a player by USCF ID first, falling back to name-based canonicalize. */
+    function canonicalizeByIdOrName(uscfId, name) {
+        if (uscfId) {
+            const canonical = uscfIdMap.get(uscfId);
+            if (canonical) return { name: canonical.name, norm: canonical.norm };
         }
-        return result;
+        return canonicalize(name);
     }
 
     // --- Now safe to store: all names go through canonicalize() ---
 
-    // Cache the stripped HTML for the frontend
+    // Cache the stripped HTML for the frontend (used by computeAppState for hasPairings/hasResults)
     await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
         html: parsed.strippedHtml,
         fetchedAt: new Date().toISOString(),
         round: parsed.roundNumber,
-        gameColors: canonicalizeColors(parsed.pgnColors),
     }));
-    console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}, ${Object.keys(parsed.pgnColors).length} rounds of PGN colors).`);
+    console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}).`);
 
     // Pre-compute app state so /tournament-state is a single KV read
     const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
     const appState = computeAppState(cached, tournament);
     const slug = slugifyTournament(tournament.name);
 
-    // Extract all pairings into a flat array for per-player lookup
-    const allPairings = [];
-    for (const section of parsed.pairingsSections) {
-        for (const row of section.rows) {
-            const wInfo = parsePlayerInfo(row.whiteName);
-            const bInfo = parsePlayerInfo(row.blackName);
-            if (/^(bye|full point bye)$/i.test(wInfo.name)) continue;
-            if (/^(bye|full point bye)$/i.test(bInfo.name)) {
-                const wc = canonicalize(wInfo.name);
-                allPairings.push({
-                    player: wc.name, isBye: true,
-                    byeType: row.whiteResult === '1' ? 'full' : 'half',
-                    section: normalizeSection(section.section),
-                });
-                continue;
-            }
-            const wc = canonicalize(wInfo.name);
-            const bc = canonicalize(bInfo.name);
-            const board = row.board ? parseInt(row.board, 10) || null : null;
-            allPairings.push({
-                board: board || 'TBD',
-                white: wc.name, whiteRating: wInfo.rating, whiteUrl: row.whiteUrl || null,
-                black: bc.name, blackRating: bInfo.rating, blackUrl: row.blackUrl || null,
-                section: normalizeSection(section.section),
-            });
-        }
-    }
-
     await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
-        state: appState.state, round: appState.round, info: appState.info,
+        state: appState.state, round: appState.round,
         tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
         tournamentSlug: slug, roundDates: tournament.roundDates || [],
-        totalRounds: appState.totalRounds, nextTournament: tournament.nextTournament || null,
-        fetchedAt: new Date().toISOString(), offSeason: appState.offSeason,
-        pairings: allPairings,
+        fetchedAt: new Date().toISOString(),
     }));
-    console.log(`Cached appState in KV (${allPairings.length} pairings).`);
+    console.log(`Cached appState in KV.`);
 
-    // Canonicalize standings names + section titles and persist to KV
+    // Extract byes from standings and persist to D1
     try {
+        const byeTypes = { H: 'half', B: 'full', U: 'zero' };
+        const byeStmts = [];
         for (const section of standings) {
-            section.section = normalizeSection(section.section);
             for (const p of section.players) {
-                const resolved = canonicalize(p.name);
-                if (resolved.name !== p.name) p.name = formatPlayerName(resolved.name);
+                const uscfId = p.id || null;
+                const resolved = canonicalizeByIdOrName(uscfId, p.name);
+                for (let i = 0; i < p.rounds.length; i++) {
+                    const rd = p.rounds[i];
+                    if (!rd || !byeTypes[rd.result]) continue;
+                    byeStmts.push(
+                        env.DB.prepare(
+                            `INSERT INTO byes (tournament_slug, round, player_norm, bye_type)
+                             VALUES (?, ?, ?, ?)
+                             ON CONFLICT(tournament_slug, round, player_norm) DO UPDATE SET bye_type = excluded.bye_type`
+                        ).bind(slug, i + 1, resolved.norm, byeTypes[rd.result])
+                    );
+                }
             }
         }
-        await Promise.all(standings.map(section =>
-            env.SUBSCRIBERS.put(`standings:${slug}:${section.section}`, JSON.stringify(section))
-        ));
-        if (standings.length > 0) {
-            console.log(`Persisted standings for ${standings.length} section(s): ${standings.map(s => s.section).join(', ')}`);
+        if (byeStmts.length > 0) {
+            for (let i = 0; i < byeStmts.length; i += 100) {
+                await env.DB.batch(byeStmts.slice(i, i + 100));
+            }
+            console.log(`Persisted ${byeStmts.length} bye(s) to D1.`);
         }
     } catch (err) {
-        console.error('Failed to persist standings:', err.message);
+        console.error('Failed to persist byes:', err.message);
     }
 
     // Store games in D1 (only new or changed)
@@ -244,12 +266,12 @@ export async function handleScheduled(env) {
     let updatedCount = 0;
     try {
         const shortCode = getTournamentSlug(tournament.name);
-        const startDate = tournament.roundDates?.[0] || null;
+        const roundDatesJson = JSON.stringify(tournament.roundDates || []);
         await env.DB.prepare(
-            `INSERT INTO tournaments (slug, name, short_code, start_date, total_rounds) VALUES (?, ?, ?, ?, ?)
+            `INSERT INTO tournaments (slug, name, short_code, round_dates, url) VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(slug) DO UPDATE SET name=excluded.name, short_code=excluded.short_code,
-             start_date=excluded.start_date, total_rounds=excluded.total_rounds`
-        ).bind(slug, tournament.name, shortCode, startDate, tournament.totalRounds || null).run();
+             round_dates=excluded.round_dates, url=excluded.url`
+        ).bind(slug, tournament.name, shortCode, roundDatesJson, tournament.url || null).run();
 
         // Fetch existing games for this tournament to diff against
         const existing = await env.DB.prepare(
@@ -315,24 +337,9 @@ export async function handleScheduled(env) {
         console.error('Failed to store games in D1:', err.message);
     }
 
-    // Capture pairings colors persistently
+    // Insert shell records for games from pairings table
     if (parsed.hasPairings) {
         try {
-            const newColors = canonicalizeColors(extractPairingsColors(parsed.pairingsSections));
-            const existing = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json') || {};
-            let updated = false;
-            for (const [rnd, games] of Object.entries(newColors)) {
-                if (!existing[rnd]) {
-                    existing[rnd] = games;
-                    updated = true;
-                }
-            }
-            if (updated) {
-                await env.SUBSCRIBERS.put('cache:pairingsColors', JSON.stringify(existing));
-                console.log(`Persisted pairings colors for rounds: ${Object.keys(newColors).join(', ')}`);
-            }
-
-            // Insert shell records for games without PGN textareas
             const shellStmts = [];
             for (const section of parsed.pairingsSections) {
                 const rnd = section.round;
@@ -342,19 +349,23 @@ export async function handleScheduled(env) {
                     if (!board) continue;
                     const wInfo = parsePlayerInfo(row.whiteName);
                     const bInfo = parsePlayerInfo(row.blackName);
-                    const wc = canonicalize(wInfo.name);
-                    const bc = canonicalize(bInfo.name);
+                    const wc = canonicalizeByIdOrName(row.whiteUscfId, wInfo.name);
+                    const bc = canonicalizeByIdOrName(row.blackUscfId, bInfo.name);
                     const white = wc.name, whiteNorm = wc.norm;
                     const black = bc.name, blackNorm = bc.norm;
+                    const result = parseGameResult(row.whiteResult, row.blackResult);
                     shellStmts.push(
                         env.DB.prepare(
-                            `INSERT OR IGNORE INTO games
+                            `INSERT INTO games
                              (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, pgn)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                             ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
+                              result = excluded.result
+                              WHERE games.result = '*' AND excluded.result != '*'`
                         ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm,
                             wInfo.rating || ratingAtDate(white, null),
                             bInfo.rating || ratingAtDate(black, null),
-                            parseGameResult(row.whiteResult, row.blackResult), normalizeSection(section.section))
+                            result, normalizeSection(section.section))
                     );
                 }
             }
@@ -362,10 +373,10 @@ export async function handleScheduled(env) {
                 await env.DB.batch(shellStmts.slice(i, i + 100));
             }
             if (shellStmts.length > 0) {
-                console.log(`Inserted up to ${shellStmts.length} shell records (INSERT OR IGNORE).`);
+                console.log(`Upserted ${shellStmts.length} shell records (insert or update result).`);
             }
         } catch (err) {
-            console.error('Failed to capture pairings colors:', err.message);
+            console.error('Failed to upsert shell records:', err.message);
         }
     }
 

@@ -6,7 +6,6 @@
 
 export const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 export const MI_BASE_URL = 'https://www.milibrary.org';
-export const META_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 // Manual tournament short codes for PGN filenames
 const TOURNAMENT_SLUGS = {
@@ -160,31 +159,20 @@ export function slugifyTournament(name) {
         .replace(/^-+|-+$/g, '');
 }
 
-// --- Game Colors ---
-
-export function mergeGameColors(pgnColors, pairingsColors) {
-    if (!pairingsColors) return pgnColors || null;
-    if (!pgnColors) return pairingsColors;
-    const merged = { ...pgnColors };
-    for (const [rnd, games] of Object.entries(pairingsColors)) {
-        if (!merged[rnd]) {
-            merged[rnd] = games;
-        }
-    }
-    return merged;
-}
-
 // --- Tournament Slug Resolution ---
 
 /**
- * Resolve current tournament slug + meta from KV cache.
- * Returns { slug, meta } or a 503 error Response.
+ * Resolve current tournament slug from D1.
+ * Returns { slug } or a 503 error Response.
  */
 export async function resolveCurrentSlug(env, request) {
-    const meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-    const slug = meta?.name ? slugifyTournament(meta.name) : null;
-    if (!slug) return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
-    return { slug, meta };
+    const today = new Date().toISOString().split('T')[0];
+    const row = await env.DB.prepare(
+        `SELECT slug FROM tournaments WHERE json_extract(round_dates, '$[0]') <= ?
+         ORDER BY json_extract(round_dates, '$[0]') DESC LIMIT 1`
+    ).bind(today).first();
+    if (!row) return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
+    return { slug: row.slug };
 }
 
 // --- Parameter Validation ---

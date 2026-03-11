@@ -4,139 +4,104 @@
  * Handles: /tournament-html, /tournament-state, /og-state, /health
  */
 
-import { corsResponse, mergeGameColors, slugifyTournament, getTournamentSlug, normalizePlayerName, formatPlayerName, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL, META_CACHE_TTL } from './helpers.js';
-import { hasPairings, hasResults, findPlayerPairing, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
-
-// --- Tournament Resolution Helpers ---
-
-const UA_HEADERS = { 'User-Agent': 'TNMP-Notification-Worker/1.0' };
-
-const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-
-function parseListDate(dateStr, year) {
-    const m = dateStr.match(/(\w+)\s+(\d+)/);
-    if (!m) return null;
-    const month = MONTHS[m[1].toLowerCase()];
-    if (month === undefined) return null;
-    const day = parseInt(m[2], 10);
-    const mo = month + 1;
-    return new Date(pacificDatetime(year, mo, day));
-}
-
-async function fetchTournamentPage(url, year) {
-    try {
-        const res = await fetch(url, { headers: UA_HEADERS });
-        if (res.ok) {
-            const html = await res.text();
-            return { roundDates: parseRoundDates(html, year), name: extractTournamentName(html) };
-        }
-    } catch (err) {
-        console.error('Failed to fetch tournament page:', err.message);
-    }
-    return { roundDates: [], name: null };
-}
-
-function buildNextInfo(next, year) {
-    if (!next) return null;
-    const start = parseListDate(next.startDate, year);
-    return { name: next.name, url: MI_BASE_URL + next.url, startDate: start ? start.toISOString().split('T')[0] : null };
-}
-
-function buildMeta(name, url, roundDates, nextTournament) {
-    return {
-        name, slug: getTournamentSlug(name), url, roundDates,
-        totalRounds: roundDates.length, nextTournament,
-        resolvedAt: new Date().toISOString(),
-    };
-}
+import { corsResponse, slugifyTournament, getTournamentSlug, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL } from './helpers.js';
+import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
 
 // --- Tournament Resolution ---
 
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
 /**
- * Resolve the current (or next) TNM tournament by fetching the MI tournaments
- * listing page, finding TNM entries, and parsing round dates.
- * Caches result in KV for META_CACHE_TTL (6 hours).
+ * Resolve the current tournament from D1. Falls back to MI listing page
+ * discovery when no tournament covers today (~7x/year during transitions).
  */
 export async function resolveTournament(env) {
-    const cached = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-    if (cached?.resolvedAt && (Date.now() - new Date(cached.resolvedAt).getTime()) < META_CACHE_TTL) {
-        return cached;
+    const today = new Date().toISOString().split('T')[0];
+
+    const [current, next] = await Promise.all([
+        env.DB.prepare(
+            `SELECT * FROM tournaments WHERE json_extract(round_dates, '$[0]') <= ?
+             ORDER BY json_extract(round_dates, '$[0]') DESC LIMIT 1`
+        ).bind(today).first(),
+        env.DB.prepare(
+            `SELECT * FROM tournaments WHERE json_extract(round_dates, '$[0]') > ?
+             ORDER BY json_extract(round_dates, '$[0]') ASC LIMIT 1`
+        ).bind(today).first(),
+    ]);
+
+    if (current) {
+        const roundDates = JSON.parse(current.round_dates || '[]');
+        return {
+            name: current.name, slug: current.slug, url: current.url, roundDates,
+            totalRounds: roundDates.length,
+            nextTournament: next ? {
+                name: next.name, url: next.url,
+                startDate: JSON.parse(next.round_dates || '[]')[0] || null,
+            } : null,
+        };
     }
+
+    // No tournament covers today — discover from MI listing page
+    return await discoverTournament(env, today);
+}
+
+/**
+ * Fetch MI listing page to discover tournaments not yet in D1.
+ * Only runs during tournament transitions (~7x/year).
+ */
+async function discoverTournament(env, today) {
+    const UA = { 'User-Agent': 'TNMP-Notification-Worker/1.0' };
 
     let listHtml;
     try {
-        const res = await fetch(TOURNAMENTS_LIST_URL, { headers: UA_HEADERS });
-        if (!res.ok) { console.error(`Failed to fetch tournaments list: HTTP ${res.status}`); return cached || null; }
+        const res = await fetch(TOURNAMENTS_LIST_URL, { headers: UA });
+        if (!res.ok) { console.error(`Failed to fetch tournaments list: HTTP ${res.status}`); return null; }
         listHtml = await res.text();
     } catch (err) {
         console.error('Failed to fetch tournaments list:', err.message);
-        return cached || null;
+        return null;
     }
 
     const tournaments = parseTournamentList(listHtml);
-    if (tournaments.length === 0) { console.error('No TNM tournaments found on listing page'); return cached || null; }
+    if (tournaments.length === 0) { console.error('No TNM tournaments found on listing page'); return null; }
 
-    const now = new Date();
-    const year = now.getFullYear();
+    const year = new Date().getFullYear();
 
-    let current = null, next = null;
-    // Parse dates, auto-incrementing year when dates go backwards (handles Dec→Jan year boundary)
-    const parsed = [];
-    let prevEnd = null;
+    // Find the first upcoming tournament
     for (const t of tournaments) {
-        let y = year;
-        let start = parseListDate(t.startDate, y);
-        if (prevEnd && start && start < prevEnd) {
-            y++;
-            start = parseListDate(t.startDate, y);
-        }
-        let end = parseListDate(t.endDate, y);
-        if (start && end && end < start) end = parseListDate(t.endDate, y + 1);
-        if (start && end) { parsed.push({ ...t, start, end }); prevEnd = end; }
+        const tournamentUrl = MI_BASE_URL + t.url;
+        let pageHtml;
+        try {
+            const res = await fetch(tournamentUrl, { headers: UA });
+            if (!res.ok) continue;
+            pageHtml = await res.text();
+        } catch { continue; }
+
+        const roundDates = parseRoundDates(pageHtml, year);
+        const name = extractTournamentName(pageHtml) || t.name;
+        if (roundDates.length === 0) continue;
+
+        // Write to D1 so we don't need to discover again
+        const slug = slugifyTournament(name);
+        const shortCode = getTournamentSlug(name);
+        const roundDatesJson = JSON.stringify(roundDates);
+        await env.DB.prepare(
+            `INSERT INTO tournaments (slug, name, short_code, round_dates, url)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(slug) DO UPDATE SET name=excluded.name, short_code=excluded.short_code,
+             round_dates=excluded.round_dates, url=excluded.url`
+        ).bind(slug, name, shortCode, roundDatesJson, tournamentUrl).run();
+
+        console.log(`Discovered tournament: ${name} (${roundDates.length} rounds), wrote to D1`);
+
+        return {
+            name, slug, url: tournamentUrl, roundDates,
+            totalRounds: roundDates.length, nextTournament: null,
+        };
     }
 
-    for (let i = 0; i < parsed.length; i++) {
-        const t = parsed[i];
-        const nextT = i + 1 < parsed.length ? parsed[i + 1] : null;
-        // Use 6:30PM Pacific on the next tournament's start date (round 1 start time)
-        // rather than midnight, so the old tournament stays active until the new one begins
-        const nextStart = nextT
-            ? new Date(pacificDatetime(nextT.start.getFullYear(), nextT.start.getMonth() + 1, nextT.start.getDate(), '18:30:00'))
-            : null;
-        const activeEnd = nextStart
-            ? new Date(nextStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-            : new Date(t.end.getTime() + 7 * 24 * 60 * 60 * 1000);
-        if (now <= activeEnd) { current = t; next = nextT || null; break; }
-    }
-
-    // Fall back to persisted previous tournament if next listed is >7 days away
-    if (current?.start && current.start.getTime() > now.getTime()) {
-        const r1Start = new Date(pacificDatetime(current.start.getFullYear(), current.start.getMonth() + 1, current.start.getDate(), '18:30:00'));
-        const sevenDaysBefore = new Date(r1Start.getTime() - 7 * 24 * 60 * 60 * 1000);
-        if (now < sevenDaysBefore) {
-            const prev = await env.SUBSCRIBERS.get('state:previousTournament', 'json');
-            if (prev?.url) {
-                console.log(`Next listed tournament (${current.name}) is >7 days away; using previous: ${prev.name}`);
-                const page = await fetchTournamentPage(prev.url, year);
-                const meta = buildMeta(page.name || prev.name, prev.url, page.roundDates.length ? page.roundDates : (prev.roundDates || []), buildNextInfo(current, year));
-                await env.SUBSCRIBERS.put('cache:tournamentMeta', JSON.stringify(meta));
-                console.log(`Resolved tournament (from previous): ${meta.name} (${meta.totalRounds} rounds)`);
-                return meta;
-            }
-        }
-    }
-
-    if (!current) { console.log('No current or upcoming TNM tournament found'); current = tournaments[tournaments.length - 1]; }
-
-    const tournamentUrl = MI_BASE_URL + current.url;
-    const page = await fetchTournamentPage(tournamentUrl, year);
-    const meta = buildMeta(page.name || current.name, tournamentUrl, page.roundDates, buildNextInfo(next, year));
-
-    await env.SUBSCRIBERS.put('cache:tournamentMeta', JSON.stringify(meta));
-    await env.SUBSCRIBERS.put('state:previousTournament', JSON.stringify({ name: meta.name, url: meta.url, roundDates: meta.roundDates }));
-
-    console.log(`Resolved tournament: ${meta.name} (${meta.totalRounds} rounds)`);
-    return meta;
+    console.log('No current or upcoming TNM tournament found');
+    return null;
 }
 
 // --- App State ---
@@ -276,25 +241,17 @@ export function computeAppState(cached, meta) {
 
 // --- HTTP Handlers ---
 
-async function getMetaOrResolve(env) {
-    let meta = await env.SUBSCRIBERS.get('cache:tournamentMeta', 'json');
-    if (!meta) meta = await resolveTournament(env);
-    return meta;
-}
-
 export async function handleTournamentHtml(request, env) {
-    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
+    const [cached, meta] = await Promise.all([
+        env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
+        resolveTournament(env),
+    ]);
     if (!cached) return corsResponse({ error: 'No cached data available', html: null }, 503, env, request);
-
-    const meta = await getMetaOrResolve(env);
-    const pairingsColors = await env.SUBSCRIBERS.get('cache:pairingsColors', 'json');
 
     return corsResponse({
         html: cached.html, fetchedAt: cached.fetchedAt, round: cached.round,
-        gameColors: mergeGameColors(cached.gameColors, pairingsColors),
         tournamentName: meta?.name || null, tournamentSlug: meta?.slug || null,
         tournamentUrl: meta?.url || null, roundDates: meta?.roundDates || [],
-        totalRounds: meta?.totalRounds || 0, nextTournament: meta?.nextTournament || null,
     }, 200, env, request);
 }
 
@@ -302,76 +259,28 @@ export async function handleTournamentState(request, env) {
     // Fast path: serve pre-computed state from cron (single KV read)
     const cachedAppState = await env.SUBSCRIBERS.get('cache:appState', 'json');
     if (cachedAppState) {
-        const { pairings, ...response } = cachedAppState;
-
-        const url = new URL(request.url);
-        const playerName = url.searchParams.get('player');
-        if (playerName && pairings?.length) {
-            response.pairing = findPairingInCache(pairings, playerName, response.round);
-        }
-
-        return corsResponse(response, 200, env, request);
+        return corsResponse(cachedAppState, 200, env, request);
     }
 
     // Fallback: compute on the fly (first deploy or KV cleared)
     const [cached, meta] = await Promise.all([
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
-        getMetaOrResolve(env),
+        resolveTournament(env),
     ]);
-    const slug = meta?.name ? slugifyTournament(meta.name) : null;
     const appState = computeAppState(cached, meta);
 
-    const response = {
-        state: appState.state, round: appState.round, info: appState.info,
+    return corsResponse({
+        state: appState.state, round: appState.round,
         tournamentName: appState.tournamentName, tournamentUrl: meta?.url || null,
-        tournamentSlug: slug, roundDates: meta?.roundDates || [],
-        totalRounds: appState.totalRounds, nextTournament: meta?.nextTournament || null,
-        fetchedAt: cached?.fetchedAt || null, offSeason: appState.offSeason,
-    };
-
-    const url = new URL(request.url);
-    const playerName = url.searchParams.get('player');
-    if (playerName && cached?.html) {
-        const pairing = findPlayerPairing(cached.html, playerName);
-        if (pairing) pairing.round = appState.round;
-        response.pairing = pairing;
-    }
-
-    return corsResponse(response, 200, env, request);
-}
-
-/**
- * Find a player's pairing from the pre-computed pairings array.
- * Case-insensitive substring match, same as findPlayerPairing.
- */
-function findPairingInCache(pairings, playerName, round) {
-    const norm = normalizePlayerName(playerName);
-    for (const p of pairings) {
-        if (p.isBye && normalizePlayerName(p.player) === norm) {
-            return { isBye: true, byeType: p.byeType, section: p.section, round };
-        }
-        if (p.white && normalizePlayerName(p.white) === norm) {
-            return {
-                board: p.board, color: 'White',
-                opponent: formatPlayerName(p.black), opponentRating: p.blackRating,
-                opponentUrl: p.blackUrl, section: p.section, round,
-            };
-        }
-        if (p.black && normalizePlayerName(p.black) === norm) {
-            return {
-                board: p.board, color: 'Black',
-                opponent: formatPlayerName(p.white), opponentRating: p.whiteRating,
-                opponentUrl: p.whiteUrl, section: p.section, round,
-            };
-        }
-    }
-    return null;
+        tournamentSlug: meta?.slug || null, roundDates: meta?.roundDates || [],
+        fetchedAt: cached?.fetchedAt || null,
+    }, 200, env, request);
 }
 
 export async function handleOgState(request, env) {
     const [cached, meta] = await Promise.all([
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
-        env.SUBSCRIBERS.get('cache:tournamentMeta', 'json'),
+        resolveTournament(env),
     ]);
     const appState = computeAppState(cached, meta);
     const ogConfig = OG_STATE_CONFIG[appState.state] || OG_STATE_CONFIG.no;

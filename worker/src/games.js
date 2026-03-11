@@ -1,11 +1,11 @@
 /**
- * D1 game query endpoints, OG image generation, game submissions, and player history.
+ * D1 game query endpoints, OG image generation, and game submissions.
  *
  * Handles: /query, /tournaments, /og-game, /og-game-image,
- *          /player-history, /eco-classify, /submit-game
+ *          /eco-classify, /submit-game
  */
 
-import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, buildPlayerNamePatterns, resolveCurrentSlug, validateGameId } from './helpers.js';
+import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, resolveCurrentSlug, validateGameId } from './helpers.js';
 import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import ecoEpd from './eco-epd.json';
 import { generateBoardSvg } from './og-board.js';
@@ -136,6 +136,7 @@ export async function handleQuery(request, env) {
 
     const conditions = [];
     const params = [];
+    let tournamentSlug = null; // track resolved slug for bye queries
 
     // Tournament filter (skip when gameId is specified — gameId is globally unique)
     if (gameId) {
@@ -143,11 +144,13 @@ export async function handleQuery(request, env) {
     } else if (tournament && tournament !== 'all') {
         conditions.push('g.tournament_slug = ?');
         params.push(tournament);
+        tournamentSlug = tournament;
     } else if (!tournament) {
         const resolved = await resolveCurrentSlug(env, request);
         if (resolved instanceof Response) return resolved;
         conditions.push('g.tournament_slug = ?');
         params.push(resolved.slug);
+        tournamentSlug = resolved.slug;
     }
 
     // Player filter (resolve aliases so old name variants still find games)
@@ -216,12 +219,13 @@ export async function handleQuery(request, env) {
 
     let selectCols;
     if (includePgn) {
-        selectCols = 'g.*, t.name as tournament_name, t.short_code';
+        selectCols = 'g.*, t.name as tournament_name';
     } else {
-        selectCols = `g.tournament_slug, g.round, g.board, g.white, g.black, g.white_elo, g.black_elo,
+        selectCols = `g.tournament_slug, g.round, g.board, g.white, g.black, g.white_norm, g.black_norm,
+           g.white_elo, g.black_elo,
            g.result, g.eco, g.opening_name, g.section, g.date, g.game_id,
            (g.pgn IS NOT NULL AND g.pgn != '') as has_pgn,
-           t.name as tournament_name, t.short_code`;
+           t.name as tournament_name`;
     }
 
     // LEFT JOIN submissions when requested
@@ -233,20 +237,36 @@ export async function handleQuery(request, env) {
         ? ', s.pgn AS submission_pgn, s.submitted_by, s.status AS submission_status'
         : '';
 
-    const [countResult, gamesResult] = await Promise.all([
+    // Fetch byes when filtering by player + specific tournament
+    const fetchByes = norm && tournamentSlug;
+
+    const queries = [
         env.DB.prepare(
             `SELECT COUNT(*) as total FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where}`
         ).bind(...params).first(),
         env.DB.prepare(
             `SELECT ${selectCols}${submissionCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${submissionJoin} ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
         ).bind(...params, limit, offset).all(),
-    ]);
+    ];
+    if (fetchByes) {
+        queries.push(
+            env.DB.prepare(
+                'SELECT round, bye_type FROM byes WHERE tournament_slug = ? AND player_norm = ? ORDER BY round'
+            ).bind(tournamentSlug, norm).all()
+        );
+    }
+
+    const results = await Promise.all(queries);
+    const countResult = results[0];
+    const gamesResult = results[1];
+    const byeResult = results[2] || null;
 
     const games = gamesResult.results.map(row => {
         const game = {
             tournament: row.tournament_name, tournamentSlug: row.tournament_slug,
-            shortCode: row.short_code, round: row.round, board: row.board,
+            round: row.round, board: row.board,
             white: formatPlayerName(row.white), black: formatPlayerName(row.black),
+            whiteNorm: row.white_norm, blackNorm: row.black_norm,
             whiteElo: row.white_elo, blackElo: row.black_elo, result: row.result,
             eco: row.eco, openingName: row.opening_name,
             section: row.section, date: row.date, gameId: row.game_id,
@@ -263,19 +283,28 @@ export async function handleQuery(request, env) {
         return game;
     });
 
-    return corsResponse({ games, total: countResult.total, limit, offset }, 200, env, request);
+    const response = { games, total: countResult.total, limit, offset };
+    if (byeResult) {
+        response.byes = byeResult.results.map(r => ({ round: r.round, type: r.bye_type }));
+    }
+    return corsResponse(response, 200, env, request);
 }
 
 // --- Tournaments Endpoint ---
 
 export async function handleTournaments(request, env) {
-    const result = await env.DB.prepare('SELECT * FROM tournaments ORDER BY start_date DESC').all();
+    const result = await env.DB.prepare(
+        `SELECT * FROM tournaments ORDER BY json_extract(round_dates, '$[0]') DESC`
+    ).all();
     return corsResponse({
-        tournaments: result.results.map(t => ({
-            slug: t.slug, name: t.name, shortCode: t.short_code,
-            startDate: t.start_date, totalRounds: t.total_rounds,
-            uscfEventId: t.uscf_event_id || null,
-        })),
+        tournaments: result.results.map(t => {
+            const roundDates = JSON.parse(t.round_dates || '[]');
+            return {
+                slug: t.slug, name: t.name, shortCode: t.short_code,
+                roundDates, url: t.url,
+                uscfEventId: t.uscf_event_id || null,
+            };
+        }),
     }, 200, env, request);
 }
 
@@ -303,103 +332,6 @@ export async function handlePlayers(request, env) {
     ).all();
     return corsResponse({
         players: result.results.map(r => ({ name: formatPlayerName(r.name), dbName: r.name, uscfId: null })),
-    }, 200, env, request);
-}
-
-// --- Player History ---
-
-export async function handlePlayerHistory(request, env) {
-    const url = new URL(request.url);
-    const playerName = url.searchParams.get('name');
-    if (!playerName) return corsResponse({ error: 'name parameter is required' }, 400, env, request);
-
-    const resolved = await resolveCurrentSlug(env, request);
-    if (resolved instanceof Response) return resolved;
-    const { slug, meta } = resolved;
-
-    const patterns = buildPlayerNamePatterns(playerName);
-    const standingsPrefix = `standings:${slug}:`;
-    const { keys } = await env.SUBSCRIBERS.list({ prefix: standingsPrefix });
-
-    // Fetch all standings sections in parallel
-    const sections = await Promise.all(keys.map(key => env.SUBSCRIBERS.get(key.name, 'json')));
-
-    let foundPlayer = null;
-    let foundSectionData = null;
-
-    for (const section of sections) {
-        if (!section?.players) continue;
-        for (const p of section.players) {
-            if (patterns.some(r => r.test(p.name))) {
-                foundPlayer = p;
-                foundSectionData = section;
-                break;
-            }
-        }
-        if (foundPlayer) break;
-    }
-
-    if (!foundPlayer) return corsResponse({ error: 'Player not found in standings' }, 404, env, request);
-
-    // Build rank map from the found section (names already canonicalized at ingestion)
-    const rankMap = {};
-    if (foundSectionData?.players) {
-        for (const p of foundSectionData.players) rankMap[p.rank] = { name: p.name, rating: p.rating, url: p.url };
-    }
-
-    const norm = await resolvePlayerNorm(normalizePlayerName(playerName), env);
-
-    // Fetch pairings colors + all player games in parallel (single D1 query for all rounds)
-    const [pairingsColors, gameRows] = await Promise.all([
-        env.SUBSCRIBERS.get('cache:pairingsColors', 'json').then(v => v || {}),
-        env.DB.prepare(
-            'SELECT round, white_norm, board, game_id FROM games WHERE tournament_slug = ? AND (white_norm = ? OR black_norm = ?)'
-        ).bind(slug, norm, norm).all().then(r => r.results),
-    ]);
-
-    // Index game rows by round for O(1) lookup
-    const gamesByRound = {};
-    for (const row of gameRows) gamesByRound[row.round] = row;
-
-    const byeTypes = { H: 'half', B: 'full', U: 'zero' };
-    const rounds = {};
-    for (let i = 0; i < foundPlayer.rounds.length; i++) {
-        const roundData = foundPlayer.rounds[i];
-        const roundNum = i + 1;
-        const code = roundData?.result || null;
-
-        if (code === 'H' || code === 'B' || code === 'U') {
-            rounds[roundNum] = { result: code, isBye: true, byeType: byeTypes[code], color: null, opponent: null, opponentRating: null, board: null };
-            continue;
-        }
-
-        const opponent = roundData ? rankMap[roundData.opponentRank] : null;
-        let color = null, board = null, gameId = null;
-
-        // D1 lookup (single query above), then pairingsColors fallback for very recent rounds
-        const gameRow = gamesByRound[roundNum];
-        if (gameRow) {
-            color = gameRow.white_norm === norm ? 'White' : 'Black';
-            board = gameRow.board;
-            gameId = gameRow.game_id || null;
-        } else if (pairingsColors[roundNum]) {
-            for (const game of pairingsColors[roundNum]) {
-                if (patterns.some(r => r.test(game.white))) { color = 'White'; board = game.board || null; break; }
-                if (patterns.some(r => r.test(game.black))) { color = 'Black'; board = game.board || null; break; }
-            }
-        }
-
-        rounds[roundNum] = {
-            result: code, isBye: false, color, board, gameId,
-            opponent: opponent?.name || null, opponentRating: opponent?.rating || null,
-            opponentUrl: opponent?.url || null,
-        };
-    }
-
-    return corsResponse({
-        tournamentName: meta.name, tournamentSlug: slug,
-        totalRounds: meta?.totalRounds || 0, section: foundSectionData?.section,
-        uscfId: foundPlayer.id || null, rounds,
     }, 200, env, request);
 }
 

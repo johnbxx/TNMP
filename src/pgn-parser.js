@@ -7,34 +7,7 @@
 
 import { getHeader } from './utils.js';
 
-// NAG symbols for common codes
-const NAG_SYMBOLS = {
-    1: '!', 2: '?', 3: '\u203C', 4: '\u2047', 5: '\u2049', 6: '\u2048',
-    7: '\u25A1',             // □ forced move
-    9: '\u2612',             // ☒ worst move
-    10: '=', 11: '=',       // equal position
-    13: '\u221E',            // ∞ unclear
-    14: '\u2A72', 15: '\u2A71', // ⩲ ⩱ slight advantage
-    16: '\u00B1', 17: '\u2213', // ± ∓ moderate advantage
-    18: '+-', 19: '-+',      // decisive advantage
-    20: '+\u2212\u2212', 21: '\u2212\u2212+', // +−− −−+ crushing advantage
-    22: '\u2A00', 23: '\u2A00', // ⨀ zugzwang
-    32: '\u27F3', 33: '\u27F3', // ⟳ development advantage
-    36: '\u2191', 37: '\u2191', // ↑ initiative
-    40: '\u2192', 41: '\u2192', // → attack
-    44: '\u2BD9', 45: '\u2BD9', // ⯹ compensation
-    132: '\u21C6', 133: '\u21C6', // ⇆ counterplay
-    138: '\u2A01', 139: '\u2A01', // ⨁ time pressure
-    140: '\u2206',            // ∆ with the idea
-    141: '\u2207',            // ∇ aimed against
-    142: '\u2313',            // ⌓ better is
-    143: '\u2264',            // ≤ worse is
-    145: 'RR',               // editorial comment
-    146: 'N',                // novelty
-};
-
-// NAG metadata for the picker UI: [symbol, description, category]
-// Categories: 'move' (move quality), 'position' (who stands better), 'situation' (special)
+// NAG metadata: [symbol, description, category]
 export const NAG_INFO = {
     1:   ['!',      'Good move',                    'move'],
     2:   ['?',      'Poor move',                    'move'],
@@ -77,23 +50,37 @@ export const NAG_INFO = {
 };
 
 export function nagToHtml(nag) {
-    const sym = NAG_SYMBOLS[nag] || `$${nag}`;
+    const sym = NAG_INFO[nag]?.[0] || `$${nag}`;
     return `<span data-nag="${nag}">${sym}</span>`;
 }
 
-/**
- * Parse PGN move text into an annotated move tree.
- * Returns array of move objects: { san, comment, nags, variations[] }
- * Each variation is itself an array of the same structure.
- */
+
+function appendComment(existing, added) {
+    return existing ? existing + ' ' + added : added;
+}
+
+function parseComment(raw) {
+    const annotations = {};
+    // Extract [%clk h:mm:ss], [%eval ±n.n], [%cal ...], [%csl ...] etc.
+    const text = raw.replace(/\[%(\w+)\s+([^\]]*)\]/g, (_, key, val) => {
+        if (key === 'clk') annotations.clk = val.trim();
+        else if (key === 'eval') annotations.eval = parseFloat(val) || val.trim();
+        else if (key === 'cal') annotations.arrows = val.trim().split(',');
+        else if (key === 'csl') annotations.squares = val.trim().split(',');
+        else annotations[key] = val.trim();
+        return '';
+    }).trim();
+    const tok = { type: 'comment', value: text };
+    if (Object.keys(annotations).length > 0) tok.annotations = annotations;
+    return tok;
+}
+
+// Returns array of { san, comment, nags, variations[] }
 export function parseMoveText(moveText) {
     const tokens = tokenizeMoveText(moveText);
     return parseTokens(tokens, 0).moves;
 }
 
-/**
- * Tokenize PGN move text into a flat array of typed tokens.
- */
 function tokenizeMoveText(text) {
     const tokens = [];
     let i = 0;
@@ -101,11 +88,13 @@ function tokenizeMoveText(text) {
         const ch = text[i];
         // Whitespace
         if (/\s/.test(ch)) { i++; continue; }
-        // Brace comment
+        // Brace comment (extracts structured annotations like [%clk], [%eval], [%cal], [%csl])
         if (ch === '{') {
             const end = text.indexOf('}', i + 1);
-            if (end === -1) { tokens.push({ type: 'comment', value: text.substring(i + 1).trim() }); break; }
-            tokens.push({ type: 'comment', value: text.substring(i + 1, end).trim() });
+            const raw = end === -1 ? text.substring(i + 1) : text.substring(i + 1, end);
+            const tok = parseComment(raw);
+            tokens.push(tok);
+            if (end === -1) break;
             i = end + 1;
             continue;
         }
@@ -119,15 +108,23 @@ function tokenizeMoveText(text) {
         // Variation start/end
         if (ch === '(') { tokens.push({ type: 'var_start' }); i++; continue; }
         if (ch === ')') { tokens.push({ type: 'var_end' }); i++; continue; }
-        // NAG
+        // NAG ($14) or inline NAG symbols (! ? !! ?? !? ?!)
         if (ch === '$') {
             const m = text.substring(i).match(/^\$(\d+)/);
             if (m) { tokens.push({ type: 'nag', value: parseInt(m[1], 10) }); i += m[0].length; continue; }
         }
-        // Result
-        const resultMatch = text.substring(i).match(/^(1-0|0-1|1\/2-1\/2|\*)/);
+        if (ch === '!' || ch === '?') {
+            const pair = text[i + 1];
+            if (ch === '!' && pair === '!') { tokens.push({ type: 'nag', value: 3 }); i += 2; continue; }
+            if (ch === '?' && pair === '?') { tokens.push({ type: 'nag', value: 4 }); i += 2; continue; }
+            if (ch === '!' && pair === '?') { tokens.push({ type: 'nag', value: 5 }); i += 2; continue; }
+            if (ch === '?' && pair === '!') { tokens.push({ type: 'nag', value: 6 }); i += 2; continue; }
+            tokens.push({ type: 'nag', value: ch === '!' ? 1 : 2 }); i++; continue;
+        }
+        // Result (including unicode en-dash variants)
+        const resultMatch = text.substring(i).match(/^(1[-\u2013]0|0[-\u2013]1|1\/2[-\u2013]1\/2|\*)/);
         if (resultMatch && (i === 0 || /[\s)]/.test(text[i - 1]))) {
-            tokens.push({ type: 'result', value: resultMatch[1] });
+            tokens.push({ type: 'result', value: resultMatch[1].replace(/\u2013/g, '-') });
             i += resultMatch[0].length;
             continue;
         }
@@ -138,10 +135,18 @@ function tokenizeMoveText(text) {
             i += numMatch[0].length;
             continue;
         }
+        // Null move (analysis placeholder)
+        const nullMatch = text.substring(i).match(/^(Z0|--(?![-+])|0000|@@@@)/);
+        if (nullMatch) {
+            tokens.push({ type: 'move', value: '--' });
+            i += nullMatch[0].length;
+            continue;
+        }
         // SAN move (includes standard piece moves, castling, pawn moves)
-        const sanMatch = text.substring(i).match(/^([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|O-O-O[+#]?|O-O[+#]?)/);
+        // Zero-castling (0-0, 0-0-0) normalized to O-O, O-O-O
+        const sanMatch = text.substring(i).match(/^([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|(?:O-O-O|0-0-0)[+#]?|(?:O-O|0-0)[+#]?)/);
         if (sanMatch) {
-            tokens.push({ type: 'move', value: sanMatch[1] });
+            tokens.push({ type: 'move', value: sanMatch[1].replace(/0-0-0/, 'O-O-O').replace(/0-0/, 'O-O') });
             i += sanMatch[0].length;
             continue;
         }
@@ -151,21 +156,29 @@ function tokenizeMoveText(text) {
     return tokens;
 }
 
-/**
- * Recursively parse tokens into an annotated move tree.
- */
+function mergeAnnotations(target, source) {
+    if (!source) return;
+    for (const [k, v] of Object.entries(source)) {
+        target[k] = v;
+    }
+}
+
 function parseTokens(tokens, startIdx) {
     const moves = [];
     let i = startIdx;
     let pendingComment = null;
+    let pendingAnnotations = null;
     let pendingNags = [];
 
     while (i < tokens.length) {
         const tok = tokens[i];
         if (tok.type === 'var_end') {
             if (moves.length > 0 && pendingComment) {
-                moves[moves.length - 1].comment = (moves[moves.length - 1].comment || '') +
-                    (moves[moves.length - 1].comment ? ' ' : '') + pendingComment;
+                moves[moves.length - 1].comment = appendComment(moves[moves.length - 1].comment, pendingComment);
+            }
+            if (moves.length > 0 && pendingAnnotations) {
+                if (!moves[moves.length - 1].annotations) moves[moves.length - 1].annotations = {};
+                mergeAnnotations(moves[moves.length - 1].annotations, pendingAnnotations);
             }
             return { moves, nextIdx: i + 1 };
         }
@@ -173,6 +186,7 @@ function parseTokens(tokens, startIdx) {
         if (tok.type === 'move_number') { i++; continue; }
         if (tok.type === 'comment') {
             pendingComment = tok.value;
+            pendingAnnotations = tok.annotations || null;
             i++;
             continue;
         }
@@ -186,9 +200,11 @@ function parseTokens(tokens, startIdx) {
                 san: tok.value,
                 comment: pendingComment,
                 nags: pendingNags.length > 0 ? [...pendingNags] : null,
+                annotations: pendingAnnotations || null,
                 variations: null,
             };
             pendingComment = null;
+            pendingAnnotations = null;
             pendingNags = [];
             moves.push(move);
             i++;
@@ -196,7 +212,11 @@ function parseTokens(tokens, startIdx) {
             // Collect post-move annotations (comments, NAGs, variations)
             while (i < tokens.length) {
                 if (tokens[i].type === 'comment') {
-                    move.comment = (move.comment || '') + (move.comment ? ' ' : '') + tokens[i].value;
+                    move.comment = appendComment(move.comment, tokens[i].value);
+                    if (tokens[i].annotations) {
+                        if (!move.annotations) move.annotations = {};
+                        mergeAnnotations(move.annotations, tokens[i].annotations);
+                    }
                     i++;
                 } else if (tokens[i].type === 'nag') {
                     if (!move.nags) move.nags = [];
@@ -227,24 +247,22 @@ function parseTokens(tokens, startIdx) {
         }
         i++;
     }
-    if (moves.length > 0 && pendingComment) {
-        moves[moves.length - 1].comment = (moves[moves.length - 1].comment || '') +
-            (moves[moves.length - 1].comment ? ' ' : '') + pendingComment;
+    if (moves.length > 0 && (pendingComment || pendingAnnotations)) {
+        const last = moves[moves.length - 1];
+        if (pendingComment) last.comment = appendComment(last.comment, pendingComment);
+        if (pendingAnnotations) {
+            if (!last.annotations) last.annotations = {};
+            mergeAnnotations(last.annotations, pendingAnnotations);
+        }
     }
     return { moves, nextIdx: i };
 }
 
-/**
- * Extract the move text portion from a full PGN string.
- */
 export function extractMoveText(pgn) {
     const i = findHeaderEnd(pgn);
     return i >= 0 ? pgn.substring(i).trim() : pgn.trim();
 }
 
-/**
- * Build a clean PGN (headers + main line moves only) for chess.js.
- */
 export function buildCleanPgn(pgn, mainLineMoves) {
     const i = findHeaderEnd(pgn);
     const headers = i >= 0 ? pgn.substring(0, i) : '';
@@ -252,11 +270,8 @@ export function buildCleanPgn(pgn, mainLineMoves) {
     return headers + '\n' + moveStr;
 }
 
-/**
- * Find the index where movetext begins (after the last header line).
- * Scans forward through lines matching [Tag "value"] rather than using
- * lastIndexOf, which fails when movetext contains ]\n (e.g. {[#]\n}).
- */
+// Scans forward through header lines rather than using lastIndexOf,
+// which fails when movetext contains ]\n (e.g. {[#]\n}).
 function findHeaderEnd(pgn) {
     let end = -1;
     let pos = 0;
@@ -276,13 +291,6 @@ function findHeaderEnd(pgn) {
     return end > 0 ? end : -1;
 }
 
-/**
- * Serialize a parsed move tree (from parseMoveText) back to PGN text.
- * @param {Array} moves - Array of {san, comment, nags, variations[]} from parseMoveText()
- * @param {Object} [headers={}] - PGN header tags {White: "...", Black: "...", ...}
- * @param {string} [result] - Game result token. If omitted, uses headers.Result or '*'
- * @returns {string} Valid PGN string
- */
 export function serializePgn(moves, headers = {}, result) {
     const lines = [];
 
@@ -314,13 +322,6 @@ export function serializePgn(moves, headers = {}, result) {
     return lines.join('\n') + '\n';
 }
 
-/**
- * Recursively serialize moves into PGN move text.
- * @param {Array} moves - Array of parsed move objects
- * @param {number} moveNum - Current full move number
- * @param {boolean} whiteToMove - Whether the first move in this sequence is White's
- * @returns {string} Serialized move text (no result token)
- */
 function serializeMoves(moves, moveNum, whiteToMove) {
     const parts = [];
     let num = moveNum;
@@ -370,9 +371,6 @@ function serializeMoves(moves, moveNum, whiteToMove) {
     return parts.join(' ');
 }
 
-/**
- * Word-wrap text at the given column width, breaking on spaces.
- */
 function wordWrap(text, width) {
     const words = text.split(/\s+/);
     const lines = [];
@@ -390,11 +388,6 @@ function wordWrap(text, width) {
     return lines.join('\n');
 }
 
-/**
- * Split a multi-game PGN string into individual game strings.
- * Splits on the PGN spec boundary: blank line(s) followed by a header tag.
- * Games missing a result token get '*' appended.
- */
 export function splitPgn(text) {
     const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     const games = normalized.split(/\n\n+(?=\[)/).filter(s => s.trim());
@@ -405,10 +398,6 @@ export function splitPgn(text) {
     });
 }
 
-/**
- * Convert a single PGN string into a browser-compatible game object.
- * Generates a local-{index} gameId. Extracts standard headers.
- */
 export function pgnToGameObject(pgn, index) {
     const white = getHeader(pgn, 'White') || 'Unknown';
     const black = getHeader(pgn, 'Black') || 'Unknown';
@@ -450,7 +439,6 @@ export function pgnToGameObject(pgn, index) {
         gameId: `local-${index}`,
         tournament: eventBase || null,
         tournamentSlug: null,
-        shortCode: null,
         round,
         board: board || index + 1,
         white,
