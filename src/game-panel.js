@@ -431,7 +431,7 @@ function setToolbarButtons() {
     document.getElementById('panel-toolbar')?.classList.toggle('hidden', !_hasGame);
     // Show/hide submit button based on pending submission state
     const submitBtn = document.getElementById('viewer-submit');
-    if (submitBtn) submitBtn.classList.toggle('hidden', !_pendingSubmission);
+    if (submitBtn) submitBtn.classList.toggle('hidden', !SUBMISSIONS_ENABLED || !_pendingSubmission);
 }
 
 function showBrowserView() {
