@@ -657,7 +657,7 @@
       <div class="box c-green" id="o-worker" style="--area:worker">
         <h3>⚙️ Worker <span class="badge" style="background:rgba(63,185,80,0.15);color:var(--green)">Cloudflare Workers</span></h3>
         <ul>
-          <li>HTTP API: 17 endpoints (tournament, games, push, OG)</li>
+          <li>HTTP API: 18 endpoints (tournament, games, push, OG)</li>
           <li>Cron: 3 schedules (pairings, results, cache refresh)</li>
           <li>Regex parser for MI website</li>
           <li>Web Push (VAPID JWT + AES-128-GCM encryption)</li>
@@ -673,8 +673,8 @@
         <ul>
           <li>Push subscriptions</li>
           <li>Tournament HTML cache</li>
-          <li>Standings data</li>
           <li>Notification state</li>
+          <li>OG image cache</li>
           <li>OG image blobs</li>
         </ul>
       </div>
@@ -682,11 +682,11 @@
       <div class="box c-orange" id="o-d1" style="--area:d1">
         <h3>🗃️ D1 Database <span class="badge" style="background:rgba(210,153,34,0.15);color:var(--orange)">SQLite</span></h3>
         <ul>
-          <li><code>tournaments</code> table</li>
-          <li><code>games</code> table (2,685+ games)</li>
-          <li>Normalized player names</li>
-          <li>ECO codes + opening names</li>
-          <li>Full PGN storage</li>
+          <li><code>tournaments</code> — metadata + round dates</li>
+          <li><code>games</code> — 2,750+ games with PGN, ECO</li>
+          <li><code>players</code> — USCF IDs, ratings, aliases</li>
+          <li><code>byes</code> — half/full/zero-point byes</li>
+          <li><code>game_submissions</code> — community PGN</li>
         </ul>
       </div>
 
@@ -826,18 +826,6 @@
         <span>showError()</span>
         <span>renderRoundTracker()</span>
         <span>fitTextToContainer()</span>
-      </div>
-    </div>
-
-    <div class="module-card" style="border-left:3px solid var(--cyan)">
-      <h4 style="color:var(--cyan)">history.js</h4>
-      <div class="path">src/history.js</div>
-      <p>Round history tracking via localStorage + server sync. Merges local cache with server <code>/player-history</code> data.</p>
-      <div class="exports">
-        <span>loadRoundHistory()</span>
-        <span>fetchPlayerHistory()</span>
-        <span>updateRoundHistory()</span>
-        <span>clearRoundHistory()</span>
       </div>
     </div>
 
@@ -1112,7 +1100,7 @@
     <div class="module-card" style="border-left:3px solid var(--green)">
       <h4 style="color:var(--green)">tournament.js</h4>
       <div class="path">worker/src/tournament.js</div>
-      <p>Tournament resolution from MI listing. Handles tournament lifecycle (active → grace period → next). Caches metadata in KV (6h TTL).</p>
+      <p>Tournament resolution from D1. Queries current + next tournament by round dates. Falls back to MI listing only during transitions (~7×/year).</p>
       <div class="exports">
         <span>resolveTournament()</span>
         <span>handleTournamentHtml()</span>
@@ -1124,7 +1112,7 @@
     <div class="module-card" style="border-left:3px solid var(--green)">
       <h4 style="color:var(--green)">cron.js</h4>
       <div class="path">worker/src/cron.js</div>
-      <p>Cron handler. Fetches MI page, parses in single pass, caches HTML, persists standings/games to KV/D1, dispatches push notifications.</p>
+      <p>Cron handler. Fetches MI page, parses in single pass, caches HTML in KV, ingests games + byes to D1, auto-creates new player records from US Chess API, dispatches push notifications.</p>
       <div class="exports">
         <span>handleScheduled()</span>
       </div>
@@ -1179,11 +1167,10 @@
     <div class="module-card" style="border-left:3px solid var(--cyan)">
       <h4 style="color:var(--cyan)">games.js</h4>
       <div class="path">worker/src/games.js</div>
-      <p>D1-based game endpoints. Composable <code>/query</code> API with filters (player, tournament, round, section, hasPgn). Player list, player history, OG image generation, ECO classification, game submissions.</p>
+      <p>D1-based game endpoints. Composable <code>/query</code> API with filters (player, tournament, round, section, eco, result, rating range). Returns games + byes. Player list, OG images, ECO classification, game submissions.</p>
       <div class="exports">
         <span>handleQuery()</span>
         <span>handlePlayers()</span>
-        <span>handlePlayerHistory()</span>
         <span>handleTournaments()</span>
         <span>handleSubmitGame()</span>
         <span>handleOgGame()</span>
@@ -1257,8 +1244,8 @@
         <div class="flow-row">
           <div class="flow-step" style="border-left:3px solid var(--orange)">
             <h4 style="color:var(--orange)">🗄️ KV + D1</h4>
-            <p>HTML cache, standings → KV</p>
-            <p>Games with PGN, ECO → D1</p>
+            <p>HTML cache → KV</p>
+            <p>Games, byes, players, tournaments → D1</p>
           </div>
         </div>
         <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">if new pairings/results</span></div>
@@ -1324,7 +1311,7 @@
         <div class="flow-row">
           <div class="flow-step" style="border-left:3px solid var(--green)">
             <h4 style="color:var(--green)">⚙️ Worker API</h4>
-            <p><code>/tournament-state</code> + <code>/player-history</code></p>
+            <p><code>/tournament-state</code> + <code>/query</code></p>
           </div>
         </div>
         <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">merge &amp; re-render</span></div>
@@ -1470,20 +1457,8 @@
       <tr>
         <td><code>cache:tournamentHtml</code></td>
         <td>JSON</td>
-        <td>Stripped SwissSys HTML + round number + PGN colors map</td>
+        <td>Stripped SwissSys HTML + round number</td>
         <td>Refreshed hourly</td>
-      </tr>
-      <tr>
-        <td><code>cache:tournamentMeta</code></td>
-        <td>JSON</td>
-        <td>Tournament name, URL, round dates, next tournament info</td>
-        <td>6 hours</td>
-      </tr>
-      <tr>
-        <td><code>standings:{slug}:{section}</code></td>
-        <td>JSON</td>
-        <td>Standings table by section (for player history)</td>
-        <td>None</td>
       </tr>
       <tr>
         <td><code>state:pairingsUp</code></td>
@@ -1495,12 +1470,6 @@
         <td><code>state:resultsPosted</code></td>
         <td>JSON</td>
         <td>Last notified results round + timestamp</td>
-        <td>None</td>
-      </tr>
-      <tr>
-        <td><code>state:previousTournament</code></td>
-        <td>JSON</td>
-        <td>Fallback tournament when MI delists finished ones</td>
         <td>None</td>
       </tr>
       <tr>
@@ -1529,8 +1498,8 @@
           <tr><td><code>slug</code></td><td>TEXT PK</td><td>URL-safe identifier</td></tr>
           <tr><td><code>name</code></td><td>TEXT</td><td>Full tournament name</td></tr>
           <tr><td><code>short_code</code></td><td>TEXT</td><td>Compact code for filenames</td></tr>
-          <tr><td><code>start_date</code></td><td>TEXT</td><td>ISO date</td></tr>
-          <tr><td><code>total_rounds</code></td><td>INTEGER</td><td>Number of rounds</td></tr>
+          <tr><td><code>round_dates</code></td><td>TEXT</td><td>JSON array of ISO date strings</td></tr>
+          <tr><td><code>url</code></td><td>TEXT</td><td>Tournament page URL</td></tr>
         </tbody>
       </table>
     </div>
@@ -1558,6 +1527,36 @@
       </table>
       <p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px">Indexes: <code>(tournament_slug, round, board)</code>, <code>(game_id)</code>, <code>(white_norm)</code>, <code>(black_norm)</code></p>
     </div>
+
+    <div class="module-card" style="border-left:3px solid var(--orange)">
+      <h4 style="color:var(--orange)">byes</h4>
+      <table class="data-table" style="margin:0">
+        <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>tournament_slug</code></td><td>TEXT</td><td rowspan="3">Composite PK</td></tr>
+          <tr><td><code>round</code></td><td>INTEGER</td></tr>
+          <tr><td><code>player_norm</code></td><td>TEXT</td></tr>
+          <tr><td><code>bye_type</code></td><td>TEXT</td><td>half, full, zero</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="module-card" style="border-left:3px solid var(--orange); grid-column: span 2">
+      <h4 style="color:var(--orange)">players</h4>
+      <table class="data-table" style="margin:0">
+        <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>INTEGER PK</td><td>Auto-increment</td></tr>
+          <tr><td><code>name</code></td><td>TEXT</td><td>Display name (Last, First)</td></tr>
+          <tr><td><code>name_norm</code></td><td>TEXT UNIQUE</td><td>Canonical key</td></tr>
+          <tr><td><code>uscf_id</code></td><td>TEXT</td><td>US Chess member ID</td></tr>
+          <tr><td><code>aliases</code></td><td>TEXT</td><td>JSON array of name variants</td></tr>
+          <tr><td><code>rating</code></td><td>INTEGER</td><td>Current USCF regular rating</td></tr>
+          <tr><td><code>rating_updated_at</code></td><td>TEXT</td><td>Last rating refresh</td></tr>
+          <tr><td><code>rating_history</code></td><td>TEXT</td><td>JSON supplement history</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div class="section-label" style="margin-top:40px">Browser localStorage</div>
@@ -1570,11 +1569,6 @@
         <td><code>playerName</code></td>
         <td>Selected player name for personalized pairings</td>
         <td>Settings modal</td>
-      </tr>
-      <tr>
-        <td><code>roundHistory</code></td>
-        <td>Per-round results: color, opponent, result, board, bye status</td>
-        <td>history.js (merged with server data)</td>
       </tr>
       <tr>
         <td><code>lastTournamentState</code></td>
@@ -1612,13 +1606,13 @@
       <tr>
         <td><code>/tournament-state</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Current app state + metadata + pairing info. Optional <code>?player=Name</code></td>
+        <td>Current app state + metadata (state, round, tournamentName, roundDates, fetchedAt)</td>
         <td>Frontend (app.js)</td>
       </tr>
       <tr>
         <td><code>/tournament-html</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Cached tournament HTML + round number + PGN colors</td>
+        <td>Cached tournament HTML + round number</td>
         <td>Internal / debug</td>
       </tr>
       <tr>
@@ -1657,12 +1651,6 @@
         <td><span class="method method-get">GET</span></td>
         <td>List all tournaments in D1</td>
         <td>Tournament dropdown</td>
-      </tr>
-      <tr>
-        <td><code>/player-history</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Player's round-by-round history (colors, results, boards, opponents)</td>
-        <td>Round tracker</td>
       </tr>
       <tr>
         <td><code>/eco-classify</code></td>

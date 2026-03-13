@@ -409,7 +409,15 @@ function renderOpponents(container, stats) {
     searchInput.addEventListener('input', () => renderOpponentList(searchInput.value.trim()));
 }
 
-export function initPlayerProfile() {
+export function initPlayerProfile(mount) {
+    mount.innerHTML = `
+        <div id="profile-modal" class="modal hidden" role="dialog" aria-labelledby="profile-modal-title" aria-modal="true">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-content-wide modal-content-scrollable profile-modal-content">
+                <h2 id="profile-modal-title"><span id="profile-player-name"></span></h2>
+                <div id="profile-body" class="profile-body"></div>
+            </div>
+        </div>`;
     onModalClose('profile-modal', closePlayerProfile);
 
     async function browseTo(query) {

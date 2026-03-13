@@ -9,8 +9,6 @@ import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseT
 
 // --- Tournament Resolution ---
 
-const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-
 /**
  * Resolve the current tournament from D1. Falls back to MI listing page
  * discovery when no tournament covers today (~7x/year during transitions).
@@ -31,8 +29,19 @@ export async function resolveTournament(env) {
 
     if (current) {
         const roundDates = JSON.parse(current.round_dates || '[]');
+        let url = current.url;
+
+        // If URL is missing, discover it from MI listing page and persist
+        if (!url) {
+            url = await discoverTournamentUrl(env, current.name);
+            if (url) {
+                await env.DB.prepare('UPDATE tournaments SET url = ? WHERE slug = ?')
+                    .bind(url, current.slug).run();
+            }
+        }
+
         return {
-            name: current.name, slug: current.slug, url: current.url, roundDates,
+            name: current.name, slug: current.slug, url, roundDates,
             totalRounds: roundDates.length,
             nextTournament: next ? {
                 name: next.name, url: next.url,
@@ -43,6 +52,28 @@ export async function resolveTournament(env) {
 
     // No tournament covers today — discover from MI listing page
     return await discoverTournament(env, today);
+}
+
+/**
+ * Find the URL for a tournament by name from the MI listing page.
+ * Used when a tournament exists in D1 but has no URL yet.
+ */
+async function discoverTournamentUrl(env, tournamentName) {
+    try {
+        const res = await fetch(TOURNAMENTS_LIST_URL, { headers: { 'User-Agent': 'TNMP-Notification-Worker/1.0' } });
+        if (!res.ok) return null;
+        const listHtml = await res.text();
+        const tournaments = parseTournamentList(listHtml);
+        const slug = slugifyTournament(tournamentName);
+        const match = tournaments.find(t => slugifyTournament(t.name) === slug);
+        if (match) {
+            console.log(`Discovered URL for ${tournamentName}: ${MI_BASE_URL + match.url}`);
+            return MI_BASE_URL + match.url;
+        }
+    } catch (err) {
+        console.error('Failed to discover tournament URL:', err.message);
+    }
+    return null;
 }
 
 /**

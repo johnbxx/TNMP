@@ -51,7 +51,7 @@ export function getAppState() { return _appState; }
 export function setAppState(partial) { _appState = { ..._appState, ...partial }; }
 
 // Feature gates
-export const SUBMISSIONS_ENABLED = true; // TODO: set false before deploy
+export const SUBMISSIONS_ENABLED = false;
 
 // Debug PGN for testing the game viewer
 export const DEBUG_PGN = `[Event "2026 New Year TNM: 1600-1999"]

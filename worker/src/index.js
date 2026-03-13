@@ -4,7 +4,7 @@
  * All domain logic lives in focused modules:
  *   helpers.js    — response builders, name utils, constants
  *   tournament.js — tournament resolution, app state, tournament endpoints
- *   games.js      — D1 query endpoints, OG images, submissions, player history
+ *   games.js      — D1 query endpoints, OG images, submissions
  *   push.js       — push subscription CRUD, notification dispatch
  *   cron.js       — scheduled HTML fetching, caching, D1 ingestion, push dispatch
  */
@@ -46,8 +46,8 @@ export default {
             if (path === '/eco-classify' && request.method === 'GET') return await handleEcoClassify(request, env);
             if (path === '/eco-data' && request.method === 'GET') return handleEcoData(request, env);
 
-            // Game submissions
-            if (path === '/submit-game' && request.method === 'POST') return await handleSubmitGame(request, env);
+            // Game submissions (disabled — feature not yet live)
+            // if (path === '/submit-game' && request.method === 'POST') return await handleSubmitGame(request, env);
             if (path === '/backfill-eco' && request.method === 'POST') return await handleBackfillEco(request, env);
 
             // Push notifications
@@ -56,6 +56,20 @@ export default {
             if (path === '/push-status' && request.method === 'GET') return await handlePushStatus(request, env);
             if (path === '/push-preferences' && request.method === 'POST') return await handlePushPreferences(request, env);
             if (path === '/push-test' && request.method === 'POST') return await handlePushTest(request, env);
+
+            // Manual cron trigger (bypasses time guard, requires VAPID key)
+            if (path === '/cron' && request.method === 'POST') {
+                try {
+                    const { key } = await request.json();
+                    if (!key || key !== env.VAPID_PRIVATE_KEY) {
+                        return corsResponse({ error: 'Unauthorized' }, 403, env, request);
+                    }
+                    await handleScheduled(env, { force: true });
+                    return corsResponse({ ok: true }, 200, env, request);
+                } catch (err) {
+                    return corsResponse({ error: err.message, stack: err.stack }, 500, env, request);
+                }
+            }
 
             return corsResponse({ error: 'Not found' }, 404, env, request);
         } catch (err) {

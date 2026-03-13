@@ -15,7 +15,7 @@ import {
 } from './parser.js';
 import { classifyOpening } from './eco.js';
 
-export async function handleScheduled(env) {
+export async function handleScheduled(env, { force = false } = {}) {
     // DST-proof guard: cron windows are widened to cover both PST and PDT.
     // Early-return if Pacific time is outside the intended hours.
     const pacific = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
@@ -28,7 +28,7 @@ export async function handleScheduled(env) {
     // Tue 7PM-11:59PM: results check (every 5 min)
     const isResultsWindow = pDay === 2 && pHour >= 19;
 
-    if (!isPairingsWindow && !isResultsWindow) {
+    if (!force && !isPairingsWindow && !isResultsWindow) {
         // Outside pairings/results windows — only run every-20-min cache refresh
         if (pMinute % 20 !== 0) {
             console.log(`Cron skipped: Pacific ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][pDay]} ${pHour}:${String(pMinute).padStart(2, '0')} outside active window`);

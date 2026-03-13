@@ -1,6 +1,37 @@
 import { STATE, getAppState } from './config.js';
 import { showState } from './ui.js';
 
+export function initDebugPanel(container) {
+    container.innerHTML = `
+        <div class="debug-panel" id="debug-panel" style="display: none;">
+            <p>Debug: Preview States</p>
+            <button data-debug="yes">YES</button>
+            <button data-debug="no">NO</button>
+            <button data-debug="too_early">TOO EARLY</button>
+            <button data-debug="in_progress">IN PROGRESS</button>
+            <button data-debug="results">RESULTS</button>
+            <p>Debug: Bye Variants</p>
+            <button data-debug="yes" data-variant="fullBye">YES + Full Bye</button>
+            <button data-debug="yes" data-variant="halfBye">YES + Half Bye</button>
+            <button data-debug="in_progress" data-variant="fullBye">IN PROGRESS + Full Bye</button>
+            <p>Debug: Result Variants</p>
+            <button data-debug="results" data-variant="win">RESULTS + Win</button>
+            <button data-debug="results" data-variant="loss">RESULTS + Loss</button>
+            <button data-debug="results" data-variant="draw">RESULTS + Draw</button>
+            <button data-debug="results" data-variant="fullBye">RESULTS + Bye</button>
+            <p>Debug: Final Results</p>
+            <button data-debug="results" data-variant="final">RESULTS (Final Round)</button>
+            <p>Debug: Off-Season</p>
+            <button data-debug="off_season">OFF SEASON (No Info)</button>
+            <button data-debug="off_season" data-variant="nextTnm">OFF SEASON (Next TNM)</button>
+            <button data-debug="off_season" data-variant="r1Day">OFF SEASON (R1 Day)</button>
+            <p>Debug: Game Viewer</p>
+            <button id="debug-game-viewer">Open Game Viewer</button>
+            <p>Debug: PGN Editor</p>
+            <button id="debug-pgn-editor">Open PGN Editor</button>
+        </div>`;
+}
+
 const MOCK_PAIRINGS = {
     normal: {
         board: '5',

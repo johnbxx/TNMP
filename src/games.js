@@ -434,6 +434,10 @@ export async function fetchGames(queryParams = {}, { cache = false } = {}) {
 
     if (gen !== _fetchGeneration) return _playerData || _tournamentData;
 
+    // Assign synthetic IDs to shell records (no game_id from server)
+    for (const g of data.games) {
+        if (!g.gameId) g.gameId = `${g.tournamentSlug}:${g.round}:${g.board}`;
+    }
     const result = { games: data.games, query: queryParams };
     if (queryParams.player) {
         _playerData = result;

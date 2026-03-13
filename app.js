@@ -2,8 +2,8 @@ import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setApp
 import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
-import { openSettings, saveSettings, initDarkMode } from './src/settings.js';
-import { previewState } from './src/debug.js';
+import { openSettings, saveSettings, initSettings } from './src/settings.js';
+import { previewState, initDebugPanel } from './src/debug.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
 import {
@@ -15,7 +15,7 @@ import {
     getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
     toggleNag, showImportDialog, showSubmitDialog, hideImportDialog, doImport, submitGame,
     showHeaderEditor, hideHeaderEditor, saveHeaderEditor,
-    launchExplorer, debugInjectSkeletons,
+    launchExplorer, debugInjectSkeletons, initGamePanel,
 } from './src/game-panel.js';
 import { showToast } from './src/toast.js';
 import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './src/games.js';
@@ -436,7 +436,8 @@ if ('serviceWorker' in navigator) {
 
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
-    initDarkMode();
+    initSettings(document.getElementById('settings-mount'));
+    initGamePanel(document.getElementById('game-panel-mount'));
 
     // Comments button starts active
     document.querySelector('[data-action="viewer-comments"]')?.classList.add('active');
@@ -446,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelector('[data-action="share-native"]')?.classList.add('hidden');
     }
 
-    initPlayerProfile();
+    initPlayerProfile(document.getElementById('profile-mount'));
 
     // First-visit onboarding
     if (!localStorage.getItem('hasVisited')) {
@@ -470,8 +471,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // URL params
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('debug') === 'true') {
-        const debugPanel = document.getElementById('debug-panel');
-        if (debugPanel) debugPanel.style.display = 'block';
+        initDebugPanel(document.getElementById('debug-mount'));
+        document.getElementById('debug-panel').style.display = 'block';
     }
     const gameId = urlParams.get('game');
     if (gameId && /^\d{10,20}$/.test(gameId)) {

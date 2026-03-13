@@ -23,10 +23,183 @@ import * as pgn from './pgn.js';
 
 loadEcoData();
 
-// Wire comment input once
-document.getElementById('editor-comment-input')?.addEventListener('input', (e) => {
-    pgn.setComment(pgn.getCurrentNodeId(), e.target.value);
-});
+export function initGamePanel(mount) {
+    mount.innerHTML = `
+    <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true" data-manual-close>
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-content-viewer">
+            <button class="viewer-close" data-action="close-panel" aria-label="Close">&times;</button>
+            <div id="viewer-browser-panel" class="viewer-browser-panel hidden"></div>
+            <div class="viewer-main">
+                <div id="viewer-header" class="viewer-header"></div>
+                <div class="viewer-layout">
+                    <div id="viewer-board" class="viewer-board"></div>
+                    <div id="editor-eco" class="editor-eco hidden"></div>
+                    <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
+                    <div id="viewer-moves" class="viewer-moves"></div>
+                </div>
+                <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
+                <div class="viewer-tool-group">
+                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg></button>
+                    <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg></button>
+                    <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
+                </div>
+                <div class="viewer-toolbar-sep"></div>
+                <div class="viewer-nav-group">
+                    <button data-action="viewer-start" class="viewer-nav-btn" aria-label="Go to start" data-tooltip="Start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
+                    <button data-action="viewer-prev" data-hold class="viewer-nav-btn" aria-label="Previous move" data-tooltip="Previous move (Left)"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
+                    <button id="viewer-play" data-action="viewer-play" class="viewer-nav-btn" aria-label="Play" data-tooltip="Play (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg></button>
+                    <button data-action="viewer-next" data-hold class="viewer-nav-btn" aria-label="Next move" data-tooltip="Next move (Right)"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></svg></button>
+                    <button data-action="viewer-end" class="viewer-nav-btn" aria-label="Go to end" data-tooltip="End"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></svg></button>
+                </div>
+                <div class="viewer-toolbar-sep"></div>
+                <div class="viewer-tool-group">
+                    <button data-action="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess" data-tooltip="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+                    <div class="share-btn-wrapper">
+                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
+                        <div id="share-popover" class="share-popover hidden">
+                            <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
+                            <button class="share-option" data-action="share-copy-link">Copy Link</button>
+                            <button class="share-option" data-action="share-download">Download PGN</button>
+                            <button class="share-option" data-action="share-native">Share...</button>
+                        </div>
+                    </div>
+                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg></button>
+                    <button id="viewer-submit" data-action="viewer-submit" class="viewer-tool-btn viewer-submit-btn hidden" aria-label="Submit game" data-tooltip="Submit"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+                </div>
+                </div>
+            </div>
+            <!-- Panel overlays -->
+            <div id="board-promotion" class="board-promotion hidden">
+                <button class="promo-btn" data-piece="q"><img alt="Queen"></button>
+                <button class="promo-btn" data-piece="r"><img alt="Rook"></button>
+                <button class="promo-btn" data-piece="b"><img alt="Bishop"></button>
+                <button class="promo-btn" data-piece="n"><img alt="Knight"></button>
+            </div>
+            <div id="editor-import-dialog" class="editor-import-dialog hidden">
+                <div class="editor-import-content">
+                    <h3>Import PGN</h3>
+                    <textarea id="editor-import-text" class="editor-import-text" placeholder="Paste PGN text here, or drag .pgn files..." rows="10"></textarea>
+                    <div class="editor-import-actions">
+                        <label class="editor-h-btn editor-h-btn-secondary editor-file-btn">Choose files<input type="file" id="editor-import-file" accept=".pgn,.txt" multiple hidden></label>
+                        <span class="editor-import-spacer"></span>
+                        <button data-action="editor-import-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                        <button data-action="editor-import-ok" class="editor-h-btn">Import</button>
+                    </div>
+                </div>
+            </div>
+            <div id="editor-header-popup" class="editor-header-popup hidden">
+                <div class="editor-header-inner">
+                    <h3 class="editor-header-title">Game Info</h3>
+                    <div class="editor-header-fields">
+                        <label for="header-white">White</label>
+                        <input type="text" id="header-white" class="editor-header-input" data-header="White" placeholder="First Last">
+                        <label for="header-black">Black</label>
+                        <input type="text" id="header-black" class="editor-header-input" data-header="Black" placeholder="First Last">
+                        <label for="header-result">Result</label>
+                        <select id="header-result" class="editor-header-input" data-header="Result">
+                            <option value="*">*</option>
+                            <option value="1-0">1-0</option>
+                            <option value="0-1">0-1</option>
+                            <option value="1/2-1/2">1/2-1/2</option>
+                        </select>
+                        <label for="header-date">Date</label>
+                        <input type="text" id="header-date" class="editor-header-input" data-header="Date" placeholder="YYYY.MM.DD">
+                        <label for="header-white-elo">White Elo</label>
+                        <input type="text" id="header-white-elo" class="editor-header-input" data-header="WhiteElo" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
+                        <label for="header-black-elo">Black Elo</label>
+                        <input type="text" id="header-black-elo" class="editor-header-input" data-header="BlackElo" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
+                        <label for="header-event">Event</label>
+                        <input type="text" id="header-event" class="editor-header-input" data-header="Event" placeholder="Tournament name">
+                        <label for="header-round">Round</label>
+                        <input type="text" id="header-round" class="editor-header-input" data-header="Round" placeholder="1 or 1.5">
+                    </div>
+                    <div class="editor-header-actions">
+                        <button type="button" data-action="header-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                        <button type="button" data-action="header-save" class="editor-h-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+            <div id="editor-dirty-dialog" class="editor-import-dialog hidden">
+                <div class="editor-import-content editor-dirty-content">
+                    <h3>Unsaved Changes</h3>
+                    <p class="editor-dirty-message">You have unsaved edits. What would you like to do?</p>
+                    <div class="editor-import-actions editor-dirty-actions">
+                        <button data-action="dirty-copy-leave" class="editor-h-btn">Copy PGN & Leave</button>
+                        <button data-action="dirty-discard" class="editor-h-btn editor-h-btn-secondary">Discard</button>
+                        <button data-action="dirty-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            </div>
+        <!-- NAG picker popup (outside modal-content to avoid overflow clipping) -->
+        <div id="editor-nag-picker" class="editor-nag-picker hidden">
+            <div class="nag-section">
+                <div class="nag-section-title">Move</div>
+                <button class="nag-btn" data-nag="1"><span class="nag-symbol">!</span><span class="nag-label">Good move</span></button>
+                <button class="nag-btn" data-nag="2"><span class="nag-symbol">?</span><span class="nag-label">Poor move</span></button>
+                <button class="nag-btn" data-nag="3"><span class="nag-symbol">‼</span><span class="nag-label">Brilliant</span></button>
+                <button class="nag-btn" data-nag="4"><span class="nag-symbol">⁇</span><span class="nag-label">Blunder</span></button>
+                <button class="nag-btn" data-nag="5"><span class="nag-symbol">⁉</span><span class="nag-label">Interesting</span></button>
+                <button class="nag-btn" data-nag="6"><span class="nag-symbol">⁈</span><span class="nag-label">Dubious</span></button>
+                <button class="nag-btn" data-nag="7"><span class="nag-symbol">□</span><span class="nag-label">Forced</span></button>
+                <button class="nag-btn" data-nag="9"><span class="nag-symbol">☒</span><span class="nag-label">Worst move</span></button>
+            </div>
+            <div class="nag-section">
+                <div class="nag-section-title">Position</div>
+                <button class="nag-btn" data-nag="10"><span class="nag-symbol">=</span><span class="nag-label">Equal</span></button>
+                <button class="nag-btn" data-nag="13"><span class="nag-symbol">∞</span><span class="nag-label">Unclear</span></button>
+                <button class="nag-btn" data-nag="14"><span class="nag-symbol">⩲</span><span class="nag-label">White slightly better</span></button>
+                <button class="nag-btn" data-nag="15"><span class="nag-symbol">⩱</span><span class="nag-label">Black slightly better</span></button>
+                <button class="nag-btn" data-nag="16"><span class="nag-symbol">±</span><span class="nag-label">White moderately better</span></button>
+                <button class="nag-btn" data-nag="17"><span class="nag-symbol">∓</span><span class="nag-label">Black moderately better</span></button>
+                <button class="nag-btn" data-nag="18"><span class="nag-symbol">+-</span><span class="nag-label">White winning</span></button>
+                <button class="nag-btn" data-nag="19"><span class="nag-symbol">-+</span><span class="nag-label">Black winning</span></button>
+                <button class="nag-btn" data-nag="20"><span class="nag-symbol">+−−</span><span class="nag-label">White crushing</span></button>
+                <button class="nag-btn" data-nag="21"><span class="nag-symbol">−−+</span><span class="nag-label">Black crushing</span></button>
+            </div>
+            <div class="nag-section">
+                <div class="nag-section-title">Situation</div>
+                <button class="nag-btn" data-nag="22"><span class="nag-symbol">⨀</span><span class="nag-label">Zugzwang</span></button>
+                <button class="nag-btn" data-nag="32"><span class="nag-symbol">⟳</span><span class="nag-label">Development advantage</span></button>
+                <button class="nag-btn" data-nag="36"><span class="nag-symbol">↑</span><span class="nag-label">Has the initiative</span></button>
+                <button class="nag-btn" data-nag="40"><span class="nag-symbol">→</span><span class="nag-label">Has the attack</span></button>
+                <button class="nag-btn" data-nag="44"><span class="nag-symbol">⯹</span><span class="nag-label">Compensation</span></button>
+                <button class="nag-btn" data-nag="132"><span class="nag-symbol">⇆</span><span class="nag-label">Counterplay</span></button>
+                <button class="nag-btn" data-nag="138"><span class="nag-symbol">⨁</span><span class="nag-label">Time pressure</span></button>
+            </div>
+            <div class="nag-section">
+                <div class="nag-section-title">Other</div>
+                <button class="nag-btn" data-nag="140"><span class="nag-symbol">∆</span><span class="nag-label">With the idea</span></button>
+                <button class="nag-btn" data-nag="141"><span class="nag-symbol">∇</span><span class="nag-label">Aimed against</span></button>
+                <button class="nag-btn" data-nag="142"><span class="nag-symbol">⌓</span><span class="nag-label">Better is</span></button>
+                <button class="nag-btn" data-nag="143"><span class="nag-symbol">≤</span><span class="nag-label">Worse is</span></button>
+                <button class="nag-btn" data-nag="145"><span class="nag-symbol">RR</span><span class="nag-label">Editorial comment</span></button>
+                <button class="nag-btn" data-nag="146"><span class="nag-symbol">N</span><span class="nag-label">Novelty</span></button>
+            </div>
+        </div>
+        <!-- Move context menu -->
+        <div id="editor-context-menu" class="editor-context-menu hidden">
+            <div class="ctx-nag-row">
+                <button class="ctx-nag" data-nag="1">!</button>
+                <button class="ctx-nag" data-nag="2">?</button>
+                <button class="ctx-nag" data-nag="3">‼</button>
+                <button class="ctx-nag" data-nag="4">⁇</button>
+                <button class="ctx-nag" data-nag="5">⁉</button>
+                <button class="ctx-nag" data-nag="6">⁈</button>
+            </div>
+            <button class="ctx-item" data-ctx-action="annotate">More annotations...</button>
+            <button class="ctx-item" data-ctx-action="delete">Delete from here</button>
+            <button class="ctx-item ctx-mainline" data-ctx-action="mainline">Make mainline</button>
+        </div>
+    </div>
+    </div>`;
+
+    // Wire comment input
+    document.getElementById('editor-comment-input')?.addEventListener('input', (e) => {
+        pgn.setComment(pgn.getCurrentNodeId(), e.target.value);
+    });
+}
 
 // ─── 1. State ──────────────────────────────────────────────────────
 
@@ -1239,7 +1412,8 @@ function renderBrowserFilters(panelEl, state) {
         html += '<select class="browser-round-select" id="browser-round-select">';
         for (const r of state.roundNumbers) {
             const selected = r === state.round ? ' selected' : '';
-            html += `<option value="${r}"${selected}>R${r}</option>`;
+            const label = window.innerWidth > 600 ? `Round ${r}` : `R${r}`;
+            html += `<option value="${r}"${selected}>${label}</option>`;
         }
         html += '</select>';
     }
