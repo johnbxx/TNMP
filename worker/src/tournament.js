@@ -325,10 +325,11 @@ export async function handleOgState(request, env) {
 }
 
 export async function handleHealth(env, request) {
-    const [lastCheck, pairingsState, resultsState, cached] = await Promise.all([
+    const [lastCheck, pairingsState, resultsState, gamesState, cached] = await Promise.all([
         env.SUBSCRIBERS.get('state:lastCheck'),
         env.SUBSCRIBERS.get('state:pairingsUp', 'json'),
         env.SUBSCRIBERS.get('state:resultsPosted', 'json'),
+        env.SUBSCRIBERS.get('state:gamesPosted', 'json'),
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
     ]);
 
@@ -343,7 +344,7 @@ export async function handleHealth(env, request) {
         status: 'ok',
         lastCheck: lastCheckData || null,
         minutesSinceLastCheck: lastCheckTime ? Math.round((Date.now() - lastCheckTime) / 60000) : null,
-        pairingsUp: pairingsState || null, resultsPosted: resultsState || null,
+        pairingsUp: pairingsState || null, resultsPosted: resultsState || null, gamesPosted: gamesState || null,
         cachedRound: cached?.round || null, cachedAt: cached?.fetchedAt || null,
     }, 200, env, request);
 }

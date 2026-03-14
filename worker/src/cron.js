@@ -11,7 +11,7 @@ import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings,
     parsePlayerInfo, parseGameResult, findPlayerPairingFromSections,
-    findPlayerResultFromSections, composeMessage, composeResultsMessage,
+    findPlayerResultFromSections, composeMessage, composeResultsMessage, composeGamesMessage,
 } from './parser.js';
 import { classifyOpening } from './eco.js';
 
@@ -30,7 +30,8 @@ export async function handleScheduled(env, { force = false } = {}) {
 
     if (!force && !isPairingsWindow && !isResultsWindow) {
         // Outside pairings/results windows — only run every-20-min cache refresh
-        if (pMinute % 20 !== 0) {
+        // Allow ±2 min tolerance for Cloudflare cron drift
+        if (pMinute % 20 > 2 && pMinute % 20 < 18) {
             console.log(`Cron skipped: Pacific ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][pDay]} ${pHour}:${String(pMinute).padStart(2, '0')} outside active window`);
             return;
         }
@@ -264,6 +265,7 @@ export async function handleScheduled(env, { force = false } = {}) {
     // Store games in D1 (only new or changed)
     let newCount = 0;
     let updatedCount = 0;
+    const existingMap = new Map();
     try {
         const roundDatesJson = JSON.stringify(tournament.roundDates || []);
         await env.DB.prepare(
@@ -276,12 +278,13 @@ export async function handleScheduled(env, { force = false } = {}) {
         const existing = await env.DB.prepare(
             'SELECT round, board, result, pgn FROM games WHERE tournament_slug = ?'
         ).bind(slug).all();
-        const existingMap = new Map();
         for (const row of existing.results) {
             existingMap.set(`${row.round}:${row.board}`, { result: row.result, hasPgn: !!row.pgn });
         }
 
         const stmts = [];
+        const totalParsed = Object.values(parsed.fullGames).reduce((sum, g) => sum + g.length, 0);
+        console.log(`fullGames: ${totalParsed} games across rounds ${Object.keys(parsed.fullGames).join(', ')}`);
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
             for (const g of games) {
                 if (g.board === null) continue;
@@ -333,7 +336,7 @@ export async function handleScheduled(env, { force = false } = {}) {
             console.log(`D1: ${newCount} new, ${updatedCount} updated games across ${Object.keys(parsed.fullGames).length} rounds.`);
         }
     } catch (err) {
-        console.error('Failed to store games in D1:', err.message);
+        console.error('Failed to store games in D1:', err.message, err.stack);
     }
 
     // Insert shell records for games from pairings table (skip if already in D1)
@@ -383,7 +386,7 @@ export async function handleScheduled(env, { force = false } = {}) {
                 console.log(`Upserted ${shellStmts.length} shell records (insert or update result).`);
             }
         } catch (err) {
-            console.error('Failed to upsert shell records:', err.message);
+            console.error('Failed to upsert shell records:', err.message, err.stack);
         }
     }
 
@@ -406,29 +409,33 @@ export async function handleScheduled(env, { force = false } = {}) {
         pairingsFound: parsed.hasPairings,
     }));
 
+    // --- Dispatch notifications (independent of data ingestion) ---
+    await dispatchAllNotifications(parsed, env);
+}
+
+/**
+ * Dispatch all notification types independently. Each checks its own
+ * conditions and state — no early returns between types.
+ */
+async function dispatchAllNotifications(parsed, env) {
     if (!parsed.hasPairings) {
-        console.log('No pairings found on page.');
+        console.log('No pairings found on page, skipping notifications.');
         return;
     }
 
     const round = parsed.roundNumber;
-    console.log(`Pairings detected for round ${round}`);
-
-    // Fetch subscribers once — used by both pairings and results dispatch
     const pushSubs = await listPushSubscriptions(env);
-
-    // Skip subscribers whose player name isn't in this tournament's pairings
     const isInTournament = (record) =>
         !record.playerName || findPlayerPairingFromSections(parsed.pairingsSections, record.playerName) !== null;
 
-    // --- Pairings notifications ---
+    // --- Pairings ---
     const pairingsState = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
     if (pairingsState && pairingsState.round === round) {
-        console.log(`Already notified pairings for round ${round}, skipping.`);
+        console.log(`Already notified pairings for round ${round}.`);
     } else {
-        let pushPairingsCount = 0;
+        let count = 0;
         try {
-            pushPairingsCount = await dispatchPushNotifications({
+            count = await dispatchPushNotifications({
                 subscribers: pushSubs,
                 prefKey: 'notifyPairings',
                 trackKey: 'lastNotifiedRound',
@@ -441,76 +448,95 @@ export async function handleScheduled(env, { force = false } = {}) {
                     return {
                         title: `Round ${round} Pairings Are Up!`,
                         body: composeMessage(pairing, round),
-                        url: '/',
-                        type: 'pairings',
-                        round,
+                        url: '/', type: 'pairings', round,
                     };
                 },
-                env,
-                label: 'pairings',
+                env, label: 'pairings',
             });
-        } catch (err) {
-            console.error('Push pairings dispatch error:', err.message);
-        }
+        } catch (err) { console.error('Push pairings dispatch error:', err.message); }
 
         await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
-            round,
-            detectedAt: new Date().toISOString(),
-            pushNotifiedCount: pushPairingsCount,
+            round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
         }));
-
-        console.log(`Notified ${pushPairingsCount} push subscriber(s) for round ${round}.`);
+        console.log(`Notified ${count} push subscriber(s) for round ${round} pairings.`);
     }
 
-    // --- Results notifications ---
+    // --- Results ---
     if (!parsed.hasResults) {
         console.log('No results found yet for current round.');
-        return;
-    }
-
-    console.log(`Results detected for round ${round}`);
-
-    const resultsState = await env.SUBSCRIBERS.get('state:resultsPosted', 'json');
-    if (resultsState && resultsState.round === round) {
-        console.log(`Already notified results for round ${round}, skipping.`);
-        return;
-    }
-
-    let pushResultsCount = 0;
-    try {
-        pushResultsCount = await dispatchPushNotifications({
-            subscribers: pushSubs,
-            prefKey: 'notifyResults',
-            trackKey: 'lastNotifiedResultsRound',
-            round,
-            shouldNotify: isInTournament,
-            buildPayload: (record) => {
-                const pairing = record.playerName
-                    ? findPlayerPairingFromSections(parsed.pairingsSections, record.playerName)
-                    : null;
-                const playerResult = record.playerName
-                    ? findPlayerResultFromSections(parsed.pairingsSections, record.playerName)
-                    : null;
-                return {
-                    title: `Round ${round} Results Are In!`,
-                    body: composeResultsMessage(pairing, playerResult, round),
-                    url: '/',
-                    type: 'results',
+    } else {
+        const resultsState = await env.SUBSCRIBERS.get('state:resultsPosted', 'json');
+        if (resultsState && resultsState.round === round) {
+            console.log(`Already notified results for round ${round}.`);
+        } else {
+            let count = 0;
+            try {
+                count = await dispatchPushNotifications({
+                    subscribers: pushSubs,
+                    prefKey: 'notifyResults',
+                    trackKey: 'lastNotifiedResultsRound',
                     round,
-                };
-            },
-            env,
-            label: 'results',
-        });
-    } catch (err) {
-        console.error('Push results dispatch error:', err.message);
+                    shouldNotify: isInTournament,
+                    buildPayload: (record) => {
+                        const pairing = record.playerName
+                            ? findPlayerPairingFromSections(parsed.pairingsSections, record.playerName)
+                            : null;
+                        const playerResult = record.playerName
+                            ? findPlayerResultFromSections(parsed.pairingsSections, record.playerName)
+                            : null;
+                        return {
+                            title: `Round ${round} Results Are In!`,
+                            body: composeResultsMessage(pairing, playerResult, round),
+                            url: '/', type: 'results', round,
+                        };
+                    },
+                    env, label: 'results',
+                });
+            } catch (err) { console.error('Push results dispatch error:', err.message); }
+
+            await env.SUBSCRIBERS.put('state:resultsPosted', JSON.stringify({
+                round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
+            }));
+            console.log(`Notified ${count} push subscriber(s) of results for round ${round}.`);
+        }
     }
 
-    await env.SUBSCRIBERS.put('state:resultsPosted', JSON.stringify({
-        round,
-        detectedAt: new Date().toISOString(),
-        pushNotifiedCount: pushResultsCount,
-    }));
+    // --- Games (PGNs available) ---
+    // Count boards from pairings for this round, notify when >50% have PGNs
+    const roundGames = parsed.fullGames[String(round)] || [];
+    const roundSections = parsed.pairingsSections.filter(s => s.round === round);
+    const totalBoards = roundSections.reduce((sum, s) => sum + s.rows.length, 0);
 
-    console.log(`Notified ${pushResultsCount} push subscriber(s) of results for round ${round}.`);
+    if (roundGames.length === 0) {
+        console.log('No PGN games found for current round.');
+    } else if (totalBoards > 0 && roundGames.length <= totalBoards / 2) {
+        console.log(`Only ${roundGames.length}/${totalBoards} PGN games — waiting for majority before notifying.`);
+    } else {
+        const gamesState = await env.SUBSCRIBERS.get('state:gamesPosted', 'json');
+        if (gamesState && gamesState.round === round) {
+            console.log(`Already notified games for round ${round}.`);
+        } else {
+            let count = 0;
+            try {
+                count = await dispatchPushNotifications({
+                    subscribers: pushSubs,
+                    prefKey: 'notifyResults',
+                    trackKey: 'lastNotifiedGamesRound',
+                    round,
+                    shouldNotify: isInTournament,
+                    buildPayload: () => ({
+                        title: `Round ${round} Games Are Up!`,
+                        body: composeGamesMessage(round, roundGames.length),
+                        url: '/', type: 'games', round,
+                    }),
+                    env, label: 'games',
+                });
+            } catch (err) { console.error('Push games dispatch error:', err.message); }
+
+            await env.SUBSCRIBERS.put('state:gamesPosted', JSON.stringify({
+                round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
+            }));
+            console.log(`Notified ${count} push subscriber(s) of games for round ${round}.`);
+        }
+    }
 }

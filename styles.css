@@ -3329,21 +3329,41 @@ select.editor-header-input {
     flex-shrink: 0;
 }
 
-.explorer-view-games {
-    display: block;
-    width: 100%;
-    padding: 0.6rem;
+/* Explorer content + toolbar layout */
+.explorer-content { flex: 1; }
+.viewer-moves:has(.explorer-toolbar) {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Explorer toolbar: reset, back, view games */
+.explorer-toolbar {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
     margin-top: 0.25rem;
+}
+.explorer-tb-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
     background: var(--surface-raised);
-    color: var(--accent);
+    color: var(--text-muted);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    font-size: 0.85rem;
     cursor: pointer;
-    text-align: center;
 }
-.explorer-view-games:hover { background: var(--surface-hover); }
-@media (min-width: 1000px) { .explorer-view-games { display: none; } }
+.explorer-tb-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
+.explorer-tb-btn:disabled { opacity: 0.3; cursor: default; }
+.explorer-tb-games {
+    flex: 1;
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+@media (min-width: 1000px) { .explorer-tb-games { display: none; } }
 
 .explorer-empty {
     text-align: center;

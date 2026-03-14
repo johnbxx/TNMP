@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TNMP Query API</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #c8c8cc;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .page { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+
+  header {
+    border-bottom: 1px solid #1e1e2a;
+    padding: 20px 0;
+    position: sticky;
+    top: 0;
+    background: #0a0a0fee;
+    backdrop-filter: blur(12px);
+    z-index: 10;
+  }
+  header .page { display: flex; align-items: baseline; gap: 16px; }
+  header h1 { font-size: 1.1rem; font-weight: 700; color: #f0ede6; letter-spacing: -0.02em; }
+  header .base-url {
+    font-size: 0.78rem; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    color: #606068; background: #14141c; padding: 4px 10px; border-radius: 4px;
+    border: 1px solid #1e1e2a;
+  }
+
+  main { padding: 48px 0 96px; }
+
+  /* Sections */
+  section { margin-bottom: 64px; }
+  section:last-child { margin-bottom: 0; }
+
+  h2 {
+    font-size: 1.35rem; font-weight: 700; color: #f0ede6;
+    letter-spacing: -0.02em; margin-bottom: 8px;
+    padding-bottom: 12px; border-bottom: 1px solid #1a1a24;
+  }
+  h3 {
+    font-size: 0.95rem; font-weight: 600; color: #b0a898;
+    margin: 32px 0 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  p { margin-bottom: 16px; font-size: 0.9rem; color: #9898a0; }
+  p code, li code, td code {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.82em; background: #16161e; padding: 2px 6px; border-radius: 3px;
+    color: #d0c8b8; border: 1px solid #222230;
+  }
+
+  /* Two-column: docs left, examples right */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  .split .docs { min-width: 0; }
+  .split .examples { min-width: 0; position: sticky; top: 80px; }
+
+  @media (max-width: 840px) {
+    .split { grid-template-columns: 1fr; gap: 24px; }
+    .split .examples { position: static; }
+    .page { padding: 0 16px; }
+  }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 0.85rem; }
+  th {
+    text-align: left; font-weight: 600; color: #8a8290;
+    padding: 8px 12px; border-bottom: 2px solid #1e1e2a;
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid #141420; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { white-space: nowrap; }
+
+  .param-name { color: #d0c8b8; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-weight: 600; font-size: 0.82rem; }
+  .param-type { color: #607080; font-size: 0.75rem; margin-left: 6px; }
+  .param-default { color: #505060; font-style: italic; }
+  .param-note { color: #888890; }
+
+  /* Code blocks */
+  pre {
+    background: #12121a; border: 1px solid #1e1e2a; border-radius: 8px;
+    padding: 16px 20px; overflow-x: auto; margin-bottom: 16px;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.8rem; line-height: 1.7; color: #b8b8c0;
+  }
+  pre .comment { color: #4a4a58; }
+  pre .method { color: #8ab4d0; font-weight: 600; }
+  pre .url { color: #d0c8a0; }
+  pre .param { color: #c0a878; }
+  pre .string { color: #a0c8a0; }
+  pre .key { color: #c0a090; }
+  pre .number { color: #a0b8d0; }
+  pre .punct { color: #606070; }
+  pre .label { display: block; color: #606068; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; }
+
+  /* Callouts */
+  .callout {
+    background: #14141c; border-left: 3px solid #8a7a60;
+    padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;
+    font-size: 0.82rem; color: #a0a0a8;
+  }
+  .callout strong { color: #d0c8b8; }
+  .callout.info { border-left-color: #5080a0; }
+
+  /* Response shape */
+  .response-field { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+  .response-field .field-name {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    color: #c0a090; font-size: 0.82rem;
+  }
+  .response-field .field-type { color: #506070; font-size: 0.75rem; }
+  .response-field .field-desc { color: #808088; font-size: 0.8rem; }
+  .field-indent { padding-left: 20px; border-left: 1px solid #1e1e2a; margin-left: 4px; }
+
+  /* Badge */
+  .badge {
+    display: inline-block; padding: 3px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; vertical-align: middle;
+  }
+  .badge-get { background: #1a2a1a; color: #6ab06a; border: 1px solid #2a3a2a; }
+
+  /* Nav */
+  nav { margin-bottom: 48px; }
+  nav ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  nav a {
+    display: block; padding: 6px 14px; border-radius: 6px;
+    font-size: 0.78rem; color: #808088; text-decoration: none;
+    background: #12121a; border: 1px solid #1a1a24;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  nav a:hover { color: #d0c8b8; border-color: #2a2a38; background: #1a1a24; }
+
+  /* Utility */
+  ul.plain { list-style: none; padding: 0; }
+  ul.plain li { padding: 3px 0; font-size: 0.82rem; color: #888890; }
+  ul.plain li::before { content: '\2022'; color: #3a3a48; margin-right: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="page">
+    <h1>TNMP Query API</h1>
+    <span class="base-url">https://tnmp-notifications.johnfranklinboyer.workers.dev</span>
+  </div>
+</header>
+
+<main>
+<div class="page">
+
+<nav>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#tournament-scope">Tournament Scope</a></li>
+    <li><a href="#filters">Filters</a></li>
+    <li><a href="#pagination">Pagination & Output</a></li>
+    <li><a href="#response">Response</a></li>
+    <li><a href="#examples">Examples</a></li>
+    <li><a href="#tips">Tips</a></li>
+  </ul>
+</nav>
+
+<!-- Overview -->
+<section id="overview">
+  <h2><span class="badge badge-get">GET</span> /query</h2>
+  <div class="split">
+    <div class="docs">
+      <p>Composable game query endpoint backed by D1. Returns games with optional PGN text, byes, and USCF IDs. All filters are optional and combine with AND logic.</p>
+      <p>By default, queries are scoped to the <strong>current tournament</strong>. Use <code>tournament=all</code> to search across all tournaments, or pass a specific slug.</p>
+      <div class="callout">
+        <strong>Name resolution:</strong> Player names are resolved through the alias system automatically. Old name variants, different capitalizations, and "First Last" or "Last, First" formats all resolve to the same canonical player.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Basic request</span><span class="method">GET</span> <span class="url">/query</span>
+
+<span class="comment">// Returns up to 100 games from the current tournament</span></pre>
+      <pre><span class="label">With filters</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John<span class="punct">&</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">include</span>=pgn</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Tournament Scope -->
+<section id="tournament-scope">
+  <h3>Tournament Scope</h3>
+  <div class="split">
+    <div class="docs">
+      <table>
+        <thead><tr><th>Usage</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">tournament</span> <em class="param-default">omitted</em></td>
+            <td class="param-note">Current tournament only (resolved from D1)</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">tournament=</span><code>all</code></td>
+            <td class="param-note">Search across all tournaments</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">tournament=</span><code>{slug}</code></td>
+            <td class="param-note">Specific tournament by slug</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout info">
+        <strong>Finding slugs:</strong> Slugs follow the pattern <code>YYYY-season-tuesday-night-marathon</code>. Hit <code>/tournaments</code> to list all available slugs.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Current tournament</span><span class="method">GET</span> <span class="url">/query</span>
+
+<span class="label">All tournaments</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all
+
+<span class="label">Specific tournament</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=2026-spring-tuesday-night-marathon</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Filters -->
+<section id="filters">
+  <h3>Filters</h3>
+  <div class="split">
+    <div class="docs">
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">player</span> <span class="param-type">string</span></td>
+            <td class="param-note">Player name. Matches white or black. Alias-resolved.<br>e.g. <code>Boyer, John</code> or <code>John Boyer</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">color</span> <span class="param-type">string</span></td>
+            <td class="param-note"><code>white</code> or <code>black</code>. Requires <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">opponent</span> <span class="param-type">string</span></td>
+            <td class="param-note">Filter to games between <code>player</code> and this opponent</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">result</span> <span class="param-type">string</span></td>
+            <td class="param-note"><code>win</code>, <code>loss</code>, or <code>draw</code>. Relative to <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">round</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Round number</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">board</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Board number</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">gameId</span> <span class="param-type">string</span></td>
+            <td class="param-note">Globally unique game ID. Ignores tournament scope</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">eco</span> <span class="param-type">string</span></td>
+            <td class="param-note">ECO code or range. <code>B23</code> or <code>B00-B99</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">section</span> <span class="param-type">string</span></td>
+            <td class="param-note">Section name, e.g. <code>2000+</code>, <code>1600-1999</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">minRating</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Opponent's minimum rating. Requires <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">maxRating</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Opponent's maximum rating. Requires <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">after</span> <span class="param-type">date</span></td>
+            <td class="param-note">Games on or after this date. <code>YYYY-MM-DD</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">before</span> <span class="param-type">date</span></td>
+            <td class="param-note">Games on or before this date. <code>YYYY-MM-DD</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Player + color + result</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+      <span class="punct">&</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">color</span>=white
+      <span class="punct">&</span><span class="param">result</span>=win
+
+<span class="label">ECO range</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">eco</span>=B00-B99
+
+<span class="label">Head to head</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+      <span class="punct">&</span><span class="param">opponent</span>=Smith, Alice
+      <span class="punct">&</span><span class="param">tournament</span>=all
+
+<span class="label">Rating filter</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+      <span class="punct">&</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">minRating</span>=1800
+      <span class="punct">&</span><span class="param">maxRating</span>=2200
+
+<span class="label">Date range</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">after</span>=2025-01-01
+      <span class="punct">&</span><span class="param">before</span>=2025-12-31</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Pagination & Output -->
+<section id="pagination">
+  <h3>Pagination & Output</h3>
+  <div class="split">
+    <div class="docs">
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">limit</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Results per page. Default <code>100</code>, max <code>500</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">offset</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Skip this many results. Default <code>0</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">include</span> <span class="param-type">string</span></td>
+            <td class="param-note">
+              Comma-separated extras:<br>
+              <code>pgn</code> &mdash; include full PGN text<br>
+              <code>submissions</code> &mdash; include pending community PGNs
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>PGN is excluded by default</strong> to keep responses small. Add <code>include=pgn</code> when you need move data.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Paginated with PGN</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">limit</span>=50
+      <span class="punct">&</span><span class="param">offset</span>=100
+      <span class="punct">&</span><span class="param">include</span>=pgn
+
+<span class="label">Multiple includes</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">include</span>=pgn,submissions</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Response -->
+<section id="response">
+  <h3>Response Shape</h3>
+  <div class="split">
+    <div class="docs">
+      <div class="response-field">
+        <span class="field-name">games</span>
+        <span class="field-type">array</span>
+        <span class="field-desc">Array of game objects</span>
+      </div>
+      <div class="field-indent">
+        <div class="response-field"><span class="field-name">tournament</span> <span class="field-type">string</span> <span class="field-desc">Display name</span></div>
+        <div class="response-field"><span class="field-name">tournamentSlug</span> <span class="field-type">string</span> <span class="field-desc">URL-safe slug</span></div>
+        <div class="response-field"><span class="field-name">round</span> <span class="field-type">integer</span></div>
+        <div class="response-field"><span class="field-name">board</span> <span class="field-type">integer</span></div>
+        <div class="response-field"><span class="field-name">white</span> / <span class="field-name">black</span> <span class="field-type">string</span> <span class="field-desc">"First Last" display format</span></div>
+        <div class="response-field"><span class="field-name">whiteNorm</span> / <span class="field-name">blackNorm</span> <span class="field-type">string</span> <span class="field-desc">"last,first" canonical key</span></div>
+        <div class="response-field"><span class="field-name">whiteElo</span> / <span class="field-name">blackElo</span> <span class="field-type">integer|null</span></div>
+        <div class="response-field"><span class="field-name">result</span> <span class="field-type">string</span> <span class="field-desc"><code>1-0</code>, <code>0-1</code>, <code>1/2-1/2</code>, or <code>*</code></span></div>
+        <div class="response-field"><span class="field-name">eco</span> <span class="field-type">string|null</span> <span class="field-desc">ECO classification code</span></div>
+        <div class="response-field"><span class="field-name">openingName</span> <span class="field-type">string|null</span> <span class="field-desc">Full opening name</span></div>
+        <div class="response-field"><span class="field-name">section</span> <span class="field-type">string</span> <span class="field-desc">e.g. "2000+", "1600-1999"</span></div>
+        <div class="response-field"><span class="field-name">date</span> <span class="field-type">string</span> <span class="field-desc">"YYYY.MM.DD"</span></div>
+        <div class="response-field"><span class="field-name">gameId</span> <span class="field-type">string|null</span></div>
+        <div class="response-field"><span class="field-name">hasPgn</span> <span class="field-type">boolean</span></div>
+        <div class="response-field"><span class="field-name">pgn</span> <span class="field-type">string</span> <span class="field-desc">Only with <code>include=pgn</code></span></div>
+      </div>
+
+      <div class="response-field" style="margin-top: 16px;">
+        <span class="field-name">total</span>
+        <span class="field-type">integer</span>
+        <span class="field-desc">Total matching games (for pagination)</span>
+      </div>
+      <div class="response-field">
+        <span class="field-name">limit</span> / <span class="field-name">offset</span>
+        <span class="field-type">integer</span>
+        <span class="field-desc">Echo of pagination params</span>
+      </div>
+      <div class="response-field">
+        <span class="field-name">byes</span>
+        <span class="field-type">array</span>
+        <span class="field-desc">Only with <code>player</code> + specific tournament</span>
+      </div>
+      <div class="field-indent">
+        <div class="response-field"><span class="field-name">round</span> <span class="field-type">integer</span></div>
+        <div class="response-field"><span class="field-name">type</span> <span class="field-type">string</span> <span class="field-desc"><code>half</code>, <code>full</code>, or <code>zero</code></span></div>
+      </div>
+      <div class="response-field">
+        <span class="field-name">uscfId</span>
+        <span class="field-type">string</span>
+        <span class="field-desc">Player's USCF ID. Only with <code>player</code> filter</span>
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Example response</span><span class="punct">{</span>
+  <span class="key">"games"</span><span class="punct">: [</span>
+    <span class="punct">{</span>
+      <span class="key">"tournament"</span><span class="punct">:</span> <span class="string">"2026 Spring Tuesday Night Marathon"</span><span class="punct">,</span>
+      <span class="key">"tournamentSlug"</span><span class="punct">:</span> <span class="string">"2026-spring-tuesday-night-marathon"</span><span class="punct">,</span>
+      <span class="key">"round"</span><span class="punct">:</span> <span class="number">2</span><span class="punct">,</span>
+      <span class="key">"board"</span><span class="punct">:</span> <span class="number">27</span><span class="punct">,</span>
+      <span class="key">"white"</span><span class="punct">:</span> <span class="string">"John Boyer"</span><span class="punct">,</span>
+      <span class="key">"black"</span><span class="punct">:</span> <span class="string">"Bennett Mccutcheon"</span><span class="punct">,</span>
+      <span class="key">"whiteNorm"</span><span class="punct">:</span> <span class="string">"boyer,john"</span><span class="punct">,</span>
+      <span class="key">"blackNorm"</span><span class="punct">:</span> <span class="string">"mccutcheon,bennett"</span><span class="punct">,</span>
+      <span class="key">"whiteElo"</span><span class="punct">:</span> <span class="number">1761</span><span class="punct">,</span>
+      <span class="key">"blackElo"</span><span class="punct">:</span> <span class="number">1565</span><span class="punct">,</span>
+      <span class="key">"result"</span><span class="punct">:</span> <span class="string">"1-0"</span><span class="punct">,</span>
+      <span class="key">"eco"</span><span class="punct">:</span> <span class="string">"C47"</span><span class="punct">,</span>
+      <span class="key">"openingName"</span><span class="punct">:</span> <span class="string">"Four Knights: Naroditsky"</span><span class="punct">,</span>
+      <span class="key">"section"</span><span class="punct">:</span> <span class="string">"1600-1999"</span><span class="punct">,</span>
+      <span class="key">"date"</span><span class="punct">:</span> <span class="string">"2026.03.10"</span><span class="punct">,</span>
+      <span class="key">"gameId"</span><span class="punct">:</span> <span class="string">"2286569907722448"</span><span class="punct">,</span>
+      <span class="key">"hasPgn"</span><span class="punct">:</span> <span class="number">true</span><span class="punct">,</span>
+      <span class="key">"pgn"</span><span class="punct">:</span> <span class="string">"[Event \"2026 Spring TNM\"] ..."</span>
+    <span class="punct">}</span>
+  <span class="punct">],</span>
+  <span class="key">"total"</span><span class="punct">:</span> <span class="number">2</span><span class="punct">,</span>
+  <span class="key">"limit"</span><span class="punct">:</span> <span class="number">100</span><span class="punct">,</span>
+  <span class="key">"offset"</span><span class="punct">:</span> <span class="number">0</span><span class="punct">,</span>
+  <span class="key">"byes"</span><span class="punct">: [</span>
+    <span class="punct">{</span> <span class="key">"round"</span><span class="punct">:</span> <span class="number">3</span><span class="punct">,</span> <span class="key">"type"</span><span class="punct">:</span> <span class="string">"half"</span> <span class="punct">}</span>
+  <span class="punct">],</span>
+  <span class="key">"uscfId"</span><span class="punct">:</span> <span class="string">"16865157"</span>
+<span class="punct">}</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- Examples -->
+<section id="examples">
+  <h3>Recipe Book</h3>
+  <pre><span class="comment"># My games this tournament</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+
+<span class="comment"># All my games ever, with PGNs</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John<span class="punct">&</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">include</span>=pgn
+
+<span class="comment"># Round 2 of current tournament</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">round</span>=2
+
+<span class="comment"># Specific game by ID</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">gameId</span>=2286569907722448<span class="punct">&</span><span class="param">include</span>=pgn
+
+<span class="comment"># All Sicilian games across all tournaments</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">eco</span>=B20-B99
+
+<span class="comment"># My wins as white against 1800+ opponents</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John<span class="punct">&</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">color</span>=white<span class="punct">&</span><span class="param">result</span>=win<span class="punct">&</span><span class="param">minRating</span>=1800
+
+<span class="comment"># All 2025 games</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">after</span>=2025-01-01<span class="punct">&</span><span class="param">before</span>=2025-12-31<span class="punct">&</span><span class="param">limit</span>=500
+
+<span class="comment"># Page 2 of results (games 101-200)</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">limit</span>=100<span class="punct">&</span><span class="param">offset</span>=100</pre>
+</section>
+
+<!-- Tips -->
+<section id="tips">
+  <h3>Tips</h3>
+  <div class="split">
+    <div class="docs">
+      <ul class="plain">
+        <li>Player names are flexible: <code>Boyer, John</code> and <code>John Boyer</code> both work</li>
+        <li>Use <code>/tournaments</code> to list all tournament slugs</li>
+        <li>Use <code>/players</code> to list all player names and USCF IDs</li>
+        <li><code>gameId</code> is globally unique &mdash; no tournament scope needed</li>
+        <li><code>result</code>, <code>color</code>, <code>minRating</code>, <code>maxRating</code>, and <code>opponent</code> all require <code>player</code></li>
+        <li><code>byes</code> array only appears when filtering by player + specific tournament</li>
+        <li>Results: <code>1-0</code> = white wins, <code>0-1</code> = black wins, <code>1/2-1/2</code> = draw, <code>*</code> = pending</li>
+      </ul>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Console PGN viewer</span><span class="comment">// Paste in browser console on a /query?include=pgn page</span>
+fetch(location.href)
+  .then(r => r.json())
+  .then(d => d.games.forEach(g =>
+    g.pgn && console.log(g.pgn)
+  ))</pre>
+    </div>
+  </div>
+</section>
+
+</div>
+</main>
+
+</body>
+</html>

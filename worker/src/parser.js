@@ -563,6 +563,13 @@ export function composeResultsMessage(pairing, result, round) {
 }
 
 /**
+ * Compose a games-posted notification message.
+ */
+export function composeGamesMessage(round, gameCount) {
+    return `TNM Round ${round} games are ready to replay at ${SITE_URL}`;
+}
+
+/**
  * Parse the MI tournaments listing page to find TNM entries.
  */
 export function parseTournamentList(html) {

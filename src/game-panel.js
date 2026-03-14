@@ -263,7 +263,26 @@ export function initGamePanel(mount) {
 
 // ─── 1. State ──────────────────────────────────────────────────────
 
-const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
+const combinedWidthQuery = window.matchMedia('(min-width: 1000px)');
+const isCombinedWidth = () => combinedWidthQuery.matches;
+
+// Re-evaluate layout when crossing the mobile/desktop breakpoint
+combinedWidthQuery.addEventListener('change', () => {
+    const modal = document.querySelector('.modal-content-viewer');
+    if (!modal || modal.closest('.modal.hidden')) return;
+    updateLayout();
+    board.resize();
+});
+
+// Mobile view toggle: browser-panel vs viewer-main
+function showBrowser() {
+    const modal = document.querySelector('.modal-content-viewer');
+    if (modal && !isCombinedWidth()) modal.classList.add('browser-only');
+}
+function showViewer() {
+    const modal = document.querySelector('.modal-content-viewer');
+    if (modal) modal.classList.remove('browser-only');
+}
 
 // Stashed state from onChange callbacks (NEVER call getters for rendering)
 let _gamesState = null;
@@ -295,7 +314,7 @@ let _pendingSubmission = null; // { gameId, round, board } when previewing befor
 
 pgn.onChange((state) => {
     _pgnState = state;
-    if (!_gamesState?.explorerActive) {
+    if (_viewMode === 'game') {
         renderPgnMoveList();
     }
     updatePlayButton(state.isPlaying);
@@ -320,7 +339,7 @@ games.onChange((state) => {
 });
 
 function onBoardMove(san) {
-    if (_gamesState?.explorerActive) {
+    if (_viewMode === 'explorer' && _gamesState?.explorerActive) {
         games.explorerPlayMove(san);
     } else {
         pgn.playMove(san);
@@ -385,7 +404,11 @@ export async function openGamePanel(opts = {}) {
 
     // No game specified — explorer on desktop, browser list on mobile
     if (!game && !opts.pgn) {
-        loadExplorer();
+        if (isCombinedWidth()) {
+            loadExplorer();
+        } else {
+            showBrowser();
+        }
         return;
     }
 
@@ -438,6 +461,7 @@ function ensureBoard() {
 function loadGame(pgnText, orientation = 'white') {
     _viewMode = 'game';
     _pendingSubmission = null;
+    showViewer();
     updateLayout();
     ensureBoard();
     setToolbarButtons();
@@ -456,6 +480,7 @@ function loadExplorer({ restoreMoves } = {}) {
     if (_viewMode === 'game') { pgn.destroyGame(); }
     _viewMode = 'explorer';
     _pendingSubmission = null;
+    showViewer();
     updateLayout();
     setToolbarButtons();
     document.getElementById('game-header')?.classList.add('hidden');
@@ -464,8 +489,6 @@ function loadExplorer({ restoreMoves } = {}) {
 
     board.setOrientation('white');
     board.highlightSquares(null, null);
-
-    if (!isCombinedWidth()) return; // mobile: browser-only, no explorer
 
     ensureBoard();
     if (_gamesState?.explorerActive) {
@@ -481,10 +504,16 @@ function loadExplorer({ restoreMoves } = {}) {
 function updateLayout() {
     const modal = document.querySelector('.modal-content-viewer');
     if (!modal) return;
-    modal.classList.toggle('browser-only', _viewMode !== 'game' && !isCombinedWidth());
+    // On desktop, both panels are always visible — never use browser-only
+    if (isCombinedWidth()) modal.classList.remove('browser-only');
 }
 
 export function explorerBackToBrowser() {
+    if (!isCombinedWidth()) {
+        // Mobile: show browser list (explorer stays alive so gameIds filter persists)
+        showBrowser();
+        return;
+    }
     loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
 }
 
@@ -891,8 +920,8 @@ function updateGameHeader(meta) {
     }
 }
 
-function renderExplorerMoveListHtml(stats) {
-    let html = '';
+function renderExplorerMoveListHtml(stats, moveHistory) {
+    let html = '<div class="explorer-content">';
 
     if (stats && stats.moves.length > 0) {
         html += '<div class="explorer-table">';
@@ -928,12 +957,19 @@ function renderExplorerMoveListHtml(stats) {
     } else {
         html += '<div class="explorer-empty">No games at this position</div>';
     }
+    html += '</div>'; // .explorer-content
 
-    // Mobile: show a button to view filtered games (on desktop the sidebar is visible)
+    // Explorer toolbar: reset, back, view games (games button mobile-only)
     const total = stats?.total || 0;
+    const atStart = !moveHistory || moveHistory.length === 0;
+    const dis = atStart ? ' disabled' : '';
+    html += '<div class="explorer-toolbar">';
+    html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset"${dis}><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back"${dis}><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="18,5 7,12 18,19"/></svg></button>`;
     if (total > 0) {
-        html += `<button class="explorer-view-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
+        html += `<button class="explorer-tb-btn explorer-tb-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
     }
+    html += '</div>';
 
     return html;
 }
@@ -1203,7 +1239,7 @@ function renderExplorerMoveList() {
     const container = document.getElementById('viewer-moves');
     if (!container || !_gamesState) return;
 
-    container.innerHTML = renderExplorerMoveListHtml(_gamesState.explorerStats);
+    container.innerHTML = renderExplorerMoveListHtml(_gamesState.explorerStats, _gamesState.explorerMoveHistory);
     _explorerSelectedIdx = _gamesState.explorerStats?.moves?.length ? 0 : -1;
     updateExplorerSelection();
 }
@@ -1390,7 +1426,11 @@ function wireViewerHeader() {
 
     headerEl.addEventListener('click', (e) => {
         if (e.target.closest('#viewer-filter-link') || e.target.closest('#viewer-back-to-browser')) {
-            loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
+            if (!isCombinedWidth()) {
+                showBrowser();
+            } else {
+                loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
+            }
             return;
         }
         if (e.target.closest('#viewer-filter-clear')) {
