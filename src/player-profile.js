@@ -89,7 +89,7 @@ function winBar(s) {
     </div>`;
 }
 
-function profileRow(label, s, action, { icon, compact, profileName, actionAttr = 'data-action-query' } = {}) {
+function profileRow(label, s, action, { icon, compact, noSummary, profileName, actionAttr = 'data-action-query' } = {}) {
     const t = total(s);
     const cls = compact ? 'profile-row profile-row-compact' : 'profile-row';
     const nameEl = profileName
@@ -101,7 +101,7 @@ function profileRow(label, s, action, { icon, compact, profileName, actionAttr =
             ${nameEl}
         </div>
         ${winBar(s)}
-        <div class="profile-row-summary">${scorePct(s)}%<span class="profile-row-divider">|</span>${t}</div>
+        ${noSummary ? '' : `<div class="profile-row-summary">${scorePct(s)}%<span class="profile-row-divider">|</span>${t}</div>`}
     </button>`;
 }
 
@@ -116,13 +116,15 @@ function renderOverview(stats) {
     }
     const entries = [...stats.tournaments.entries()].sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
 
-    return profileRow('All Games', stats.totals.all, JSON.stringify({ player: currentPlayer, tournament: 'all' }))
-        + profileRow('As White', stats.totals.white, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'white' }), { icon: 'wK.webp' })
-        + profileRow('As Black', stats.totals.black, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'black' }), { icon: 'bK.webp' })
-        + `<div class="profile-section-title">Tournaments</div>`
-        + entries.map(([slug, t]) =>
-            profileRow(t.name, t, JSON.stringify({ player: currentPlayer, tournament: slug }))
-        ).join('');
+    return {
+        header: profileRow('All Games', stats.totals.all, JSON.stringify({ player: currentPlayer, tournament: 'all' }))
+            + profileRow('As White', stats.totals.white, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'white' }), { icon: 'wK.webp' })
+            + profileRow('As Black', stats.totals.black, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'black' }), { icon: 'bK.webp' })
+            + `<div class="profile-section-title">Tournaments</div>`,
+        content: entries.map(([slug, t]) =>
+            profileRow(t.name, t, JSON.stringify({ player: currentPlayer, tournament: slug }), { noSummary: true })
+        ).join(''),
+    };
 }
 
 function openingFamily(name) {
@@ -158,7 +160,7 @@ function renderOpenings(stats) {
         ).join('');
     }
 
-    return section('white', 'wK.webp') + section('black', 'bK.webp');
+    return { header: '', content: section('white', 'wK.webp') + section('black', 'bK.webp') };
 }
 
 function renderOpponentList(opponents, filter = '') {
@@ -173,21 +175,26 @@ function renderOpponentList(opponents, filter = '') {
 }
 
 function renderOpponents(stats) {
-    return `<div class="profile-opponent-search">
+    return {
+        header: `<div class="profile-opponent-search">
             <input type="text" class="profile-opponent-input" placeholder="Search opponents..." id="profile-opponent-search">
-        </div>
-        <div id="profile-opponent-list">${renderOpponentList(stats.opponents)}</div>`;
+        </div>`,
+        content: `<div id="profile-opponent-list">${renderOpponentList(stats.opponents)}</div>`,
+    };
 }
 
 const TAB_RENDERERS = { overview: renderOverview, openings: renderOpenings, opponents: renderOpponents };
 
 function renderActiveTab() {
-    const container = document.getElementById('profile-tab-content');
+    const headerEl = document.getElementById('profile-tab-header');
+    const contentEl = document.getElementById('profile-tab-content');
     const tabs = document.getElementById('profile-tabs');
-    if (!container || !cachedStats) return;
+    if (!contentEl || !cachedStats) return;
 
     const activeTab = tabs?.dataset.active || 'overview';
-    container.innerHTML = TAB_RENDERERS[activeTab](cachedStats);
+    const { header, content } = TAB_RENDERERS[activeTab](cachedStats);
+    headerEl.innerHTML = header;
+    contentEl.innerHTML = content;
 
     // Wire opponent search (only on opponents tab)
     const searchInput = document.getElementById('profile-opponent-search');
@@ -213,6 +220,7 @@ export async function openPlayerProfile(playerName) {
     const tabs = document.getElementById('profile-tabs');
 
     title.textContent = playerName;
+    body.querySelector('.profile-tab-header')?.classList.add('hidden');
     body.querySelector('.profile-tab-content')?.classList.add('hidden');
     tabs.classList.add('hidden');
     body.querySelector('.profile-loading').classList.remove('hidden');
@@ -239,6 +247,7 @@ export async function openPlayerProfile(playerName) {
         body.querySelector('.profile-loading').classList.add('hidden');
         tabs.classList.remove('hidden');
         tabs.dataset.active = 'overview';
+        body.querySelector('.profile-tab-header').classList.remove('hidden');
         body.querySelector('.profile-tab-content').classList.remove('hidden');
         renderActiveTab();
     } catch (err) {
@@ -281,6 +290,7 @@ export function initPlayerProfile(mount) {
                         <button class="profile-tab" data-tab="openings">Openings</button>
                         <button class="profile-tab" data-tab="opponents">Opponents</button>
                     </div>
+                    <div id="profile-tab-header" class="profile-tab-header hidden"></div>
                     <div class="profile-tab-content hidden" id="profile-tab-content"></div>
                 </div>
             </div>

@@ -2868,11 +2868,15 @@ select.editor-header-input {
 .profile-modal-content {
     max-width: 520px;
     max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .profile-modal-content h2 {
     text-align: center;
     margin-bottom: 0.5rem;
+    flex-shrink: 0;
 }
 
 .profile-uscf-link {
@@ -2892,6 +2896,11 @@ select.editor-header-input {
     color: var(--text-muted);
     font-size: 0.9rem;
     line-height: 1.5;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .profile-loading,
@@ -2919,7 +2928,7 @@ select.editor-header-input {
     display: flex;
     gap: 0;
     border-bottom: 1px solid var(--input-bg);
-    margin-bottom: 1rem;
+    flex-shrink: 0;
 }
 
 .profile-tab {
@@ -3085,6 +3094,18 @@ select.editor-header-input {
 }
 .profile-bar-loss span { color: var(--status-error); }
 
+.profile-tab-header {
+    flex-shrink: 0;
+    padding-top: 0.75rem;
+}
+
+.profile-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    min-height: 0;
+}
+
 .profile-section-title {
     display: flex;
     align-items: center;
@@ -3106,7 +3127,7 @@ select.editor-header-input {
 
 /* Opponent search + list */
 .profile-opponent-search {
-    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
 }
 
 .profile-opponent-input {
