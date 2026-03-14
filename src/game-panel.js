@@ -9,7 +9,7 @@
  * 5. Own UI state — variation collapse, branch popover, mode, loaded game
  */
 
-import { openModal, closeModal, onModalClose } from './modal.js';
+import { openModal, closeModal } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn, pgnToGameObject, extractMoveText } from './pgn-parser.js';
 import { formatName, resultClass, resultSymbol } from './utils.js';
@@ -29,9 +29,51 @@ export function initGamePanel(mount) {
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-viewer">
             <button class="viewer-close" data-action="close-panel" aria-label="Close">&times;</button>
-            <div id="viewer-browser-panel" class="viewer-browser-panel hidden"></div>
+            <div id="viewer-browser-panel" class="viewer-browser-panel hidden">
+                <h2 id="browser-title-panel"></h2>
+                <div class="browser-content">
+                    <div class="browser-search" id="browser-search">
+                        <div class="browser-search-wrap">
+                            <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="browser-autocomplete">
+                            <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
+                            <div id="browser-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
+                        </div>
+                        <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/></svg></button>
+                        <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>
+                        <button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>
+                    </div>
+                    <div class="browser-chips hidden" id="browser-chips"></div>
+                    <div class="browser-filters hidden" id="browser-filters"></div>
+                    <div class="browser-games-wrap raised-panel"><div id="browser-games" class="browser-games"></div></div>
+                </div>
+            </div>
             <div class="viewer-main">
-                <div id="viewer-header" class="viewer-header"></div>
+                <div id="viewer-header" class="viewer-header">
+                    <div id="game-header">
+                        <div class="viewer-browser-nav" id="viewer-nav-row">
+                            <button class="viewer-browse-arrow" id="viewer-browse-prev" aria-label="Previous game">&#8249;</button>
+                            <button class="viewer-browse-back" id="viewer-back-to-browser"><span id="viewer-round-label"></span></button>
+                            <button class="viewer-browse-arrow" id="viewer-browse-next" aria-label="Next game">&#8250;</button>
+                        </div>
+                        <div class="viewer-players">
+                            <div class="viewer-player" id="viewer-player-white">
+                                <span class="viewer-player-name" data-player="" id="viewer-white-name"></span>
+                                <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
+                                <span class="viewer-player-score" id="viewer-white-score"></span>
+                            </div>
+                            <div class="viewer-player" id="viewer-player-black">
+                                <span class="viewer-player-score" id="viewer-black-score"></span>
+                                <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
+                                <span class="viewer-player-name" data-player="" id="viewer-black-name"></span>
+                            </div>
+                        </div>
+                        <div class="viewer-opening hidden" id="viewer-opening">
+                            <span class="viewer-eco-code" id="viewer-eco-code"></span>
+                            <span id="viewer-eco-name"></span>
+                        </div>
+                    </div>
+                    <div id="explorer-header" class="hidden"></div>
+                </div>
                 <div class="viewer-layout">
                     <div id="viewer-board" class="viewer-board"></div>
                     <div id="editor-eco" class="editor-eco hidden"></div>
@@ -201,12 +243,14 @@ export function initGamePanel(mount) {
     document.getElementById('editor-comment-input')?.addEventListener('input', (e) => {
         pgn.setComment(pgn.getCurrentNodeId(), e.target.value);
     });
+
+    // Wire browser listeners once (scaffold is now permanent)
+    wireBrowserListeners(document.getElementById('viewer-browser-panel'));
 }
 
 // ─── 1. State ──────────────────────────────────────────────────────
 
 const isCombinedWidth = () => window.matchMedia('(min-width: 1000px)').matches;
-const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
 
 // Stashed state from onChange callbacks (NEVER call getters for rendering)
 let _gamesState = null;
@@ -215,8 +259,8 @@ let _pgnState = null;
 // Panel identity (set on open, cleared on close)
 let _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
 
-// Game state
-let _hasGame = false;
+// View mode: 'game' (PGN loaded) or 'explorer' (browsing openings)
+let _viewMode = 'explorer';
 
 // UI-only state
 let _branchChoices = [];
@@ -242,16 +286,16 @@ pgn.onChange((state) => {
         renderPgnMoveList();
     }
     updatePlayButton(state.isPlaying);
-    syncCommentInput();
+    document.getElementById('editor-comment-input')?.classList.add('hidden');
     const headerEl = document.getElementById('viewer-header');
-    if (headerEl && _hasGame) headerEl.innerHTML = buildGameHeaderHtml(_panel.meta);
+    if (headerEl && _viewMode === 'game') updateGameHeader(_panel.meta);
 });
 
 games.onChange((state) => {
     _gamesState = state;
     renderBrowserPanel(state);
     // Explorer takes over the board/moves only when no game is loaded
-    if (state.explorerActive && !_hasGame) {
+    if (state.explorerActive && _viewMode !== 'game') {
         setToolbarButtons();
         document.getElementById('editor-comment-input')?.classList.add('hidden');
         renderExplorerHeader(state);
@@ -277,43 +321,23 @@ function onPositionChange(fen, from, to) {
 
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
 
-async function ensurePanelOpen(gameId) {
+async function openPanel() {
     wireViewerHeader();
 
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
-
-    if (!alreadyOpen) {
-        openModal('viewer-modal');
-    }
+    if (!alreadyOpen) openModal('viewer-modal');
 
     const panelEl = document.getElementById('viewer-browser-panel');
     let hadAsyncGap = false;
     if (panelEl && panelEl.classList.contains('hidden')) {
         panelEl.classList.remove('hidden');
-        const modalContent = panelEl.closest('.modal-content-viewer');
-        if (modalContent) modalContent.classList.add('has-browser');
-
+        panelEl.closest('.modal-content-viewer')?.classList.add('has-browser');
         await games.openBrowser();
         hadAsyncGap = true;
-
-        if (!gameId && isCombinedWidth()) {
-            games.launchExplorer();
-            board.createBoard('viewer-board', {
-                onMove: onBoardMove,
-                orientation: 'white',
-            });
-            board.resize();
-        }
     }
 
-    const modal = document.querySelector('.modal-content-viewer');
-    if (modal) {
-        if (gameId) modal.classList.remove('browser-only');
-        else if (!isCombinedWidth()) modal.classList.add('browser-only');
-        else modal.classList.remove('browser-only');
-    }
-    if (gameId) highlightActiveGame(gameId);
+    updateLayout();
 
     if (!hadAsyncGap && !alreadyOpen) {
         await new Promise(resolve => requestAnimationFrame(resolve));
@@ -344,11 +368,11 @@ export async function openGamePanel(opts = {}) {
     meta.onPrev = _panel.onPrev;
     meta.onNext = _panel.onNext;
 
-    await ensurePanelOpen(_panel.gameId);
+    await openPanel();
 
-    // No game specified — explorer or browser-only mode is already set up by ensurePanelOpen
+    // No game specified — explorer on desktop, browser list on mobile
     if (!game && !opts.pgn) {
-        setToolbarButtons();
+        loadExplorer();
         return;
     }
 
@@ -365,21 +389,7 @@ export async function openGamePanel(opts = {}) {
         games.closeExplorer();
     }
 
-    _hasGame = true;
-    setToolbarButtons();
-
-    const pgnText = game?.pgn || opts.pgn || '*';
-    pgn.initGame(pgnText, { onPositionChange });
-
-    const headerEl = document.getElementById('viewer-header');
-    if (headerEl) headerEl.innerHTML = buildGameHeaderHtml(_panel.meta);
-
-    board.createBoard('viewer-board', {
-        onMove: onBoardMove,
-        orientation,
-        fen: pgn.getCurrentFen(),
-    });
-    board.resize();
+    loadGame(game?.pgn || opts.pgn || '*', orientation);
 }
 
 export function closeGamePanel() {
@@ -394,76 +404,75 @@ export function closeGamePanel() {
 function forceCloseGamePanel() {
     const onCloseCallback = _panel.onClose;
     _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
-    _hasGame = false;
-    _pendingSubmission = null;
-
-    onModalClose('viewer-modal', () => {
-        pgn.destroyGame();
-        board.destroy();
-        games.closeBrowser();
-
-        _branchChoices = [];
-        _branchSelectedIdx = 0;
-        _varToggled.clear();
-        _explorerLastEco = null;
-        _pendingAction = null;
-        _gamesState = null;
-        _pgnState = null;
-
-        const modalEl = document.querySelector('.modal-content-viewer');
-        if (modalEl) {
-            modalEl.classList.remove('browser-only');
-            modalEl.classList.remove('has-browser');
-        }
-
-        const panelEl = document.getElementById('viewer-browser-panel');
-        if (panelEl) {
-            panelEl.classList.add('hidden');
-            panelEl.innerHTML = '';
-        }
-
-        setToolbarButtons();
-        onCloseCallback?.();
-    });
-
+    _pendingAction = null;
+    pgn.destroyGame();
     closeModal('viewer-modal');
+    onCloseCallback?.();
 }
 
 function setToolbarButtons() {
-    document.getElementById('panel-toolbar')?.classList.toggle('hidden', !_hasGame);
-    // Show/hide submit button based on pending submission state
+    document.getElementById('panel-toolbar')?.classList.toggle('hidden', _viewMode !== 'game');
     const submitBtn = document.getElementById('viewer-submit');
     if (submitBtn) submitBtn.classList.toggle('hidden', !SUBMISSIONS_ENABLED || !_pendingSubmission);
 }
 
-function showBrowserView() {
-    if (isCombinedWidth()) {
-        pgn.destroyGame();
-        board.destroy();
-        _hasGame = false;
-    _pendingSubmission = null;
-        setToolbarButtons();
-        games.launchExplorer({
-            restoreMoves: _gamesState?.explorerMoveHistory,
-        });
-        if (!document.querySelector('#viewer-board chess-board')) {
-            board.createBoard('viewer-board', {
-                onMove: onBoardMove,
-                orientation: 'white',
-                fen: _gamesState?.explorerFen,
-            });
-            board.resize();
-        }
-        return;
+function ensureBoard() {
+    if (!document.querySelector('#viewer-board chess-board')) {
+        board.createBoard('viewer-board', { onMove: onBoardMove, orientation: 'white' });
     }
+}
+
+function loadGame(pgnText, orientation = 'white') {
+    _viewMode = 'game';
+    _pendingSubmission = null;
+    updateLayout();
+    ensureBoard();
+    setToolbarButtons();
+    document.getElementById('game-header')?.classList.remove('hidden');
+    document.getElementById('explorer-header')?.classList.add('hidden');
+
+    pgn.initGame(pgnText, { onPositionChange });
+    updateGameHeader(_panel.meta);
+
+    board.setOrientation(orientation);
+    board.setPosition(pgn.getCurrentFen(), false);
+    board.resize();
+}
+
+function loadExplorer({ restoreMoves } = {}) {
+    if (_viewMode === 'game') { pgn.destroyGame(); }
+    _viewMode = 'explorer';
+    _pendingSubmission = null;
+    updateLayout();
+    setToolbarButtons();
+    document.getElementById('game-header')?.classList.add('hidden');
+    document.getElementById('explorer-header')?.classList.remove('hidden');
+    document.getElementById('editor-comment-input')?.classList.add('hidden');
+
+    board.setOrientation('white');
+    board.highlightSquares(null, null);
+
+    if (!isCombinedWidth()) return; // mobile: browser-only, no explorer
+
+    ensureBoard();
+    if (_gamesState?.explorerActive) {
+        // Explorer already running — just re-render
+        renderExplorerHeader(_gamesState);
+        renderExplorerMoveList();
+        board.setPosition(_gamesState.explorerFen, false);
+    } else {
+        games.launchExplorer({ restoreMoves });
+    }
+}
+
+function updateLayout() {
     const modal = document.querySelector('.modal-content-viewer');
-    if (modal) modal.classList.add('browser-only');
-    // Don't call games.openBrowser() — that resets filters.
-    // The browser panel is already rendered with explorer-filtered games.
+    if (!modal) return;
+    modal.classList.toggle('browser-only', _viewMode !== 'game' && !isCombinedWidth());
 }
 
 export function explorerBackToBrowser() {
-    showBrowserView();
+    loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
 }
 
 // Dirty dialog
@@ -678,7 +687,7 @@ export async function openImportedGames(importedGames) {
     // Close stale explorer before opening browser with new data,
     // so no intermediate renders flash old tree + new games.
     if (_gamesState?.explorerActive) games.closeExplorer();
-    await ensurePanelOpen();
+    await openPanel();
     await games.openBrowser();
     if (isCombinedWidth()) {
         games.launchExplorer();
@@ -689,38 +698,9 @@ export async function openImportedGames(importedGames) {
 }
 
 export function launchExplorer({ restore = false } = {}) {
-    const modal = document.querySelector('.modal-content-viewer');
-    if (modal) modal.classList.remove('browser-only');
-
-    if (!restore && _gamesState?.explorerActive) {
-        // Explorer already running (e.g., returning from a game on mobile) — just re-render
-        if (_hasGame) {
-            pgn.destroyGame();
-            _hasGame = false;
-    _pendingSubmission = null;
-            setToolbarButtons();
-            renderExplorerHeader(_gamesState);
-            renderExplorerMoveList();
-            board.setPosition(_gamesState.explorerFen, false);
-            board.highlightSquares(null, null);
-        }
-        return;
-    }
-
-    _hasGame = false;
-    _pendingSubmission = null;
-    games.launchExplorer({
+    loadExplorer({
         restoreMoves: restore ? _gamesState?.explorerMoveHistory : undefined,
     });
-
-    if (!document.querySelector('#viewer-board chess-board')) {
-        board.createBoard('viewer-board', {
-            onMove: onBoardMove,
-            orientation: 'white',
-            fen: _gamesState?.explorerFen,
-        });
-        board.resize();
-    }
 }
 
 export function getGamePgn() { return pgn.getPgn(); }
@@ -847,7 +827,7 @@ function updateExplorerSelection() {
 
 // ─── 5. HTML Builders ──────────────────────────────────────────────
 
-function buildGameHeaderHtml(meta) {
+function updateGameHeader(meta) {
     const h = pgn.getHeaders();
     const white = formatName(h.White || '');
     const black = formatName(h.Black || '');
@@ -861,34 +841,35 @@ function buildGameHeaderHtml(meta) {
     const boardNum = meta.board || (roundTag?.includes('.') ? parseInt(roundTag.split('.')[1], 10) : null);
     const roundBoardLabel = [round && `Round ${round}`, boardNum && `Board ${boardNum}`].filter(Boolean).join(' \u00B7 ');
 
-    const hasNav = meta.onPrev || meta.onNext;
+    document.getElementById('viewer-round-label').textContent = roundBoardLabel;
+    document.getElementById('viewer-browse-prev').classList.toggle('hidden', !meta.onPrev);
+    document.getElementById('viewer-browse-next').classList.toggle('hidden', !meta.onNext);
 
-    const navArrow = (handler, id, arrow) => handler
-        ? `<button class="viewer-browse-arrow" id="${id}" aria-label="${id === 'viewer-browse-prev' ? 'Previous' : 'Next'} game">${arrow}</button>`
-        : `<span class="viewer-browse-arrow viewer-browse-disabled">${arrow}</span>`;
+    // Players
+    const whiteNameEl = document.getElementById('viewer-white-name');
+    const blackNameEl = document.getElementById('viewer-black-name');
+    whiteNameEl.innerHTML = white + (whiteElo ? ` (${whiteElo})` : ' <span class="viewer-unrated">(unr.)</span>');
+    whiteNameEl.dataset.player = white;
+    blackNameEl.innerHTML = black + (blackElo ? ` (${blackElo})` : ' <span class="viewer-unrated">(unr.)</span>');
+    blackNameEl.dataset.player = black;
+    document.getElementById('viewer-white-score').textContent = resultSymbol(result, 'white');
+    document.getElementById('viewer-black-score').textContent = resultSymbol(result, 'black');
+    document.getElementById('viewer-player-white').className = `viewer-player ${resultClass(result, 'white')}`;
+    document.getElementById('viewer-player-black').className = `viewer-player ${resultClass(result, 'black')}`;
 
-    const playerHtml = (name, elo, color) => {
-        const cls = resultClass(result, color);
-        const score = `<span class="viewer-player-score">${resultSymbol(result, color)}</span>`;
-        const nameSpan = `<span class="viewer-player-name" data-player="${name}">${name}${elo ? ` (${elo})` : ' <span class="viewer-unrated">(unr.)</span>'}</span>`;
-        const icon = `<img class="viewer-piece-icon" src="/pieces/${color === 'white' ? 'wK' : 'bK'}.webp" alt="${color === 'white' ? 'White' : 'Black'}">`;
-        return color === 'white'
-            ? `<div class="viewer-player ${cls}">${nameSpan}${icon}${score}</div>`
-            : `<div class="viewer-player ${cls}">${score}${icon}${nameSpan}</div>`;
-    };
-
-    let eco = '';
-    if (meta.eco && meta.openingName) eco = `<div class="viewer-opening"><span class="viewer-eco-code">${meta.eco}</span>${meta.openingName}</div>`;
-    else if (ecoCode) eco = `<div class="viewer-opening"><span class="viewer-eco-code">${ecoCode}</span></div>`;
-
-    return `
-        ${hasNav ? `<div class="viewer-browser-nav">${navArrow(meta.onPrev, 'viewer-browse-prev', '\u2039')}<button class="viewer-browse-back" id="viewer-back-to-browser">${roundBoardLabel}</button>${navArrow(meta.onNext, 'viewer-browse-next', '\u203A')}</div>` : roundBoardLabel ? `<div class="viewer-round-info">${roundBoardLabel}</div>` : ''}
-        <div class="viewer-players">
-            ${playerHtml(white, whiteElo, 'white')}
-            ${playerHtml(black, blackElo, 'black')}
-        </div>
-        ${eco}
-    `;
+    // ECO / opening
+    const openingEl = document.getElementById('viewer-opening');
+    if (meta.eco && meta.openingName) {
+        document.getElementById('viewer-eco-code').textContent = meta.eco;
+        document.getElementById('viewer-eco-name').textContent = meta.openingName;
+        openingEl.classList.remove('hidden');
+    } else if (ecoCode) {
+        document.getElementById('viewer-eco-code').textContent = ecoCode;
+        document.getElementById('viewer-eco-name').textContent = '';
+        openingEl.classList.remove('hidden');
+    } else {
+        openingEl.classList.add('hidden');
+    }
 }
 
 function renderExplorerMoveListHtml(stats) {
@@ -1095,71 +1076,32 @@ function varLength(nodes, startId) {
 function renderGameRow(game, boardLabel = null) {
     const hasPgn = game.hasPgn ?? !!game.pgn;
     const isPairing = !hasPgn && game.result === '*';
-    const isSubmittable = SUBMISSIONS_ENABLED && !hasPgn && !isPairing;
-    const whiteClass = resultClass(game.result, 'white', 'browser');
-    const blackClass = resultClass(game.result, 'black', 'browser');
-    const whiteScore = resultSymbol(game.result, 'white');
-    const blackScore = resultSymbol(game.result, 'black');
 
-    const resultCenter = isPairing
-        ? `<div class="browser-result-center browser-pairing">
-               <img class="browser-piece-icon" src="/pieces/wK.webp" alt="White">
-               <span class="browser-vs">vs.</span>
-               <img class="browser-piece-icon" src="/pieces/bK.webp" alt="Black">
-           </div>`
-        : `<div class="browser-result-center">
-               <div class="browser-result-half ${whiteClass}">
-                   <img class="browser-piece-icon" src="/pieces/wK.webp" alt="White">
-                   <span class="browser-score">${whiteScore}</span>
-               </div>
-               <div class="browser-result-half ${blackClass}">
-                   <span class="browser-score">${blackScore}</span>
-                   <img class="browser-piece-icon" src="/pieces/bK.webp" alt="Black">
-               </div>
-           </div>`;
-
-    const whiteEloHtml = game.whiteElo ? `<span class="browser-elo">${game.whiteElo}</span>` : '<span class="browser-elo browser-elo-unrated">unr.</span>';
-    const blackEloHtml = game.blackElo ? `<span class="browser-elo">${game.blackElo}</span>` : '<span class="browser-elo browser-elo-unrated">unr.</span>';
-
-    const clickable = hasPgn || SUBMISSIONS_ENABLED;
     return `
-        <div class="browser-game-row${isPairing ? ' browser-pairing-row' : ''}" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" role="${clickable ? 'button' : 'listitem'}" ${clickable ? 'tabindex="0"' : ''}>
-            <span class="browser-board">${boardLabel || game.board || '?'}${isSubmittable ? ` <svg class="browser-submit-icon${game.submission ? ' submitted' : ''}" data-tooltip="${game.submission ? 'Submitted, awaiting review' : 'Awaiting submission'}" viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>` : ''}</span>
+        <div class="browser-game-row" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" data-pairing="${isPairing}" role="${hasPgn || SUBMISSIONS_ENABLED ? 'button' : 'listitem'}" ${hasPgn || SUBMISSIONS_ENABLED ? 'tabindex="0"' : ''}>
+            <span class="browser-board">${boardLabel || game.board || '?'}</span>
             <div class="browser-player browser-player-white">
                 <span class="browser-name">${game.white}</span>
-                ${whiteEloHtml}
+                <span class="browser-elo">${game.whiteElo || ''}</span>
             </div>
-            ${resultCenter}
+            <div class="browser-result-center">
+                <div class="browser-result-half ${resultClass(game.result, 'white', 'browser')}">
+                    <img class="browser-piece-icon" src="/pieces/wK.webp" alt="White">
+                    <span class="browser-score">${resultSymbol(game.result, 'white')}</span>
+                </div>
+                <span class="browser-vs">vs.</span>
+                <div class="browser-result-half ${resultClass(game.result, 'black', 'browser')}">
+                    <span class="browser-score">${resultSymbol(game.result, 'black')}</span>
+                    <img class="browser-piece-icon" src="/pieces/bK.webp" alt="Black">
+                </div>
+            </div>
             <div class="browser-player browser-player-black">
                 <span class="browser-name">${game.black}</span>
-                ${blackEloHtml}
+                <span class="browser-elo">${game.blackElo || ''}</span>
             </div>
-        </div>
-    `;
+        </div>`;
 }
 
-function buildBrowserScaffoldHtml() {
-    const exploreBtn = '<button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/></svg></button>';
-    const importBtn = '<button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>';
-    const downloadBtn = '<button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>';
-
-    return `
-        <h2 id="browser-title-panel"></h2>
-        <div class="browser-content">
-            <div class="browser-search" id="browser-search">
-                <div class="browser-search-wrap">
-                    <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="browser-autocomplete">
-                    <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
-                    <div id="browser-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
-                </div>
-                ${exploreBtn}${importBtn}${downloadBtn}
-            </div>
-            <div class="browser-chips hidden" id="browser-chips"></div>
-            <div class="browser-filters hidden" id="browser-filters"></div>
-            <div class="browser-games-wrap raised-panel"><div id="browser-games" class="browser-games"></div></div>
-        </div>
-    `;
-}
 
 function highlightMatch(name, query) {
     const idx = name.toLowerCase().indexOf(query);
@@ -1173,8 +1115,8 @@ function highlightMatch(name, query) {
 // ─── 6. DOM Rendering ──────────────────────────────────────────────
 
 function renderExplorerHeader(state) {
-    const headerEl = document.getElementById('viewer-header');
-    if (!headerEl) return;
+    const el = document.getElementById('explorer-header');
+    if (!el) return;
 
     const moveHistory = state.explorerMoveHistory;
     const total = state.explorerStats?.total || 0;
@@ -1204,20 +1146,12 @@ function renderExplorerHeader(state) {
     }
     const ecoPrefix = _explorerLastEco ? `<span class="explorer-eco">${_explorerLastEco.eco} ${_explorerLastEco.name}: </span>` : '';
 
-    headerEl.innerHTML = `
+    el.innerHTML = `
         <div class="explorer-header">
             <div class="explorer-title">${ecoPrefix}${title}</div>
             <div class="explorer-count">${total} ${gameLabel}</div>
         </div>
     `;
-    headerEl.onclick = (e) => {
-        const plyEl = e.target.closest('[data-ply]');
-        if (plyEl) {
-            const ply = parseInt(plyEl.dataset.ply, 10);
-            if (ply === 0) games.explorerGoToStart();
-            else games.explorerGoToMove(ply);
-        }
-    };
 }
 
 function renderPgnMoveList() {
@@ -1236,28 +1170,11 @@ function renderPgnMoveList() {
         return;
     }
 
-    if (isDesktop()) {
+    if (window.matchMedia('(min-width: 768px)').matches) {
         container.innerHTML = renderMoveTableHtml(nodes, currentNodeId, commentsHidden);
     } else {
         container.innerHTML = renderMovesInlineHtml(nodes, currentNodeId, nodes[0].mainChild, false);
     }
-
-    container.onclick = (e) => {
-        const moveEl = e.target.closest('[data-node-id]');
-        if (moveEl) {
-            pgn.goToMove(parseInt(moveEl.dataset.nodeId, 10));
-            return;
-        }
-        const varEl = e.target.closest('[data-var-node]');
-        if (varEl) {
-            const nodeId = parseInt(varEl.dataset.varNode, 10);
-            if (_varToggled.has(nodeId)) _varToggled.delete(nodeId);
-            else _varToggled.add(nodeId);
-            const scrollTop = container.scrollTop;
-            renderPgnMoveList();
-            container.scrollTop = scrollTop;
-        }
-    };
 
     const currentEl = container.querySelector(`[data-node-id="${currentNodeId}"]`);
     if (currentEl) currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1270,13 +1187,6 @@ function renderExplorerMoveList() {
     container.innerHTML = renderExplorerMoveListHtml(_gamesState.explorerStats);
     _explorerSelectedIdx = _gamesState.explorerStats?.moves?.length ? 0 : -1;
     updateExplorerSelection();
-
-    container.onclick = (e) => {
-        const row = e.target.closest('[data-explorer-san]');
-        if (row) {
-            games.explorerPlayMove(row.dataset.explorerSan);
-        }
-    };
 }
 
 function updatePlayButton(isPlaying) {
@@ -1287,11 +1197,6 @@ function updatePlayButton(isPlaying) {
     btn.innerHTML = isPlaying ? pauseSvg : playSvg;
     btn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
 }
-
-function syncCommentInput() {
-    document.getElementById('editor-comment-input')?.classList.add('hidden');
-}
-
 
 function highlightActiveGame(gameId) {
     const panelEl = document.getElementById('viewer-browser-panel');
@@ -1304,12 +1209,6 @@ function highlightActiveGame(gameId) {
 function renderBrowserPanel(state) {
     const panelEl = document.getElementById('viewer-browser-panel');
     if (!panelEl || panelEl.classList.contains('hidden')) return;
-
-    const hasScaffold = !!panelEl.querySelector('.browser-content');
-    if (!hasScaffold) {
-        panelEl.innerHTML = buildBrowserScaffoldHtml();
-        wireBrowserListeners(panelEl);
-    }
 
     renderBrowserTitle(panelEl, state);
     renderBrowserChips(panelEl, state);
@@ -1472,7 +1371,7 @@ function wireViewerHeader() {
 
     headerEl.addEventListener('click', (e) => {
         if (e.target.closest('#viewer-filter-link') || e.target.closest('#viewer-back-to-browser')) {
-            showBrowserView();
+            loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
             return;
         }
         if (e.target.closest('#viewer-filter-clear')) {
@@ -1485,6 +1384,40 @@ function wireViewerHeader() {
         if (e.target.closest('#viewer-browse-next')) { _panel.onNext?.(); return; }
         const playerEl = e.target.closest('[data-player]');
         if (playerEl) { openPlayerProfile(playerEl.dataset.player); return; }
+    });
+
+    // Explorer header click delegation (ply breadcrumbs)
+    document.getElementById('explorer-header')?.addEventListener('click', (e) => {
+        const plyEl = e.target.closest('[data-ply]');
+        if (plyEl) {
+            const ply = parseInt(plyEl.dataset.ply, 10);
+            if (ply === 0) games.explorerGoToStart();
+            else games.explorerGoToMove(ply);
+        }
+    });
+
+    // Move list click delegation (PGN moves, variation toggles, explorer moves)
+    const movesEl = document.getElementById('viewer-moves');
+    movesEl?.addEventListener('click', (e) => {
+        const moveEl = e.target.closest('[data-node-id]');
+        if (moveEl) {
+            pgn.goToMove(parseInt(moveEl.dataset.nodeId, 10));
+            return;
+        }
+        const varEl = e.target.closest('[data-var-node]');
+        if (varEl) {
+            const nodeId = parseInt(varEl.dataset.varNode, 10);
+            if (_varToggled.has(nodeId)) _varToggled.delete(nodeId);
+            else _varToggled.add(nodeId);
+            const scrollTop = movesEl.scrollTop;
+            renderPgnMoveList();
+            movesEl.scrollTop = scrollTop;
+            return;
+        }
+        const explorerRow = e.target.closest('[data-explorer-san]');
+        if (explorerRow) {
+            games.explorerPlayMove(explorerRow.dataset.explorerSan);
+        }
     });
 }
 
@@ -1536,7 +1469,7 @@ function wireBrowserListeners(panelEl) {
             autocomplete.classList.add('hidden');
             searchInput.setAttribute('aria-expanded', 'false');
             const name = profileBtn.dataset.profile;
-            openPlayerProfile(name, { uscfId: games.getPlayerInfo(name)?.uscfId });
+            openPlayerProfile(name);
             return;
         }
         const item = e.target.closest('[data-player]');
@@ -1593,6 +1526,7 @@ function wireBrowserListeners(panelEl) {
         const chip = e.target.closest('[data-chip]');
         if (chip) {
             if (chip.dataset.chip === 'tournament') {
+                loadExplorer();
                 games.toggleTournamentFilter(chip.dataset.value);
             } else if (chip.dataset.chip === 'color') {
                 games.toggleColorFilter(chip.dataset.value);
@@ -1609,7 +1543,7 @@ function wireBrowserListeners(panelEl) {
         const profileBtn = e.target.closest('[data-profile-player]');
         if (profileBtn) {
             const name = profileBtn.dataset.profilePlayer;
-            openPlayerProfile(name, { uscfId: games.getPlayerInfo(name)?.uscfId });
+            openPlayerProfile(name);
             return;
         }
 
@@ -1628,6 +1562,7 @@ function wireBrowserListeners(panelEl) {
             games.setRound(parseInt(e.target.value, 10));
         }
         if (e.target.dataset?.chip === 'tournament-select') {
+            loadExplorer();
             games.setTournamentFilter(e.target.value);
         }
     }, { signal });
@@ -1789,22 +1724,9 @@ function doPreview() {
     const fullPgn = headers.join('\n') + '\n\n' + moveText;
 
     // Load into viewer for review — user can annotate before submitting
-    _hasGame = true;
+    loadGame(fullPgn, 'white');
     _pendingSubmission = { gameId: _panel.gameId, round: meta.round, board: meta.board };
-    pgn.initGame(fullPgn, { onPositionChange });
-    setToolbarButtons();
-    renderPgnMoveList();
-
-    const headerEl = document.getElementById('viewer-header');
-    if (headerEl) headerEl.innerHTML = buildGameHeaderHtml(_panel.meta);
-
-    board.createBoard('viewer-board', {
-        onMove: onBoardMove,
-        orientation: 'white',
-        fen: pgn.getCurrentFen(),
-    });
-    board.resize();
-
+    setToolbarButtons(); // re-sync after setting _pendingSubmission
     showToast('Review and annotate, then hit Submit.');
 }
 
