@@ -307,7 +307,8 @@ export async function handleTournaments(request, env) {
     ).all();
     return corsResponse({
         tournaments: result.results.map(t => {
-            const roundDates = JSON.parse(t.round_dates || '[]');
+            let roundDates;
+            try { roundDates = JSON.parse(t.round_dates || '[]'); } catch { roundDates = []; }
             return {
                 slug: t.slug, name: t.name,
                 roundDates, url: t.url,

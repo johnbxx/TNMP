@@ -61,7 +61,6 @@ export default defineConfig({
     },
     test: {
         environment: 'happy-dom',
-        include: ['src/**/*.test.js'],
-        exclude: ['src/_old/**'],
+        include: ['test/**/*.test.js'],
     },
 });

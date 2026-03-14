@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getRandomMeme } from './memes.js';
-import { STATE } from './config.js';
+import { getRandomMeme } from '../src/memes.js';
+import { STATE } from '../src/config.js';
 
 describe('getRandomMeme', () => {
     const states = [STATE.YES, STATE.NO, STATE.TOO_EARLY, STATE.IN_PROGRESS, STATE.RESULTS];

@@ -242,7 +242,7 @@ export function initGamePanel(mount) {
 
     // Wire comment input
     document.getElementById('editor-comment-input')?.addEventListener('input', (e) => {
-        pgn.setComment(pgn.getCurrentNodeId(), e.target.value);
+        pgn.setComment(_pgnState?.currentNodeId || 0, e.target.value);
     });
 
     // Wire browser listeners once (scaffold is now permanent)
@@ -1650,15 +1650,10 @@ export const toggleAutoPlay = () => pgn.toggleAutoPlay();
 export const toggleComments = () => pgn.toggleComments();
 export const toggleBranchMode = () => pgn.toggleBranchMode();
 export const getGameMoves = () => pgn.getReadablePgn() || null;
-
-// NAG picker
-export function toggleNag(nagNum) {
-    const nodeId = _nagTargetNodeId || pgn.getCurrentNodeId();
-    if (nodeId > 0) {
-        pgn.toggleNag(nodeId, nagNum);
-        refreshNagHighlights();
-    }
-}
+export const toggleNag = (nagNum) => {
+    const nodeId = _nagTargetNodeId || _pgnState?.currentNodeId || 0;
+    if (nodeId > 0) { pgn.toggleNag(nodeId, nagNum); refreshNagHighlights(); }
+};
 
 // Import / Submit dialog
 let _importWired = false;

@@ -90,11 +90,13 @@ export async function disablePush() {
     try {
         const sub = await getSubscription();
         if (sub) {
-            fetch(`${WORKER_URL}/push-unsubscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ endpoint: sub.endpoint }),
-            }).catch(() => {});
+            try {
+                await fetch(`${WORKER_URL}/push-unsubscribe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint: sub.endpoint }),
+                });
+            } catch { /* server unreachable — unsubscribe browser-side anyway */ }
             await sub.unsubscribe();
         }
         localStorage.removeItem('pushEndpoint');
@@ -113,12 +115,16 @@ export async function updatePushPrefs() {
 
     const sub = await getSubscription();
     if (!sub) return;
-    fetch(`${WORKER_URL}/push-preferences`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: sub.endpoint, notifyPairings: pairings, notifyResults: results }),
-    }).catch(() => {});
-    showToast('Preferences saved', 'success');
+    try {
+        await fetch(`${WORKER_URL}/push-preferences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint, notifyPairings: pairings, notifyResults: results }),
+        });
+        showToast('Preferences saved', 'success');
+    } catch {
+        showToast('Could not save preferences — try again later', 'error');
+    }
 }
 
 // --- Sync (page load, name change) ---

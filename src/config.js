@@ -48,7 +48,7 @@ export const STATE = {
 let _appState = { state: null, pairing: null, lastRoundNumber: 1, roundInfo: '' };
 
 export function getAppState() { return _appState; }
-export function setAppState(partial) { _appState = { ..._appState, ...partial }; }
+export function updateAppState(partial) { _appState = { ..._appState, ...partial }; }
 
 // Feature gates
 export const SUBMISSIONS_ENABLED = false;

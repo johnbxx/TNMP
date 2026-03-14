@@ -78,8 +78,9 @@ export async function handleScheduled(env, { force = false } = {}) {
             "SELECT name, name_norm, uscf_id, aliases, rating_history FROM players"
         ).all();
         for (const row of allPlayers.results) {
-            if (row.uscf_id) uscfIdMap.set(row.uscf_id, { name: row.name, norm: row.name_norm, aliases: JSON.parse(row.aliases || '[]') });
-            const aliases = JSON.parse(row.aliases || '[]');
+            let aliases;
+            try { aliases = JSON.parse(row.aliases || '[]'); } catch { aliases = []; }
+            if (row.uscf_id) uscfIdMap.set(row.uscf_id, { name: row.name, norm: row.name_norm, aliases });
             for (const alias of aliases) {
                 aliasMap.set(alias, { name: row.name, norm: row.name_norm });
             }

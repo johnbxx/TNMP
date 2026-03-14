@@ -1,4 +1,4 @@
-import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setAppState, DEBUG_PGN } from './src/config.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState, DEBUG_PGN } from './src/config.js';
 import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
@@ -132,20 +132,20 @@ function renderState(stateData, trackerRounds) {
     const meta = getTournamentMeta();
     const info = getInfoText(state, roundNumber, meta.name, meta.roundDates);
 
-    setAppState({ state, roundInfo: info || '' });
+    updateAppState({ state, roundInfo: info || '' });
     if (state !== 'no') stopCountdown();
 
     // Stash pairing info for share text
     const currentRound = trackerRounds?.[roundNumber];
     if (currentRound && !currentRound.isBye) {
-        setAppState({
+        updateAppState({
             lastRoundNumber: roundNumber || 1,
             pairing: { board: currentRound.board, color: currentRound.color, opponent: currentRound.opponent, opponentRating: currentRound.opponentRating, round: roundNumber, playerResult: currentRound.result || null },
         });
     } else if (currentRound?.isBye) {
-        setAppState({ pairing: { isBye: true, byeType: currentRound.byeType, round: roundNumber } });
+        updateAppState({ pairing: { isBye: true, byeType: currentRound.byeType, round: roundNumber } });
     } else {
-        setAppState({ lastRoundNumber: roundNumber || 1, pairing: null });
+        updateAppState({ lastRoundNumber: roundNumber || 1, pairing: null });
     }
 
     if (state === 'off_season') {

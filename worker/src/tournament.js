@@ -28,7 +28,8 @@ export async function resolveTournament(env) {
     ]);
 
     if (current) {
-        const roundDates = JSON.parse(current.round_dates || '[]');
+        let roundDates;
+        try { roundDates = JSON.parse(current.round_dates || '[]'); } catch { roundDates = []; }
         let url = current.url;
 
         // If URL is missing, discover it from MI listing page and persist
@@ -40,12 +41,16 @@ export async function resolveTournament(env) {
             }
         }
 
+        let nextStartDate = null;
+        if (next) {
+            try { nextStartDate = JSON.parse(next.round_dates || '[]')[0] || null; } catch { /* corrupted */ }
+        }
+
         return {
             name: current.name, slug: current.slug, url, roundDates,
             totalRounds: roundDates.length,
             nextTournament: next ? {
-                name: next.name, url: next.url,
-                startDate: JSON.parse(next.round_dates || '[]')[0] || null,
+                name: next.name, url: next.url, startDate: nextStartDate,
             } : null,
         };
     }
