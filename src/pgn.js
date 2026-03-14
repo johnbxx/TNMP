@@ -451,6 +451,16 @@ export function getCurrentNodeId() { return _currentNodeId; }
 export function getNodes() { return _nodes; }
 export function isDirty() { return _dirty; }
 
+export function getMovesTo(nodeId) {
+    const moves = [];
+    let id = nodeId;
+    while (id > 0 && _nodes[id]) {
+        moves.push(_nodes[id].san);
+        id = _nodes[id].parentId;
+    }
+    return moves.reverse();
+}
+
 export function nodeHasNag(nodeId, nagNum) {
     const node = _nodes[nodeId];
     if (!node?.nags) return false;

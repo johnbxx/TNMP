@@ -154,7 +154,7 @@ function renderOpenings(stats) {
         const title = `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/${icon}" alt=""> As ${side === 'white' ? 'White' : 'Black'}</div>`;
         if (!families.length) return title + '<p class="profile-empty-small">No games with ECO data.</p>';
         return title + families.map(f =>
-            profileRow(f.family, f, JSON.stringify({ player: currentPlayer, eco: f.codes, color: side, ecoLabel: f.family }), { compact: true })
+            profileRow(f.family, f, JSON.stringify({ player: currentPlayer, tournament: 'all', color: side, ecoLabel: f.family }), { compact: true })
         ).join('');
     }
 

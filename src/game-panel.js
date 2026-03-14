@@ -233,6 +233,7 @@ export function initGamePanel(mount) {
                 <button class="ctx-nag" data-nag="6">⁈</button>
             </div>
             <button class="ctx-item" data-ctx-action="annotate">More annotations...</button>
+            <button class="ctx-item" data-ctx-action="explore">Explore from here</button>
             <button class="ctx-item" data-ctx-action="delete">Delete from here</button>
             <button class="ctx-item ctx-mainline" data-ctx-action="mainline">Make mainline</button>
         </div>
@@ -625,6 +626,12 @@ function wireContextMenu() {
             const targetId = _ctxTargetNodeId;
             hideContextMenu();
             showNagPicker(targetId, anchor);
+        } else if (action === 'explore') {
+            if (_ctxTargetNodeId != null && _ctxTargetNodeId > 0) {
+                const moves = pgn.getMovesTo(_ctxTargetNodeId);
+                hideContextMenu();
+                loadExplorer({ restoreMoves: moves });
+            }
         } else if (action === 'delete') {
             if (_ctxTargetNodeId != null && _ctxTargetNodeId !== 0) {
                 pgn.goToMove(_ctxTargetNodeId);
