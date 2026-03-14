@@ -1572,6 +1572,8 @@ function wireBrowserListeners(panelEl) {
             const hasPgn = row.dataset.hasPgn === '1';
             if (hasPgn || SUBMISSIONS_ENABLED) {
                 openGameFromBrowser(gameId);
+            } else if (gameId) {
+                showToast('No moves yet for this game', 'info');
             }
         }
     }, { signal });
@@ -1720,6 +1722,7 @@ export function doImport() {
 
     games.setGamesData({ games: importedGames, query: { local: true } });
     openImportedGames(importedGames);
+    showToast(`${importedGames.length} game${importedGames.length !== 1 ? 's' : ''} imported`, 'success');
 }
 
 function doPreview() {

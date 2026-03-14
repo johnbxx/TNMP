@@ -118,7 +118,7 @@ export async function updatePushPrefs() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: sub.endpoint, notifyPairings: pairings, notifyResults: results }),
     }).catch(() => {});
-    showToast('Preferences saved');
+    showToast('Preferences saved', 'success');
 }
 
 // --- Sync (page load, name change) ---

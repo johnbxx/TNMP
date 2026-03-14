@@ -593,25 +593,60 @@ html.off-season .meme {
     transform: translateY(0);
 }
 
-.share-toast {
+/* Toast notifications */
+.toast {
     position: fixed;
     top: 2rem;
     left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.8);
+    transform: translateX(-50%) translateY(-0.5rem);
+    padding: 0.65rem 1.3rem;
+    border-radius: var(--radius-sm);
+    border-bottom: 2.5px solid;
+    background: var(--modal-bg-start);
     color: var(--text-primary);
-    padding: 0.75rem 1.5rem;
-    border-radius: var(--radius-pill);
     font-size: 0.9rem;
+    font-weight: 500;
     opacity: 0;
-    transition: opacity var(--transition-medium);
+    transition: opacity var(--transition-medium), transform var(--transition-medium);
     z-index: 9000;
     pointer-events: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.share-toast.show {
+.toast.show {
     opacity: 1;
+    transform: translateX(-50%) translateY(0);
     pointer-events: auto;
+    cursor: pointer;
+}
+
+.toast-icon {
+    font-weight: 700;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+    margin-right: 0.5rem;
+}
+
+.toast-success { border-color: var(--nag-good); }
+.toast-success .toast-icon { color: var(--nag-good); }
+.toast-success .toast-icon::before { content: '!'; }
+
+.toast-error { border-color: var(--nag-blunder); }
+.toast-error .toast-icon { color: var(--nag-blunder); }
+.toast-error .toast-icon::before { content: '??'; }
+
+.toast-info { border-color: var(--gradient-in-progress-end); }
+.toast-info .toast-icon { color: var(--gradient-in-progress-end); }
+.toast-info .toast-icon::before { content: '\24D8'; }
+
+.toast-shake { animation: toast-shake 0.4s ease; }
+
+@keyframes toast-shake {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    20% { transform: translateX(calc(-50% - 6px)) translateY(0); }
+    40% { transform: translateX(calc(-50% + 5px)) translateY(0); }
+    60% { transform: translateX(calc(-50% - 3px)) translateY(0); }
+    80% { transform: translateX(calc(-50% + 2px)) translateY(0); }
 }
 
 #offline-banner {
@@ -941,7 +976,7 @@ select.editor-header-input option {
 .setting-group .notify-pref-label {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
     font-size: 0.85rem;
     font-weight: 400;
     color: var(--text-muted);

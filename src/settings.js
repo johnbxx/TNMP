@@ -103,9 +103,9 @@ export function saveSettings(checkPairings) {
     }
 
     if (newName) {
-        showToast(`Saved! Looking for "${newName}" in pairings.`);
+        showToast(`Saved! Looking for "${newName}" in pairings.`, 'success');
     } else {
-        showToast('Name cleared. Pairing info disabled.');
+        showToast('Name cleared. Pairing info disabled.', 'success');
     }
 }
 

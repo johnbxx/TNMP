@@ -181,8 +181,14 @@ async function checkPairings() {
         if (raw) cachedState = JSON.parse(raw);
     } catch { /* corrupt */ }
 
+    let cachedTracker = {};
+    try {
+        const raw = localStorage.getItem('lastTrackerRounds');
+        if (raw) cachedTracker = JSON.parse(raw);
+    } catch { /* corrupt */ }
+
     if (cachedState) {
-        renderState(cachedState, {});
+        renderState(cachedState, cachedTracker);
     } else {
         showLoading();
     }
@@ -210,6 +216,7 @@ async function checkPairings() {
             const qUrl = `${WORKER_URL}/query?player=${encodeURIComponent(CONFIG.playerName)}&tournament=${encodeURIComponent(serverState.tournamentSlug)}`;
             const qData = await (await fetch(qUrl)).json();
             trackerRounds = buildTrackerRounds(qData.games || [], qData.byes || [], playerNorm);
+            localStorage.setItem('lastTrackerRounds', JSON.stringify(trackerRounds));
         } catch { /* network failure */ }
     }
 
@@ -393,13 +400,13 @@ async function handleShareAction(action) {
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {
-        try { await navigator.clipboard.writeText(getGameMoves() || pgn); showToast('Moves copied!'); }
-        catch { showToast('Could not copy to clipboard'); }
+        try { await navigator.clipboard.writeText(getGameMoves() || pgn); showToast('Moves copied!', 'success'); }
+        catch { showToast('Could not copy to clipboard', 'error'); }
     } else if (action === 'copy-link') {
         const gameId = getHeader(pgn, 'GameId');
         const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
-        try { await navigator.clipboard.writeText(url); showToast('Link copied!'); }
-        catch { showToast('Could not copy to clipboard'); }
+        try { await navigator.clipboard.writeText(url); showToast('Link copied!', 'success'); }
+        catch { showToast('Could not copy to clipboard', 'error'); }
     } else if (action === 'download') {
         const slug = getTournamentMeta().slug;
         const w = getHeader(pgn, 'White')?.split(',')[0] || 'White';
@@ -418,9 +425,9 @@ async function handleShareAction(action) {
 
 function handleBrowserExport() {
     const state = getGamesState();
-    if (!state.gameIdList.length) { showToast('No games to export'); return; }
+    if (!state.gameIdList.length) { showToast('No games to export', 'error'); return; }
     const games = state.gameIdList.map(id => getCachedGame(id)).filter(g => g?.pgn);
-    if (!games.length) { showToast('No PGN data available'); return; }
+    if (!games.length) { showToast('No PGN data available', 'error'); return; }
     const slug = getTournamentMeta().slug;
     const filter = state.activeFilter;
     const prefix = slug || 'games';
@@ -429,7 +436,7 @@ function handleBrowserExport() {
     else if (filter?.type === 'section') filename = `${prefix}-${filter.sections.map(sectionForFilename).join('-')}-R${games[0].round}.pgn`;
     else filename = `${prefix}-R${games[0].round}.pgn`;
     downloadPgn(games.map(g => g.pgn).join('\n\n'), filename);
-    showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`);
+    showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`, 'success');
 }
 
 // --- Register service worker ---

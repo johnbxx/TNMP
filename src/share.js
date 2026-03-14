@@ -71,10 +71,10 @@ export async function shareStatus() {
         const shareText = `${text}\n${url}`;
         try {
             await navigator.clipboard.writeText(shareText);
-            showToast('Copied to clipboard!');
+            showToast('Copied to clipboard!', 'success');
         } catch (err) {
             console.error('Copy failed:', err);
-            showToast('Could not copy to clipboard');
+            showToast('Could not copy to clipboard', 'error');
         }
     }
 }
