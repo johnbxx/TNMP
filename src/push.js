@@ -129,7 +129,7 @@ export async function syncPushSubscription() {
         const sub = await getSubscription();
         if (!sub) return;
         await registerWithServer(sub);
-    } catch {}
+    } catch { /* subscription may not be available */ }
 }
 
 // --- Internals ---
