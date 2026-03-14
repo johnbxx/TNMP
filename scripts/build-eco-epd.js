@@ -7,7 +7,7 @@
  * and running `make` (requires python3 + python-chess).
  *
  * Input: dist/all.tsv (or a.tsv–e.tsv) with columns: eco, name, pgn, uci, epd
- * Output: worker/src/eco-epd.json — { [epd]: { eco, name } }
+ * Output: worker/src/eco-epd.json — { [epd]: { eco, name, pgn, uci } }
  *
  * Usage: node scripts/build-eco-epd.js /path/to/chess-openings/dist/all.tsv
  */
@@ -37,12 +37,14 @@ for (let i = 1; i < lines.length; i++) {
 
     const eco = parts[0].trim();
     const name = parts[1].trim();
+    const pgn = parts[2].trim();
+    const uci = parts[3].trim();
     const epd = parts[4].trim();
 
     // Multiple openings can share the same EPD (same position, different move orders).
     // Keep the one with the longest name (most specific).
     if (!db[epd] || name.length > db[epd].name.length) {
-        db[epd] = { eco, name };
+        db[epd] = { eco, name, pgn, uci };
     }
     count++;
 }

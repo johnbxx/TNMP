@@ -56,3 +56,16 @@ export function classifyFen(fen) {
     const epd = fenToEpd(fen);
     return _ecoData[epd] || null;
 }
+
+/**
+ * Find an opening by exact name match. Returns the first match found.
+ * @param {string} name - Opening name (e.g., "Sicilian Defense")
+ * @returns {{ eco: string, name: string, pgn: string, uci: string } | null}
+ */
+export function findOpeningByName(name) {
+    if (!_ecoData) return null;
+    for (const entry of Object.values(_ecoData)) {
+        if (entry.name === name) return entry;
+    }
+    return null;
+}

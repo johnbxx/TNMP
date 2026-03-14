@@ -176,7 +176,8 @@ export function getOrientationForGame(game) {
 export function searchPlayers(query) {
     if (!query) return [];
     const q = query.toLowerCase();
-    return _playerList.filter(name => name.toLowerCase().includes(q)).slice(0, 8);
+    const list = _playerList.length > 0 ? _playerList : (_allPlayers || []);
+    return list.filter(name => name.toLowerCase().includes(q)).slice(0, 8);
 }
 
 // ─── Mutations ─────────────────────────────────────────────────────
@@ -228,6 +229,7 @@ export async function openBrowser(query = null) {
         _sectionList = buildFilteredSectionList();
         _visibleSections = new Set(_sectionList);
     }
+    invalidateExplorer();
     notifyChange();
 }
 
@@ -251,13 +253,19 @@ export function clearPlayerMode() {
     setPlayer(null);
     _filters.tournament = null;
     _filters.color = null;
+    _filters.eco = null;
     _playerData = null;
 
     resolveDefaultRound(true);
 
     _sectionList = buildFilteredSectionList();
     _visibleSections = new Set(_sectionList);
-    invalidateExplorer();
+    if (_explorer) {
+        _explorer.chess.reset();
+        _explorer.moveHistory = [];
+        _explorer.gameIds = null;
+        rebuildExplorerTree();
+    }
     notifyChange();
 }
 

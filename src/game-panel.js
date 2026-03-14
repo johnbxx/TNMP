@@ -9,7 +9,7 @@
  * 5. Own UI state — variation collapse, branch popover, mode, loaded game
  */
 
-import { openModal, closeModal } from './modal.js';
+import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn, pgnToGameObject, extractMoveText } from './pgn-parser.js';
 import { formatName, resultClass, resultSymbol } from './utils.js';
@@ -246,6 +246,18 @@ export function initGamePanel(mount) {
 
     // Wire browser listeners once (scaffold is now permanent)
     wireBrowserListeners(document.getElementById('viewer-browser-panel'));
+
+    // Reset browser state after close animation finishes
+    onModalClose('viewer-modal', () => {
+        games.closeBrowser();
+        const panelEl = document.getElementById('viewer-browser-panel');
+        if (panelEl) {
+            panelEl.classList.add('hidden');
+            panelEl.closest('.modal-content-viewer')?.classList.remove('has-browser');
+        }
+        const searchInput = document.getElementById('browser-search-input');
+        if (searchInput) searchInput.value = '';
+    });
 }
 
 // ─── 1. State ──────────────────────────────────────────────────────

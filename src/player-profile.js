@@ -1,7 +1,8 @@
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { normalizeKey, openBrowser } from './games.js';
+import { normalizeKey, openBrowser, closeExplorer, explorerPlayMove } from './games.js';
 import { openGamePanel } from './game-panel.js';
+import { findOpeningByName } from './eco.js';
 
 let currentPlayer = null;
 let currentUscfId = null;
@@ -298,8 +299,18 @@ export function initPlayerProfile(mount) {
 
     async function browseTo(query) {
         closePlayerProfile();
+        closeExplorer();
         await openGamePanel();
-        openBrowser(query);
+        await openBrowser(query);
+
+        // Advance explorer to the opening's root position
+        if (query.ecoLabel) {
+            const opening = findOpeningByName(query.ecoLabel);
+            if (opening?.pgn) {
+                const moves = opening.pgn.replace(/\d+\.\s*/g, '').trim().split(/\s+/);
+                for (const san of moves) explorerPlayMove(san);
+            }
+        }
     }
 
     // Click handling — all profile rows and opponent links
