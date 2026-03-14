@@ -245,6 +245,11 @@ export function flip() {
     _board.orientation('flip');
 }
 
+export function setOrientation(color) {
+    if (!_board) return;
+    _board.orientation(color);
+}
+
 export function resize() {
     if (!_board) return;
     const boardEl = document.getElementById('viewer-board');

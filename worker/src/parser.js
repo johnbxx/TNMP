@@ -629,29 +629,3 @@ export function extractTournamentName(html) {
     return match ? decodeEntities(match[1]) : null;
 }
 
-/**
- * Extract color assignments from parsed pairings sections.
- * Takes the output of parseTournamentPage().pairingsSections.
- */
-export function extractPairingsColors(sections) {
-    const colors = {};
-
-    for (const section of sections) {
-        const rnd = section.round;
-        if (!colors[rnd]) colors[rnd] = [];
-
-        for (const row of section.rows) {
-            if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) {
-                continue;
-            }
-
-            const white = parsePlayerInfo(row.whiteName).name;
-            const black = parsePlayerInfo(row.blackName).name;
-            const board = row.board ? parseInt(row.board, 10) || null : null;
-
-            colors[rnd].push({ white, black, result: parseGameResult(row.whiteResult, row.blackResult), board });
-        }
-    }
-
-    return colors;
-}

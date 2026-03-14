@@ -48,6 +48,7 @@ function notifyChange() {
 }
 
 export function initGame(pgn, { onPositionChange } = {}) {
+    stopAutoPlay();
     _onPositionChange = onPositionChange || null;
     _headers = {};
     const headerRegex = /\[(\w+)\s+"([^"]*)"\]/g;

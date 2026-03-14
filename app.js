@@ -1,5 +1,5 @@
 import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, setAppState, DEBUG_PGN } from './src/config.js';
-import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker, saveLivePairingHtml } from './src/ui.js';
+import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker } from './src/ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
 import { openSettings, saveSettings, initSettings } from './src/settings.js';
@@ -7,7 +7,7 @@ import { previewState, initDebugPanel } from './src/debug.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
 import {
-    openGamePanel as openGameViewer, closeGamePanel, handlePanelKeydown,
+    openGamePanel as openGameViewer, openGameWithPlayerNav, closeGamePanel, handlePanelKeydown,
     explorerBackToBrowser,
     dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel,
     explorerGoToStart, explorerGoBack, explorerGoForward,
@@ -20,7 +20,7 @@ import {
 import { showToast } from './src/toast.js';
 import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './src/games.js';
 import { formatName, getHeader } from './src/utils.js';
-import { initPlayerProfile } from './src/player-profile.js';
+import { initPlayerProfile, openPlayerProfile } from './src/player-profile.js';
 
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
@@ -111,7 +111,7 @@ function renderTracker(trackerRounds, totalRounds, roundNumber, state) {
     const isLive = state === STATE.YES || state === STATE.IN_PROGRESS;
     const activeRounds = Object.entries(trackerRounds).filter(([, r]) => r.result || r.color || r.opponent).map(([n]) => Number(n));
     const autoSelect = isLive && roundNumber ? roundNumber : (activeRounds.length ? Math.max(...activeRounds) : null);
-    renderRoundTracker({ rounds: trackerRounds }, totalRounds || 7, roundNumber, state, autoSelect);
+    renderRoundTracker(trackerRounds, totalRounds || 7, roundNumber, state, autoSelect);
 }
 
 function renderState(stateData, trackerRounds) {
@@ -135,33 +135,25 @@ function renderState(stateData, trackerRounds) {
     setAppState({ state, roundInfo: info || '' });
     if (state !== 'no') stopCountdown();
 
-    // Build pairing info from tracker data for the current round
+    // Stash pairing info for share text
     const currentRound = trackerRounds?.[roundNumber];
-    let pairingInfo = null;
     if (currentRound && !currentRound.isBye) {
-        pairingInfo = {
-            board: currentRound.board, color: currentRound.color,
-            opponent: currentRound.opponent, opponentRating: currentRound.opponentRating,
-            round: roundNumber,
-        };
-        if (currentRound.result) pairingInfo.playerResult = currentRound.result;
+        setAppState({
+            lastRoundNumber: roundNumber || 1,
+            pairing: { board: currentRound.board, color: currentRound.color, opponent: currentRound.opponent, opponentRating: currentRound.opponentRating, round: roundNumber, playerResult: currentRound.result || null },
+        });
     } else if (currentRound?.isBye) {
-        pairingInfo = { isBye: true, byeType: currentRound.byeType, round: roundNumber };
+        setAppState({ pairing: { isBye: true, byeType: currentRound.byeType, round: roundNumber } });
+    } else {
+        setAppState({ lastRoundNumber: roundNumber || 1, pairing: null });
     }
 
     if (state === 'off_season') {
         const r1 = meta.roundDates?.[0];
         const offSeasonOpts = r1 && new Date(r1).getTime() > Date.now() ? { targetDate: r1 } : null;
-        setAppState({ pairing: null });
         showState(STATE.OFF_SEASON, info, offSeasonOpts);
-    } else if (state === 'too_early' || state === 'no') {
-        setAppState({ pairing: null });
-        showState(state, info);
     } else {
-        // yes, in_progress, results
-        setAppState({ lastRoundNumber: roundNumber || 1, pairing: pairingInfo });
-        showState(state, info, pairingInfo);
-        if (pairingInfo) saveLivePairingHtml();
+        showState(state, info);
     }
 
     // Wire "Check Again" button handler (showState sets onclick=null for check-again states)
@@ -276,6 +268,17 @@ const ACTIONS = {
     'enable-push': enablePush,
     'disable-push': disablePush,
     'open-games': () => openGameViewer(),
+    'open-profile': (e) => {
+        const btn = e.target.closest('[data-action="open-profile"]');
+        if (btn?.dataset.name) openPlayerProfile(btn.dataset.name);
+    },
+    'view-tracker-game': (e) => {
+        const btn = e.target.closest('[data-action="view-tracker-game"]');
+        const game = btn?.dataset.gameId ? getCachedGame(btn.dataset.gameId) : null;
+        if (!game) return;
+        if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, btn.dataset.gameId);
+        else openGameViewer({ game });
+    },
     // Viewer
     'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
     'viewer-next': goToNext, 'viewer-end': goToEnd, 'viewer-flip': flipBoard,

@@ -5,7 +5,7 @@
  * Called by the worker's scheduled() entry point.
  */
 
-import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, getTournamentSlug } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
 import { resolveTournament, computeAppState } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
 import {
@@ -265,13 +265,12 @@ export async function handleScheduled(env, { force = false } = {}) {
     let newCount = 0;
     let updatedCount = 0;
     try {
-        const shortCode = getTournamentSlug(tournament.name);
         const roundDatesJson = JSON.stringify(tournament.roundDates || []);
         await env.DB.prepare(
-            `INSERT INTO tournaments (slug, name, short_code, round_dates, url) VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(slug) DO UPDATE SET name=excluded.name, short_code=excluded.short_code,
+            `INSERT INTO tournaments (slug, name, round_dates, url) VALUES (?, ?, ?, ?)
+             ON CONFLICT(slug) DO UPDATE SET name=excluded.name,
              round_dates=excluded.round_dates, url=excluded.url`
-        ).bind(slug, tournament.name, shortCode, roundDatesJson, tournament.url || null).run();
+        ).bind(slug, tournament.name, roundDatesJson, tournament.url || null).run();
 
         // Fetch existing games for this tournament to diff against
         const existing = await env.DB.prepare(

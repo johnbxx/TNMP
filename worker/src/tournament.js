@@ -4,7 +4,7 @@
  * Handles: /tournament-html, /tournament-state, /og-state, /health
  */
 
-import { corsResponse, slugifyTournament, getTournamentSlug, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL } from './helpers.js';
+import { corsResponse, slugifyTournament, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL } from './helpers.js';
 import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
 
 // --- Tournament Resolution ---
@@ -114,14 +114,13 @@ async function discoverTournament(env, today) {
 
         // Write to D1 so we don't need to discover again
         const slug = slugifyTournament(name);
-        const shortCode = getTournamentSlug(name);
         const roundDatesJson = JSON.stringify(roundDates);
         await env.DB.prepare(
-            `INSERT INTO tournaments (slug, name, short_code, round_dates, url)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(slug) DO UPDATE SET name=excluded.name, short_code=excluded.short_code,
+            `INSERT INTO tournaments (slug, name, round_dates, url)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(slug) DO UPDATE SET name=excluded.name,
              round_dates=excluded.round_dates, url=excluded.url`
-        ).bind(slug, name, shortCode, roundDatesJson, tournamentUrl).run();
+        ).bind(slug, name, roundDatesJson, tournamentUrl).run();
 
         console.log(`Discovered tournament: ${name} (${roundDates.length} rounds), wrote to D1`);
 

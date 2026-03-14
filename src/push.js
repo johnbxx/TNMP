@@ -2,137 +2,67 @@
 import { WORKER_URL, VAPID_PUBLIC_KEY, CONFIG } from './config.js';
 import { showToast } from './toast.js';
 
-/**
- * Convert base64url VAPID key to Uint8Array for PushManager.subscribe().
- */
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
     const rawData = atob(base64);
     const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; i++) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
+    for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
     return outputArray;
 }
 
-/**
- * Check if push is supported in this browser.
- */
 function isPushSupported() {
-    return 'serviceWorker' in navigator
-        && 'PushManager' in window
-        && 'Notification' in window;
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
 
-/**
- * Get the current push subscription from the browser, if any.
- */
 async function getSubscription() {
     const reg = await navigator.serviceWorker.ready;
     return reg.pushManager.getSubscription();
 }
 
-/**
- * Check push status and update the UI sections accordingly.
- * Shows one of: #push-unsupported, #push-unsubscribed, #push-subscribed
- */
-let _prefsWired = false;
+function getPrefs() {
+    return {
+        notifyPairings: localStorage.getItem('pushPrefPairings') !== '0',
+        notifyResults: localStorage.getItem('pushPrefResults') !== '0',
+    };
+}
+
+function savePrefs(pairings, results) {
+    localStorage.setItem('pushPrefPairings', pairings ? '1' : '0');
+    localStorage.setItem('pushPrefResults', results ? '1' : '0');
+}
+
+// --- UI state (called when settings opens) ---
 
 export async function checkPushStatus() {
-    if (!_prefsWired) {
-        _prefsWired = true;
-        document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
-        document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
-    }
-
-    const unsupported = document.getElementById('push-unsupported');
-    const unsubscribed = document.getElementById('push-unsubscribed');
-    const subscribed = document.getElementById('push-subscribed');
-
-    if (!unsupported || !unsubscribed || !subscribed) return;
+    const section = document.getElementById('push-section');
+    if (!section) return;
 
     if (!isPushSupported()) {
-        unsupported.classList.remove('hidden');
-        unsubscribed.classList.add('hidden');
-        subscribed.classList.add('hidden');
+        section.dataset.push = 'unsupported';
         return;
     }
-
-    unsupported.classList.add('hidden');
 
     const sub = await getSubscription();
-    if (!sub) {
-        unsubscribed.classList.remove('hidden');
-        subscribed.classList.add('hidden');
-        return;
+    section.dataset.push = sub ? 'subscribed' : 'unsubscribed';
+
+    if (sub) {
+        const prefs = getPrefs();
+        document.getElementById('push-pref-pairings').checked = prefs.notifyPairings;
+        document.getElementById('push-pref-results').checked = prefs.notifyResults;
     }
-
-    // Verify with server
-    try {
-        const res = await fetch(`${WORKER_URL}/push-status?endpoint=${encodeURIComponent(sub.endpoint)}`);
-        const data = await res.json();
-
-        if (data.subscribed) {
-            unsubscribed.classList.add('hidden');
-            subscribed.classList.remove('hidden');
-            document.getElementById('push-pref-pairings').checked = data.notifyPairings !== false;
-            document.getElementById('push-pref-results').checked = data.notifyResults !== false;
-            return;
-        }
-    } catch {
-        // Offline — trust browser subscription state
-    }
-
-    // Browser has a subscription but server doesn't know about it — show as unsubscribed
-    unsubscribed.classList.remove('hidden');
-    subscribed.classList.add('hidden');
 }
 
-/**
- * Register a push subscription with the server, cleaning up any old endpoint.
- * Saves the current endpoint to localStorage for rotation detection.
- */
-async function registerWithServer(sub) {
-    const oldEndpoint = localStorage.getItem('pushEndpoint') || undefined;
-    const res = await fetch(`${WORKER_URL}/push-subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            subscription: sub.toJSON(),
-            playerName: CONFIG.playerName,
-            oldEndpoint,
-        }),
-    });
-    const data = await res.json();
-    if (data.success) {
-        localStorage.setItem('pushEndpoint', sub.endpoint);
-    }
-    return data;
-}
+// --- Subscribe/unsubscribe ---
 
-/**
- * Enable push notifications: prompt permission, subscribe, and register with server.
- */
 export async function enablePush() {
     const statusEl = document.getElementById('push-status');
-    const showError = (msg) => {
-        statusEl.textContent = msg;
-        statusEl.classList.remove('hidden', 'notification-status-success');
-        statusEl.classList.add('notification-status-error');
-    };
-
     statusEl.classList.add('hidden');
-
-    if (!isPushSupported()) {
-        showError('Push notifications are not supported in this browser.');
-        return;
-    }
 
     try {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-            showError('Notification permission was denied. Check your browser settings.');
+            showPushError(statusEl, 'Notification permission was denied. Check your browser settings.');
             return;
         }
 
@@ -144,92 +74,86 @@ export async function enablePush() {
 
         const data = await registerWithServer(sub);
         if (!data.success) {
-            showError(data.error || 'Failed to register push subscription.');
+            showPushError(statusEl, data.error || 'Failed to register push subscription.');
             return;
         }
 
         await checkPushStatus();
     } catch (err) {
-        if (err.name === 'NotAllowedError') {
-            showError('Notification permission was denied. Check your browser settings.');
-        } else {
-            showError('Could not enable push notifications. Try again later.');
-            console.error('Push subscribe error:', err);
-        }
+        showPushError(statusEl, err.name === 'NotAllowedError'
+            ? 'Notification permission was denied. Check your browser settings.'
+            : 'Could not enable push notifications. Try again later.');
     }
 }
 
-/**
- * Disable push notifications: unsubscribe from browser and server.
- */
 export async function disablePush() {
-    const statusEl = document.getElementById('push-status');
-    statusEl.classList.add('hidden');
-
     try {
         const sub = await getSubscription();
         if (sub) {
-            // Tell server to remove
-            try {
-                await fetch(`${WORKER_URL}/push-unsubscribe`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ endpoint: sub.endpoint }),
-                });
-            } catch (err) {
-                console.warn('Push unsubscribe server sync failed:', err.message);
-            }
+            fetch(`${WORKER_URL}/push-unsubscribe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endpoint: sub.endpoint }),
+            }).catch(() => {});
             await sub.unsubscribe();
         }
         localStorage.removeItem('pushEndpoint');
     } catch (err) {
         console.error('Push unsubscribe error:', err);
     }
-
     await checkPushStatus();
 }
 
-/**
- * Update push notification preferences (pairings/results checkboxes).
- */
-async function updatePushPrefs() {
+// --- Prefs (localStorage + lazy server sync) ---
+
+export async function updatePushPrefs() {
+    const pairings = document.getElementById('push-pref-pairings').checked;
+    const results = document.getElementById('push-pref-results').checked;
+    savePrefs(pairings, results);
+
     const sub = await getSubscription();
     if (!sub) return;
-
-    const notifyPairings = document.getElementById('push-pref-pairings').checked;
-    const notifyResults = document.getElementById('push-pref-results').checked;
-
-    try {
-        await fetch(`${WORKER_URL}/push-preferences`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                endpoint: sub.endpoint,
-                notifyPairings,
-                notifyResults,
-            }),
-        });
-        showToast('Preferences saved');
-    } catch (err) {
-        console.warn('Push preferences sync failed:', err.message);
-        showToast('Offline — will sync later');
-    }
+    fetch(`${WORKER_URL}/push-preferences`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: sub.endpoint, notifyPairings: pairings, notifyResults: results }),
+    }).catch(() => {});
+    showToast('Preferences saved');
 }
 
-/**
- * Re-sync the push subscription with the server.
- * Sends current playerName and detects endpoint rotation.
- * Called on page load and when the user saves settings.
- */
+// --- Sync (page load, name change) ---
+
 export async function syncPushSubscription() {
     if (!isPushSupported()) return;
-
     try {
         const sub = await getSubscription();
         if (!sub) return;
-
         await registerWithServer(sub);
-    } catch (err) {
-        console.warn('Push sync failed:', err.message);
-    }
+    } catch {}
+}
+
+// --- Internals ---
+
+async function registerWithServer(sub) {
+    const oldEndpoint = localStorage.getItem('pushEndpoint') || undefined;
+    const prefs = getPrefs();
+    const res = await fetch(`${WORKER_URL}/push-subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subscription: sub.toJSON(),
+            playerName: CONFIG.playerName,
+            oldEndpoint,
+            ...prefs,
+        }),
+    });
+    const data = await res.json();
+    if (data.success) localStorage.setItem('pushEndpoint', sub.endpoint);
+    return data;
+}
+
+function showPushError(el, msg) {
+    el.textContent = msg;
+    el.classList.remove('hidden', 'notification-status-success');
+    el.classList.add('notification-status-error');
 }

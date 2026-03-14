@@ -95,7 +95,7 @@ export async function handleOgGameImage(request, env) {
         return new Response('Image generation failed', { status: 500 });
     }
 
-    await env.GAMES.put(cacheKey, pngBuffer, { metadata: { contentType: 'image/png' } });
+    await env.GAMES.put(cacheKey, pngBuffer, { expirationTtl: 172800, metadata: { contentType: 'image/png' } });
     return new Response(pngBuffer, {
         headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' },
     });
@@ -255,11 +255,19 @@ export async function handleQuery(request, env) {
             ).bind(tournamentSlug, norm).all()
         );
     }
+    // Look up USCF ID when filtering by player
+    if (norm) {
+        queries.push(
+            env.DB.prepare('SELECT uscf_id FROM players WHERE name_norm = ?').bind(norm).first()
+        );
+    }
 
     const results = await Promise.all(queries);
     const countResult = results[0];
     const gamesResult = results[1];
-    const byeResult = results[2] || null;
+    let idx = 2;
+    const byeResult = fetchByes ? results[idx++] : null;
+    const playerRow = norm ? results[idx++] : null;
 
     const games = gamesResult.results.map(row => {
         const game = {
@@ -287,6 +295,7 @@ export async function handleQuery(request, env) {
     if (byeResult) {
         response.byes = byeResult.results.map(r => ({ round: r.round, type: r.bye_type }));
     }
+    if (playerRow?.uscf_id) response.uscfId = playerRow.uscf_id;
     return corsResponse(response, 200, env, request);
 }
 
@@ -300,7 +309,7 @@ export async function handleTournaments(request, env) {
         tournaments: result.results.map(t => {
             const roundDates = JSON.parse(t.round_dates || '[]');
             return {
-                slug: t.slug, name: t.name, shortCode: t.short_code,
+                slug: t.slug, name: t.name,
                 roundDates, url: t.url,
                 uscfEventId: t.uscf_event_id || null,
             };

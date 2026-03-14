@@ -1,8 +1,8 @@
 import { CONFIG } from './config.js';
 import { showToast } from './toast.js';
 import { openModal, closeModal } from './modal.js';
-import { checkPushStatus, syncPushSubscription } from './push.js';
-import { fetchPlayerList } from './games.js';
+import { checkPushStatus, syncPushSubscription, updatePushPrefs } from './push.js';
+import { searchPlayers } from './games.js';
 
 export function initSettings(mount) {
     mount.innerHTML = `
@@ -18,30 +18,24 @@ export function initSettings(mount) {
                     </div>
                     <p class="setting-hint">Start typing to find your name, or enter it manually.</p>
                 </div>
-                <div class="setting-group">
+                <div id="push-section" class="setting-group" data-push="unknown">
                     <label>Notifications</label>
-                    <div id="push-unsupported" class="hidden">
-                        <p class="setting-hint">Push notifications are not supported in this browser.</p>
+                    <p class="push-when-unsupported setting-hint">Push notifications are not supported in this browser.</p>
+                    <button class="push-when-unsubscribed modal-btn modal-btn-primary" data-action="enable-push">Enable Push Notifications</button>
+                    <p class="push-when-unsubscribed setting-hint">Get browser notifications when pairings or results are posted.</p>
+                    <div class="push-when-subscribed notification-status-row">
+                        <span class="notification-status-badge">Push Active</span>
+                        <button data-action="disable-push" class="modal-btn modal-btn-secondary modal-btn-small">Disable</button>
                     </div>
-                    <div id="push-unsubscribed" class="hidden">
-                        <button data-action="enable-push" class="modal-btn modal-btn-primary">Enable Push Notifications</button>
-                        <p class="setting-hint">Get browser notifications when pairings or results are posted.</p>
-                    </div>
-                    <div id="push-subscribed" class="hidden">
-                        <div class="notification-status-row">
-                            <span class="notification-status-badge">Push Active</span>
-                            <button data-action="disable-push" class="modal-btn modal-btn-secondary modal-btn-small">Disable</button>
-                        </div>
-                        <div class="notify-prefs">
-                            <label class="notify-pref-label">
-                                <input type="checkbox" id="push-pref-pairings" checked>
-                                Pairings posted
-                            </label>
-                            <label class="notify-pref-label">
-                                <input type="checkbox" id="push-pref-results" checked>
-                                Results posted
-                            </label>
-                        </div>
+                    <div class="push-when-subscribed notify-prefs">
+                        <label class="notify-pref-label">
+                            <input type="checkbox" id="push-pref-pairings" checked>
+                            Pairings posted
+                        </label>
+                        <label class="notify-pref-label">
+                            <input type="checkbox" id="push-pref-results" checked>
+                            Results posted
+                        </label>
                     </div>
                     <p id="push-status" class="notification-status hidden" role="alert" aria-live="assertive"></p>
                 </div>
@@ -59,6 +53,8 @@ export function initSettings(mount) {
             </div>
         </div>`;
     initDarkMode();
+    document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
+    document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
 }
 
 function initDarkMode() {
@@ -117,31 +113,22 @@ export function saveSettings(checkPairings) {
 
 function initNameAutocomplete(input) {
     const dropdown = document.getElementById('settings-autocomplete');
-    let players = null;
 
-    async function ensurePlayers() {
-        if (!players) {
-            try { players = await fetchPlayerList(); } catch { players = []; }
-        }
-        return players;
-    }
-
-    input.addEventListener('input', async () => {
-        const query = input.value.trim().toLowerCase();
+    input.addEventListener('input', () => {
+        const query = input.value.trim();
         if (query.length === 0) {
             dropdown.classList.add('hidden');
             input.setAttribute('aria-expanded', 'false');
             return;
         }
 
-        const list = await ensurePlayers();
-        const matches = list.filter(name => name.toLowerCase().includes(query)).slice(0, 8);
+        const matches = searchPlayers(query);
 
         if (matches.length === 0) {
             dropdown.innerHTML = '<div class="browser-ac-empty">No players found</div>';
         } else {
             dropdown.innerHTML = matches.map(name => {
-                const idx = name.toLowerCase().indexOf(query);
+                const idx = name.toLowerCase().indexOf(query.toLowerCase());
                 const before = name.slice(0, idx);
                 const match = name.slice(idx, idx + query.length);
                 const after = name.slice(idx + query.length);

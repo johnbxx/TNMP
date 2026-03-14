@@ -7,21 +7,6 @@
 export const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 export const MI_BASE_URL = 'https://www.milibrary.org';
 
-// Manual tournament short codes for PGN filenames
-const TOURNAMENT_SLUGS = {
-    '2026 Spring Tuesday Night Marathon': '2026Spring',
-    '3rd Silman Memorial Tuesday Night Marathon': '2026Silman',
-};
-
-export function getTournamentSlug(name) {
-    if (!name) return null;
-    if (TOURNAMENT_SLUGS[name]) return TOURNAMENT_SLUGS[name];
-    const yearMatch = name.match(/\b(20\d{2})\b/);
-    const words = name.replace(/\b(Tuesday|Night|Marathon|the|of|and)\b/gi, '').trim().split(/\s+/);
-    const keyword = words.find(w => w.length > 2 && !/^\d+$/.test(w)) || 'TNM';
-    return yearMatch ? `${yearMatch[1]}${keyword}` : keyword;
-}
-
 // --- HTTP Response Helpers ---
 
 export function corsHeaders(env, request) {
@@ -97,18 +82,6 @@ export function normalizeSection(section) {
         return candidate > parseInt(lo) ? `${lo}-${candidate}` : `${lo}-${hi}`;
     });
     return s;
-}
-
-export function buildPlayerNamePatterns(playerName) {
-    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const patterns = [new RegExp(esc(playerName), 'i')];
-    const parts = playerName.trim().split(/\s+/);
-    if (parts.length >= 2) {
-        const last = parts[parts.length - 1];
-        const first = parts.slice(0, -1).join(' ');
-        patterns.push(new RegExp(esc(last) + ',\\s*' + esc(first), 'i'));
-    }
-    return patterns;
 }
 
 // --- Pacific Timezone Offset ---

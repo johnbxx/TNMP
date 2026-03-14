@@ -6,7 +6,7 @@ import {
     parsePlayerInfo, hasPairings, hasResults, findPlayerPairing,
     composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
-    extractPairingsColors, parseStandings,
+    parseStandings,
     parseTournamentPage, findPlayerPairingFromSections, findPlayerResultFromSections,
 } from './parser.js';
 
@@ -221,80 +221,6 @@ describe('extractTournamentName', () => {
 
     it('decodes HTML entities', () => {
         expect(extractTournamentName('<h1>Tom&#039;s &amp; Jerry&#039;s Tournament</h1>')).toBe("Tom's & Jerry's Tournament");
-    });
-});
-
-// --- extractPairingsColors ---
-
-// --- extractPairingsColors ---
-
-describe('extractPairingsColors', () => {
-    const mockSections = [
-        {
-            round: 7,
-            section: '2000+',
-            rows: [
-                { board: '1', whiteResult: '', whiteName: 'Smith, John (2100 w 4.0 D)', whiteUrl: null, blackResult: '', blackName: 'Jones, Mary (1950 w 3.5 D)', blackUrl: null },
-                { board: '2', whiteResult: '1', whiteName: 'Doe, Jane (1800 w 5.0 D)', whiteUrl: null, blackResult: '0', blackName: 'Lee, Bob (1700 w 2.0 D)', blackUrl: null },
-                { board: '3', whiteResult: '\u00BD', whiteName: 'Chen, Wei (2000 w 4.5 D)', whiteUrl: null, blackResult: '\u00BD', blackName: 'Park, Min (1900 w 4.5 D)', blackUrl: null },
-            ],
-        },
-    ];
-
-    it('extracts colors from pairings sections', () => {
-        const colors = extractPairingsColors(mockSections);
-        expect(colors[7]).toHaveLength(3);
-    });
-
-    it('strips rating suffix from names using parsePlayerInfo', () => {
-        const colors = extractPairingsColors(mockSections);
-        expect(colors[7][0].white).toBe('Smith, John');
-        expect(colors[7][0].black).toBe('Jones, Mary');
-    });
-
-    it('extracts board numbers', () => {
-        const colors = extractPairingsColors(mockSections);
-        expect(colors[7][0].board).toBe(1);
-        expect(colors[7][1].board).toBe(2);
-    });
-
-    it('derives PGN-style results', () => {
-        const colors = extractPairingsColors(mockSections);
-        expect(colors[7][0].result).toBe('*');
-        expect(colors[7][1].result).toBe('1-0');
-        expect(colors[7][2].result).toBe('1/2-1/2');
-    });
-
-    it('skips bye rows', () => {
-        const withByes = [{
-            round: 5,
-            section: 'Open',
-            rows: [
-                { board: '1', whiteResult: '', whiteName: 'Smith, John (2100)', whiteUrl: null, blackResult: '', blackName: 'Bye', blackUrl: null },
-                { board: '2', whiteResult: '', whiteName: 'Full Point Bye', whiteUrl: null, blackResult: '', blackName: 'Jones, Mary (1950)', blackUrl: null },
-                { board: '3', whiteResult: '', whiteName: 'Doe, Jane (1800)', whiteUrl: null, blackResult: '', blackName: 'Lee, Bob (1700)', blackUrl: null },
-            ],
-        }];
-        const colors = extractPairingsColors(withByes);
-        expect(colors[5]).toHaveLength(1);
-        expect(colors[5][0].white).toBe('Doe, Jane');
-    });
-
-    it('returns empty object for empty sections', () => {
-        expect(extractPairingsColors([])).toEqual({});
-    });
-
-    it('handles multiple sections for the same round', () => {
-        const multiSection = [
-            { round: 3, section: '2000+', rows: [
-                { board: '1', whiteResult: '', whiteName: 'A, B (2000)', whiteUrl: null, blackResult: '', blackName: 'C, D (1900)', blackUrl: null },
-            ]},
-            { round: 3, section: 'U2000', rows: [
-                { board: '1', whiteResult: '', whiteName: 'E, F (1500)', whiteUrl: null, blackResult: '', blackName: 'G, H (1400)', blackUrl: null },
-            ]},
-        ];
-        const colors = extractPairingsColors(multiSection);
-        expect(colors[3]).toHaveLength(2);
     });
 });
 

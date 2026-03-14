@@ -1,61 +1,260 @@
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { getPlayerInfo, fetchPlayerList, normalizeKey, openBrowser } from './games.js';
+import { normalizeKey, openBrowser } from './games.js';
 import { openGamePanel } from './game-panel.js';
 
 let currentPlayer = null;
 let currentUscfId = null;
 let cachedGames = null;
 let cachedStats = null;
-let activeTab = 'overview';
 
-export async function openPlayerProfile(playerName, { uscfId } = {}) {
+// --- Data fetching ---
+
+async function fetchAllPlayerGames(playerName) {
+    const allGames = [];
+    let uscfId = null;
+    let offset = 0;
+    const limit = 500;
+    while (true) {
+        const url = `${WORKER_URL}/query?player=${encodeURIComponent(playerName)}&tournament=all&limit=${limit}&offset=${offset}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Server error');
+        const data = await resp.json();
+        allGames.push(...data.games);
+        if (data.uscfId) uscfId = data.uscfId;
+        if (allGames.length >= data.total || data.games.length < limit) break;
+        offset += limit;
+    }
+    return { games: allGames, uscfId };
+}
+
+// --- Stats computation (single pass) ---
+
+function computeStats(games, playerName) {
+    const norm = normalizeKey(playerName);
+    const totals = { all: wld(), white: wld(), black: wld() };
+    const tournaments = new Map();
+    const ecos = new Map();
+    const opponents = new Map();
+
+    for (const game of games) {
+        const side = game.whiteNorm === norm ? 'white' : game.blackNorm === norm ? 'black' : null;
+        if (!side) continue;
+        const r = game.result;
+        if (!r || r === '*') continue;
+
+        const outcome = (side === 'white' && r === '1-0') || (side === 'black' && r === '0-1') ? 'w'
+            : (side === 'white' && r === '0-1') || (side === 'black' && r === '1-0') ? 'l' : 'd';
+
+        tally(totals.all, outcome);
+        tally(totals[side], outcome);
+
+        // Tournament
+        const slug = game.tournamentSlug;
+        if (!tournaments.has(slug)) tournaments.set(slug, { name: game.tournament, ...wld() });
+        tally(tournaments.get(slug), outcome);
+
+        // ECO (by side)
+        if (game.eco) {
+            if (!ecos.has(game.eco)) ecos.set(game.eco, { name: game.openingName || game.eco, white: wld(), black: wld() });
+            tally(ecos.get(game.eco)[side], outcome);
+        }
+
+        // Opponent (keyed by norm to merge name variations)
+        const oppName = side === 'white' ? game.black : game.white;
+        const oppNorm = side === 'white' ? game.blackNorm : game.whiteNorm;
+        const oppKey = oppNorm || normalizeKey(oppName);
+        if (!opponents.has(oppKey)) opponents.set(oppKey, { name: oppName, ...wld() });
+        tally(opponents.get(oppKey), outcome);
+    }
+
+    return { totals, tournaments, ecos, opponents };
+}
+
+function wld() { return { w: 0, l: 0, d: 0 }; }
+function tally(s, outcome) { s[outcome]++; }
+function total(s) { return s.w + s.l + s.d; }
+function scorePct(s) { const t = total(s); return t === 0 ? '0.0' : ((s.w + 0.5 * s.d) / t * 100).toFixed(1); }
+
+// --- Shared row template ---
+
+function winBar(s) {
+    const t = total(s);
+    if (t === 0) return '<div class="profile-bar"></div>';
+    return `<div class="profile-bar">
+        <div class="profile-bar-win" style="width:${s.w / t * 100}%">${s.w > 0 ? `<span>${s.w}</span>` : ''}</div>
+        <div class="profile-bar-draw" style="width:${s.d / t * 100}%">${s.d > 0 ? `<span>${s.d}</span>` : ''}</div>
+        <div class="profile-bar-loss" style="width:${s.l / t * 100}%">${s.l > 0 ? `<span>${s.l}</span>` : ''}</div>
+    </div>`;
+}
+
+function profileRow(label, s, action, { icon, compact, profileName, actionAttr = 'data-action-query' } = {}) {
+    const t = total(s);
+    const cls = compact ? 'profile-row profile-row-compact' : 'profile-row';
+    const nameEl = profileName
+        ? `<span class="profile-row-name profile-row-link" data-action-profile="${profileName}">${label}</span>`
+        : `<span class="profile-row-name">${label}</span>`;
+    return `<button class="${cls}" ${actionAttr}='${action}'>
+        <div class="profile-row-label">
+            ${icon ? `<img class="profile-color-icon" src="pieces/${icon}" alt="">` : ''}
+            ${nameEl}
+        </div>
+        ${winBar(s)}
+        <div class="profile-row-summary">${scorePct(s)}%<span class="profile-row-divider">|</span>${t}</div>
+    </button>`;
+}
+
+// --- Tab renderers ---
+
+function renderOverview(stats) {
+    // Sort tournaments by appearance order in games (most recent first)
+    const slugOrder = [];
+    const seen = new Set();
+    for (const g of cachedGames) {
+        if (!seen.has(g.tournamentSlug)) { seen.add(g.tournamentSlug); slugOrder.push(g.tournamentSlug); }
+    }
+    const entries = [...stats.tournaments.entries()].sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
+
+    return profileRow('All Games', stats.totals.all, JSON.stringify({ player: currentPlayer, tournament: 'all' }))
+        + profileRow('As White', stats.totals.white, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'white' }), { icon: 'wK.webp' })
+        + profileRow('As Black', stats.totals.black, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'black' }), { icon: 'bK.webp' })
+        + `<div class="profile-section-title">Tournaments</div>`
+        + entries.map(([slug, t]) =>
+            profileRow(t.name, t, JSON.stringify({ player: currentPlayer, tournament: slug }))
+        ).join('');
+}
+
+function openingFamily(name) {
+    const colon = name.indexOf(':');
+    return colon > 0 ? name.slice(0, colon).trim() : name;
+}
+
+function groupByFamily(entries, side) {
+    const families = new Map();
+    for (const [code, e] of entries) {
+        const s = e[side];
+        if (total(s) === 0) continue;
+        const family = openingFamily(e.name);
+        if (!families.has(family)) families.set(family, { codes: [], ...wld() });
+        const f = families.get(family);
+        f.codes.push(code);
+        f.w += s.w; f.l += s.l; f.d += s.d;
+    }
+    return [...families.entries()]
+        .map(([family, f]) => ({ family, ...f }))
+        .sort((a, b) => total(b) - total(a));
+}
+
+function renderOpenings(stats) {
+    const entries = [...stats.ecos.entries()];
+
+    function section(side, icon) {
+        const families = groupByFamily(entries, side);
+        const title = `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/${icon}" alt=""> As ${side === 'white' ? 'White' : 'Black'}</div>`;
+        if (!families.length) return title + '<p class="profile-empty-small">No games with ECO data.</p>';
+        return title + families.map(f =>
+            profileRow(f.family, f, JSON.stringify({ player: currentPlayer, eco: f.codes, color: side, ecoLabel: f.family }), { compact: true })
+        ).join('');
+    }
+
+    return section('white', 'wK.webp') + section('black', 'bK.webp');
+}
+
+function renderOpponentList(opponents, filter = '') {
+    const f = filter.toLowerCase();
+    const sorted = [...opponents.values()]
+        .filter(o => !f || o.name.toLowerCase().includes(f))
+        .sort((a, b) => total(b) - total(a));
+    if (!sorted.length) return `<p class="profile-empty-small">${f ? 'No matching opponents.' : 'No opponents found.'}</p>`;
+    return sorted.map(o =>
+        profileRow(o.name, o, JSON.stringify({ player: currentPlayer, opponent: o.name }), { compact: true, profileName: o.name })
+    ).join('');
+}
+
+function renderOpponents(stats) {
+    return `<div class="profile-opponent-search">
+            <input type="text" class="profile-opponent-input" placeholder="Search opponents..." id="profile-opponent-search">
+        </div>
+        <div id="profile-opponent-list">${renderOpponentList(stats.opponents)}</div>`;
+}
+
+const TAB_RENDERERS = { overview: renderOverview, openings: renderOpenings, opponents: renderOpponents };
+
+function renderActiveTab() {
+    const container = document.getElementById('profile-tab-content');
+    const tabs = document.getElementById('profile-tabs');
+    if (!container || !cachedStats) return;
+
+    const activeTab = tabs?.dataset.active || 'overview';
+    container.innerHTML = TAB_RENDERERS[activeTab](cachedStats);
+
+    // Wire opponent search (only on opponents tab)
+    const searchInput = document.getElementById('profile-opponent-search');
+    const listEl = document.getElementById('profile-opponent-list');
+    if (searchInput && listEl) {
+        searchInput.addEventListener('input', () => {
+            listEl.innerHTML = renderOpponentList(cachedStats.opponents, searchInput.value.trim());
+        });
+    }
+}
+
+// --- Public API ---
+
+export async function openPlayerProfile(playerName) {
     currentPlayer = playerName;
-    currentUscfId = uscfId || null;
+    currentUscfId = null;
     cachedGames = null;
     cachedStats = null;
-    activeTab = 'overview';
 
     openModal('profile-modal');
     const body = document.getElementById('profile-body');
     const title = document.getElementById('profile-player-name');
+    const tabs = document.getElementById('profile-tabs');
 
     title.textContent = playerName;
-    body.innerHTML = '<p class="profile-loading">Loading stats...</p>';
-
-    // Look up USCF ID + rating from the player index (lazy-load if needed)
-    let info = getPlayerInfo(playerName);
-    if (!info) {
-        await fetchPlayerList().catch(() => {});
-        info = getPlayerInfo(playerName);
-    }
-    if (!currentUscfId) currentUscfId = info?.uscfId ?? null;
-    const uscfRating = info?.rating;
+    body.querySelector('.profile-tab-content')?.classList.add('hidden');
+    tabs.classList.add('hidden');
+    body.querySelector('.profile-loading').classList.remove('hidden');
+    body.querySelector('.profile-error').classList.add('hidden');
 
     try {
-        const games = await fetchAllPlayerGames(playerName);
-        cachedGames = games;
-        if (games.length === 0) {
-            body.innerHTML = '<p class="profile-empty">No games found for this player.</p>';
+        const result = await fetchAllPlayerGames(playerName);
+        cachedGames = result.games;
+        if (!currentUscfId) currentUscfId = result.uscfId;
+        const rating = ratingFromGames(cachedGames, playerName);
+
+        // Title with rating + USCF link
+        const nameText = rating ? `${playerName} (${rating})` : playerName;
+        title.innerHTML = currentUscfId
+            ? `${nameText} <a href="https://ratings.uschess.org/player/${currentUscfId}" target="_blank" rel="noopener" class="profile-uscf-link">USCF</a>`
+            : nameText;
+
+        if (!cachedGames.length) {
+            body.querySelector('.profile-loading').classList.add('hidden');
+            body.querySelector('.profile-empty').classList.remove('hidden');
             return;
         }
-        // Prefer USCF current rating over game ELO snapshot
-        const rating = uscfRating || getMostRecentRating(games, playerName);
-        renderTitle(title, playerName, rating, currentUscfId);
-        renderTabs(body);
-        renderTab('overview');
+        cachedStats = computeStats(cachedGames, playerName);
+        body.querySelector('.profile-loading').classList.add('hidden');
+        tabs.classList.remove('hidden');
+        tabs.dataset.active = 'overview';
+        body.querySelector('.profile-tab-content').classList.remove('hidden');
+        renderActiveTab();
     } catch (err) {
-        body.innerHTML = `<p class="profile-error">Failed to load stats: ${err.message}</p>`;
+        body.querySelector('.profile-loading').classList.add('hidden');
+        const errEl = body.querySelector('.profile-error');
+        errEl.textContent = `Failed to load stats: ${err.message}`;
+        errEl.classList.remove('hidden');
     }
 }
 
-function renderTitle(titleEl, playerName, rating, uscfId) {
-    const nameText = rating ? `${playerName} (${rating})` : playerName;
-    if (uscfId) {
-        titleEl.innerHTML = `${nameText} <a href="https://ratings.uschess.org/player/${uscfId}" target="_blank" rel="noopener" class="profile-uscf-link" title="USCF Profile">USCF</a>`;
-    } else {
-        titleEl.textContent = nameText;
+function ratingFromGames(games, playerName) {
+    const norm = normalizeKey(playerName);
+    for (const g of games) {
+        if (g.whiteNorm === norm && g.whiteElo) return g.whiteElo;
+        if (g.blackNorm === norm && g.blackElo) return g.blackElo;
     }
+    return null;
 }
 
 export function closePlayerProfile() {
@@ -66,359 +265,36 @@ export function closePlayerProfile() {
     cachedStats = null;
 }
 
-async function fetchAllPlayerGames(playerName) {
-    const dbName = getPlayerInfo(playerName)?.dbName || playerName;
-    const allGames = [];
-    let offset = 0;
-    const limit = 500;
-    while (true) {
-        const url = `${WORKER_URL}/query?player=${encodeURIComponent(dbName)}&tournament=all&limit=${limit}&offset=${offset}`;
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error('Server error');
-        const data = await resp.json();
-        allGames.push(...data.games);
-        if (allGames.length >= data.total || data.games.length < limit) break;
-        offset += limit;
-    }
-    return allGames;
-}
-
-function getMostRecentRating(games, playerName) {
-    const norm = normalizeKey(playerName);
-    for (const game of games) {
-        if (game.whiteNorm === norm && game.whiteElo) return game.whiteElo;
-        if (game.blackNorm === norm && game.blackElo) return game.blackElo;
-    }
-    return null;
-}
-
-function playerSide(game, playerName) {
-    const norm = normalizeKey(playerName);
-    if (game.whiteNorm === norm) return 'white';
-    if (game.blackNorm === norm) return 'black';
-    return null;
-}
-
-function computeStats(games, playerName) {
-    let wins = 0, losses = 0, draws = 0;
-    let whiteWins = 0, whiteLosses = 0, whiteDraws = 0, whiteGames = 0;
-    let blackWins = 0, blackLosses = 0, blackDraws = 0, blackGames = 0;
-
-    // By tournament: { slug: { name, wins, losses, draws } }
-    const tournamentMap = new Map();
-
-    // By ECO: { code: { name, whiteWins, whiteLosses, whiteDraws, whiteGames, blackWins, ... } }
-    const ecoMap = new Map();
-
-    // By opponent: { name: { wins, losses, draws } }
-    const opponentMap = new Map();
-
-    for (const game of games) {
-        const side = playerSide(game, playerName);
-        if (!side) continue;
-
-        const result = game.result;
-        if (!result || result === '*') continue; // skip unplayed/in-progress games
-
-        const isWin = (side === 'white' && result === '1-0') || (side === 'black' && result === '0-1');
-        const isLoss = (side === 'white' && result === '0-1') || (side === 'black' && result === '1-0');
-        const isDraw = result === '1/2-1/2';
-
-        if (isWin) wins++;
-        else if (isLoss) losses++;
-        else if (isDraw) draws++;
-
-        if (side === 'white') {
-            whiteGames++;
-            if (isWin) whiteWins++;
-            else if (isLoss) whiteLosses++;
-            else if (isDraw) whiteDraws++;
-        } else {
-            blackGames++;
-            if (isWin) blackWins++;
-            else if (isLoss) blackLosses++;
-            else if (isDraw) blackDraws++;
-        }
-
-        // Tournament stats
-        const slug = game.tournamentSlug;
-        if (!tournamentMap.has(slug)) {
-            tournamentMap.set(slug, { name: game.tournament, wins: 0, losses: 0, draws: 0 });
-        }
-        const t = tournamentMap.get(slug);
-        if (isWin) t.wins++;
-        else if (isLoss) t.losses++;
-        else if (isDraw) t.draws++;
-
-        // ECO stats
-        if (game.eco) {
-            if (!ecoMap.has(game.eco)) {
-                ecoMap.set(game.eco, {
-                    name: game.openingName || game.eco,
-                    whiteWins: 0, whiteLosses: 0, whiteDraws: 0, whiteGames: 0,
-                    blackWins: 0, blackLosses: 0, blackDraws: 0, blackGames: 0,
-                });
-            }
-            const e = ecoMap.get(game.eco);
-            if (side === 'white') {
-                e.whiteGames++;
-                if (isWin) e.whiteWins++;
-                else if (isLoss) e.whiteLosses++;
-                else if (isDraw) e.whiteDraws++;
-            } else {
-                e.blackGames++;
-                if (isWin) e.blackWins++;
-                else if (isLoss) e.blackLosses++;
-                else if (isDraw) e.blackDraws++;
-            }
-        }
-
-        // Opponent stats
-        const opponent = side === 'white' ? game.black : game.white;
-        if (!opponentMap.has(opponent)) {
-            opponentMap.set(opponent, { wins: 0, losses: 0, draws: 0 });
-        }
-        const o = opponentMap.get(opponent);
-        if (isWin) o.wins++;
-        else if (isLoss) o.losses++;
-        else if (isDraw) o.draws++;
-    }
-
-    return {
-        total: wins + losses + draws,
-        wins, losses, draws,
-        whiteGames, whiteWins, whiteLosses, whiteDraws,
-        blackGames, blackWins, blackLosses, blackDraws,
-        tournaments: tournamentMap,
-        ecos: ecoMap,
-        opponents: opponentMap,
-    };
-}
-
-function renderTabs(body) {
-    body.innerHTML = `
-        <div class="profile-tabs" id="profile-tabs">
-            <button class="profile-tab profile-tab-active" data-tab="overview">Overview</button>
-            <button class="profile-tab" data-tab="openings">Openings</button>
-            <button class="profile-tab" data-tab="opponents">Opponents</button>
-        </div>
-        <div class="profile-tab-content" id="profile-tab-content"></div>
-    `;
-
-    document.getElementById('profile-tabs').addEventListener('click', (e) => {
-        const tab = e.target.closest('[data-tab]');
-        if (!tab) return;
-        const tabName = tab.dataset.tab;
-        if (tabName === activeTab) return;
-        activeTab = tabName;
-        document.querySelectorAll('#profile-tabs .profile-tab').forEach(t =>
-            t.classList.toggle('profile-tab-active', t.dataset.tab === tabName)
-        );
-        renderTab(tabName);
-    });
-}
-
-function renderTab(tabName) {
-    const container = document.getElementById('profile-tab-content');
-    if (!container || !cachedGames) return;
-    if (!cachedStats) cachedStats = computeStats(cachedGames, currentPlayer);
-    const stats = cachedStats;
-
-    switch (tabName) {
-        case 'overview': return renderOverview(container, stats);
-        case 'openings': return renderOpenings(container, stats);
-        case 'opponents': return renderOpponents(container, stats);
-    }
-}
-
-function scorePct(wins, draws, total) {
-    if (total === 0) return '0.0';
-    return ((wins + 0.5 * draws) / total * 100).toFixed(1);
-}
-
-function winBar(wins, losses, draws, total) {
-    if (total === 0) return '<div class="profile-bar"></div>';
-    const wPct = wins / total * 100;
-    const dPct = draws / total * 100;
-    const lPct = losses / total * 100;
-    return `<div class="profile-bar">
-        <div class="profile-bar-win" style="width:${wPct}%">${wins > 0 ? `<span>${wins}</span>` : ''}</div>
-        <div class="profile-bar-draw" style="width:${dPct}%">${draws > 0 ? `<span>${draws}</span>` : ''}</div>
-        <div class="profile-bar-loss" style="width:${lPct}%">${losses > 0 ? `<span>${losses}</span>` : ''}</div>
-    </div>`;
-}
-
-function statRow(label, icon, wins, losses, draws, total, action) {
-    const pct = scorePct(wins, draws, total);
-    return `
-        <button class="profile-stat-row" data-profile-action="${action}">
-            <div class="profile-stat-label-row">
-                ${icon ? `<img class="profile-color-icon" src="pieces/${icon}" alt="${label}">` : ''}
-                <span class="profile-stat-label">${label}</span>
-            </div>
-            ${winBar(wins, losses, draws, total)}
-            <div class="profile-stat-summary">${pct}%<span class="profile-stat-divider">|</span>${total} game${total !== 1 ? 's' : ''}</div>
-        </button>`;
-}
-
-function renderOverview(container, stats) {
-    // Sort tournaments by first game date (most recent first)
-    const entries = [...stats.tournaments.entries()];
-    const slugOrder = [];
-    const seen = new Set();
-    for (const g of cachedGames) {
-        if (!seen.has(g.tournamentSlug)) {
-            seen.add(g.tournamentSlug);
-            slugOrder.push(g.tournamentSlug);
-        }
-    }
-    entries.sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
-
-    let tournamentHtml = '<div class="profile-tournament-list">';
-    for (const [slug, t] of entries) {
-        const total = t.wins + t.losses + t.draws;
-        const sp = scorePct(t.wins, t.draws, total);
-        tournamentHtml += `
-            <button class="profile-tournament-row" data-slug="${slug}" data-player="${currentPlayer}">
-                <div class="profile-tournament-name">${t.name}</div>
-                <div class="profile-tournament-stats">
-                    <span class="profile-tournament-record">${t.wins}W-${t.losses}L-${t.draws}D</span>
-                    ${winBar(t.wins, t.losses, t.draws, total)}
-                    <span class="profile-tournament-pct">${sp}%</span>
-                </div>
-            </button>`;
-    }
-    tournamentHtml += '</div>';
-
-    container.innerHTML = `
-        ${statRow('All Games', null, stats.wins, stats.losses, stats.draws, stats.total, 'all')}
-        ${statRow('As White', 'wK.webp', stats.whiteWins, stats.whiteLosses, stats.whiteDraws, stats.whiteGames, 'white')}
-        ${statRow('As Black', 'bK.webp', stats.blackWins, stats.blackLosses, stats.blackDraws, stats.blackGames, 'black')}
-        <div class="profile-section-title">Tournaments</div>
-        ${tournamentHtml}
-    `;
-}
-
-function openingFamily(name) {
-    const colon = name.indexOf(':');
-    return colon > 0 ? name.slice(0, colon).trim() : name;
-}
-
-function groupByFamily(entries, side) {
-    const wKey = side === 'white' ? 'whiteWins' : 'blackWins';
-    const lKey = side === 'white' ? 'whiteLosses' : 'blackLosses';
-    const dKey = side === 'white' ? 'whiteDraws' : 'blackDraws';
-    const gKey = side === 'white' ? 'whiteGames' : 'blackGames';
-
-    const families = new Map();
-    for (const [code, e] of entries) {
-        if (e[gKey] === 0) continue;
-        const family = openingFamily(e.name);
-        if (!families.has(family)) {
-            families.set(family, { codes: [], wins: 0, losses: 0, draws: 0, total: 0 });
-        }
-        const f = families.get(family);
-        f.codes.push(code);
-        f.wins += e[wKey];
-        f.losses += e[lKey];
-        f.draws += e[dKey];
-        f.total += e[gKey];
-    }
-
-    return [...families.entries()]
-        .map(([family, f]) => ({ family, ...f }))
-        .sort((a, b) => b.total - a.total);
-}
-
-function renderOpeningSection(families, color, icon) {
-    let html = `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/${icon}" alt="${color}"> As ${color}</div>`;
-    if (families.length === 0) {
-        return html + '<p class="profile-empty-small">No games with ECO data.</p>';
-    }
-    html += '<div class="profile-opening-list">';
-    for (const f of families) {
-        const wp = scorePct(f.wins, f.draws, f.total);
-        html += `
-            <button class="profile-opening-row" data-eco="${f.codes.join(',')}" data-color="${color.toLowerCase()}" data-family="${f.family}">
-                <span class="profile-opening-name">${f.family}</span>
-                <span class="profile-opening-count">${f.total}</span>
-                ${winBar(f.wins, f.losses, f.draws, f.total)}
-                <span class="profile-opening-pct">${wp}%</span>
-            </button>`;
-    }
-    return html + '</div>';
-}
-
-function renderOpenings(container, stats) {
-    const entries = [...stats.ecos.entries()];
-    container.innerHTML =
-        renderOpeningSection(groupByFamily(entries, 'white'), 'White', 'wK.webp') +
-        renderOpeningSection(groupByFamily(entries, 'black'), 'Black', 'bK.webp');
-}
-
-function renderOpponents(container, stats) {
-    const allEntries = [...stats.opponents.entries()]
-        .map(([name, o]) => ({ name, ...o, total: o.wins + o.losses + o.draws }))
-        .sort((a, b) => b.total - a.total);
-
-    if (allEntries.length === 0) {
-        container.innerHTML = '<p class="profile-empty-small">No opponents found.</p>';
-        return;
-    }
-
-    container.innerHTML = `
-        <div class="profile-opponent-search">
-            <input type="text" class="profile-opponent-input" placeholder="Search opponents..." id="profile-opponent-search">
-        </div>
-        <div class="profile-opponent-list" id="profile-opponent-list"></div>
-    `;
-
-    const listEl = document.getElementById('profile-opponent-list');
-    const searchInput = document.getElementById('profile-opponent-search');
-
-    function renderOpponentList(filter = '') {
-        const fLower = filter.toLowerCase();
-        const filtered = fLower
-            ? allEntries.filter(o => o.name.toLowerCase().includes(fLower))
-            : allEntries;
-
-        if (filtered.length === 0) {
-            listEl.innerHTML = '<p class="profile-empty-small">No matching opponents.</p>';
-            return;
-        }
-
-        let html = '';
-        for (const o of filtered) {
-            const wp = scorePct(o.wins, o.draws, o.total);
-            html += `
-                <div class="profile-opponent-row">
-                    <button class="profile-opponent-profile" data-opponent="${o.name}" title="View ${o.name}'s profile">
-                        <span class="profile-opponent-name">${o.name}</span>
-                    </button>
-                    <button class="profile-opponent-h2h" data-h2h="${o.name}" title="Head-to-head games">
-                        <span class="profile-opponent-record">${o.wins}W-${o.losses}L-${o.draws}D</span>
-                        ${winBar(o.wins, o.losses, o.draws, o.total)}
-                        <span class="profile-opponent-pct">${wp}%</span>
-                    </button>
-                </div>`;
-        }
-        listEl.innerHTML = html;
-    }
-
-    renderOpponentList();
-    searchInput.addEventListener('input', () => renderOpponentList(searchInput.value.trim()));
-}
-
 export function initPlayerProfile(mount) {
     mount.innerHTML = `
         <div id="profile-modal" class="modal hidden" role="dialog" aria-labelledby="profile-modal-title" aria-modal="true">
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-content-wide modal-content-scrollable profile-modal-content">
                 <h2 id="profile-modal-title"><span id="profile-player-name"></span></h2>
-                <div id="profile-body" class="profile-body"></div>
+                <div id="profile-body" class="profile-body">
+                    <p class="profile-loading hidden">Loading stats...</p>
+                    <p class="profile-empty hidden">No games found for this player.</p>
+                    <p class="profile-error hidden"></p>
+                    <div id="profile-tabs" class="profile-tabs hidden">
+                        <button class="profile-tab" data-tab="overview">Overview</button>
+                        <button class="profile-tab" data-tab="openings">Openings</button>
+                        <button class="profile-tab" data-tab="opponents">Opponents</button>
+                    </div>
+                    <div class="profile-tab-content hidden" id="profile-tab-content"></div>
+                </div>
             </div>
         </div>`;
     onModalClose('profile-modal', closePlayerProfile);
+
+    // Tab switching
+    document.getElementById('profile-tabs').addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-tab]');
+        if (!tab) return;
+        const tabs = document.getElementById('profile-tabs');
+        if (tab.dataset.tab === tabs.dataset.active) return;
+        tabs.dataset.active = tab.dataset.tab;
+        renderActiveTab();
+    });
 
     async function browseTo(query) {
         closePlayerProfile();
@@ -426,40 +302,12 @@ export function initPlayerProfile(mount) {
         openBrowser(query);
     }
 
-    // Clicks within profile body — tournament rows, opponent rows, stat rows
+    // Click handling — all profile rows and opponent links
     document.getElementById('profile-body').addEventListener('click', async (e) => {
-        const tournamentRow = e.target.closest('[data-slug]');
-        if (tournamentRow) {
-            return browseTo({ player: tournamentRow.dataset.player, tournament: tournamentRow.dataset.slug });
-        }
+        const profileLink = e.target.closest('[data-action-profile]');
+        if (profileLink) return openPlayerProfile(profileLink.dataset.actionProfile);
 
-        const openingRow = e.target.closest('[data-eco]');
-        if (openingRow && currentPlayer) {
-            return browseTo({
-                player: currentPlayer,
-                eco: openingRow.dataset.eco.split(','),
-                color: openingRow.dataset.color,
-                ecoLabel: openingRow.dataset.family,
-            });
-        }
-
-        const h2hBtn = e.target.closest('[data-h2h]');
-        if (h2hBtn && currentPlayer) {
-            return browseTo({ player: currentPlayer, opponent: h2hBtn.dataset.h2h });
-        }
-
-        const opponentRow = e.target.closest('[data-opponent]');
-        if (opponentRow) {
-            openPlayerProfile(opponentRow.dataset.opponent);
-            return;
-        }
-
-        const statBtn = e.target.closest('[data-profile-action]');
-        if (statBtn && currentPlayer) {
-            const query = { player: currentPlayer, tournament: 'all' };
-            const action = statBtn.dataset.profileAction;
-            if (action === 'white' || action === 'black') query.color = action;
-            return browseTo(query);
-        }
+        const row = e.target.closest('[data-action-query]');
+        if (row) return browseTo(JSON.parse(row.dataset.actionQuery));
     });
 }

@@ -101,7 +101,7 @@ Server stores canonical names in D1 (`white_norm="boyer,john"`). `/query` return
 
 ### PGN Parsing
 
-PGN names use "LastName, FirstName" format (e.g., `Boyer, John`), while the UI uses "FirstName LastName" (e.g., `John Boyer`). The `buildPlayerNamePatterns()` helper generates regex patterns for both formats.
+PGN names use "LastName, FirstName" format (e.g., `Boyer, John`), while the UI uses "FirstName LastName" (e.g., `John Boyer`).
 
 PGN Round field encodes board: `[Round "2.18"]` = round 2, board 18. Results: `1-0` = white wins, `0-1` = black wins, `1/2-1/2` = draw.
 

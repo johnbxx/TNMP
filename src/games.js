@@ -24,9 +24,7 @@ let _tournamentList = null;     // [{ slug, name }]
 let _activeTournamentSlug = null;
 let _fetchGeneration = 0;
 
-// Player index (populated by fetchPlayerList)
-let _allPlayers = null;         // string[]
-let _playerIndex = null;        // normalizedKey → { displayName, dbName, uscfId, rating }
+let _allPlayers = null;         // string[] (for autocomplete)
 
 /** Normalize any name format → canonical key ("boyer,john"). */
 function normalizeKey(name) {
@@ -169,11 +167,6 @@ export function updateCachedGame(gameId, headers) {
     notifyChange();
 }
 
-export function getPlayerInfo(name) {
-    if (!_playerIndex || !name) return null;
-    return _playerIndex[normalizeKey(name)] ?? null;
-}
-
 export function getOrientationForGame(game) {
     if (!_filters.playerNorm || !game) return 'White';
     if (game.blackNorm === _filters.playerNorm) return 'Black';
@@ -208,7 +201,7 @@ export async function openBrowser(query = null) {
         if (_filters.player && !isPlayerDataLoaded()) {
             _loading = true;
             notifyChange(); // let view show loading state
-            await fetchGames({ player: getPlayerInfo(_filters.player)?.dbName || _filters.player, tournament: 'all', include: 'pgn' });
+            await fetchGames({ player: _filters.player, tournament: 'all', include: 'pgn' });
             _loading = false;
         }
         if (!_tournamentData?.games) {
@@ -246,7 +239,7 @@ export async function selectPlayer(name) {
     if (!isLocalMode() && !isPlayerDataLoaded()) {
         _loading = true;
         notifyChange();
-        await fetchGames({ player: getPlayerInfo(name)?.dbName || name, tournament: 'all', include: 'pgn' });
+        await fetchGames({ player: name, tournament: 'all', include: 'pgn' });
         _loading = false;
     }
 
@@ -475,21 +468,12 @@ export function setGamesData(data) {
     // will reset filters and trigger a clean render.
 }
 
-export async function fetchPlayerList() {
+async function fetchPlayerList() {
     if (_allPlayers) return _allPlayers;
     const response = await fetch(`${WORKER_URL}/players`);
     if (!response.ok) throw new Error('Failed to fetch players');
     const data = await response.json();
-    _playerIndex = {};
-    _allPlayers = data.players.map(p => {
-        _playerIndex[normalizeKey(p.dbName || p.name)] = {
-            displayName: p.name,
-            dbName: p.dbName || p.name,
-            uscfId: p.uscfId || null,
-            rating: p.rating || null,
-        };
-        return p.name;
-    });
+    _allPlayers = data.players.map(p => p.name);
     return _allPlayers;
 }
 
