@@ -322,6 +322,36 @@ const ACTIONS = {
         e.stopPropagation();
         document.getElementById('share-popover').classList.toggle('hidden');
     },
+    'viewer-overflow': (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById('overflow-menu');
+        const stillHidden = menu.classList.toggle('hidden');
+        if (!stillHidden) {
+            // Sync toggle states when opening
+            const commentsBtn = document.getElementById('viewer-comments');
+            const branchBtn = document.getElementById('viewer-branch');
+            menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle('active', commentsBtn?.classList.contains('active'));
+            menu.querySelector('[data-action="overflow-branch"]')?.classList.toggle('active', branchBtn?.classList.contains('active'));
+        }
+    },
+    'overflow-comments': (e) => {
+        const showing = !toggleComments();
+        document.getElementById('viewer-comments')?.classList.toggle('active', showing);
+        e.target.closest('.overflow-item')?.classList.toggle('active', showing);
+    },
+    'overflow-branch': (e) => {
+        const showing = toggleBranchMode();
+        document.getElementById('viewer-branch')?.classList.toggle('active', showing);
+        e.target.closest('.overflow-item')?.classList.toggle('active', showing);
+    },
+    'overflow-analysis': () => {
+        document.getElementById('overflow-menu')?.classList.add('hidden');
+        ACTIONS['viewer-analysis']();
+    },
+    'overflow-headers': () => {
+        document.getElementById('overflow-menu')?.classList.add('hidden');
+        ACTIONS['editor-headers']();
+    },
     // Explorer
     'explorer-start': explorerGoToStart, 'explorer-prev': explorerGoBack,
     'explorer-next': explorerGoForward, 'explorer-flip': flipBoard,
@@ -358,9 +388,15 @@ document.addEventListener('click', (e) => {
     }
 
     // Dismiss share popover on outside click
-    if (!e.target.closest('.share-btn-wrapper')) {
+    if (!e.target.closest('.share-btn-wrapper') && !e.target.closest('.overflow-btn-wrapper')) {
         const popover = document.getElementById('share-popover');
         if (popover) popover.classList.add('hidden');
+    }
+
+    // Dismiss overflow menu on outside click
+    if (!e.target.closest('.overflow-btn-wrapper')) {
+        const menu = document.getElementById('overflow-menu');
+        if (menu) menu.classList.add('hidden');
     }
 
     // Browser export
@@ -397,6 +433,7 @@ document.addEventListener('click', (e) => {
 
 async function handleShareAction(action) {
     document.getElementById('share-popover').classList.add('hidden');
+    document.getElementById('overflow-menu')?.classList.add('hidden');
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {

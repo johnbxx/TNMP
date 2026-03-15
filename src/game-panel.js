@@ -95,7 +95,7 @@ export function initGamePanel(mount) {
                     <button data-action="viewer-end" class="viewer-nav-btn" aria-label="Go to end" data-tooltip="End"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></svg></button>
                 </div>
                 <div class="viewer-toolbar-sep"></div>
-                <div class="viewer-tool-group">
+                <div class="viewer-tool-group viewer-tool-group-end">
                     <button data-action="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess" data-tooltip="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
                     <div class="share-btn-wrapper">
                         <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
@@ -107,9 +107,20 @@ export function initGamePanel(mount) {
                         </div>
                     </div>
                     <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg></button>
-                    <!-- Submit button: re-enable when SUBMISSIONS_ENABLED is true
-                    <button id="viewer-submit" data-action="viewer-submit" class="viewer-tool-btn viewer-submit-btn hidden" aria-label="Submit game" data-tooltip="Submit"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
-                    -->
+                </div>
+                <div class="overflow-btn-wrapper">
+                    <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                    <div id="overflow-menu" class="overflow-menu hidden">
+                        <button class="overflow-item" data-action="overflow-comments"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>Comments</button>
+                        <button class="overflow-item" data-action="overflow-branch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg>Variations</button>
+                        <button class="overflow-item" data-action="overflow-analysis"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>Analyze on Lichess</button>
+                        <button class="overflow-item" data-action="overflow-headers"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg>Game Info</button>
+                        <div class="overflow-sep"></div>
+                        <button class="overflow-item" data-action="share-copy-pgn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Copy PGN</button>
+                        <button class="overflow-item" data-action="share-copy-link"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>Copy Link</button>
+                        <button class="overflow-item" data-action="share-download"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>Download PGN</button>
+                        <button class="overflow-item" data-action="share-native"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg>Share...</button>
+                    </div>
                 </div>
                 </div>
             </div>

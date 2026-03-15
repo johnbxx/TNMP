@@ -1430,6 +1430,8 @@ select.editor-header-input option {
     min-width: 0;
     height: 120px;
     overflow-y: auto;
+    user-select: none;
+    -webkit-user-select: none;
     overflow-x: hidden;
     padding: 0.5rem 0.75rem;
     background: var(--overlay-dark);
@@ -1594,6 +1596,8 @@ select.editor-header-input option {
     margin-top: 0.5rem;
     padding: 0.25rem;
     flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
 }
 .viewer-toolbar.hidden {
     display: none;
@@ -1766,6 +1770,70 @@ select.editor-header-input option {
 
 .share-option.hidden {
     display: none;
+}
+
+/* Overflow menu (mobile only — hidden on desktop) */
+.overflow-btn-wrapper {
+    display: none; /* shown via mobile media query */
+    position: relative;
+}
+
+.overflow-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    min-width: 180px;
+    overflow: hidden;
+}
+
+.overflow-menu.hidden {
+    display: none;
+}
+
+.overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.overflow-item svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.overflow-item:hover {
+    background: var(--overlay-light);
+}
+
+.overflow-item.active {
+    color: var(--accent);
+}
+
+.overflow-item.active svg {
+    color: var(--accent);
+}
+
+.overflow-sep {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.25rem 0;
 }
 
 /* Emphasize play button */
@@ -2403,6 +2471,43 @@ select.editor-header-input {
     .editor-comment-input:not(.hidden) {
         min-height: 3rem;
         max-height: 5rem;
+    }
+
+    /* Mobile toolbar: [flip] [nav×5] [overflow] */
+    .viewer-toolbar {
+        justify-content: space-evenly;
+        gap: 0;
+        padding: 0.4rem 0;
+    }
+    .viewer-tool-group:first-child {
+        flex: 0;
+    }
+    .viewer-tool-group:first-child > :not([data-action="viewer-flip"]) {
+        display: none;
+    }
+    .viewer-tool-group-end {
+        display: none;
+    }
+    .viewer-toolbar-sep {
+        margin: 0 0.15rem;
+    }
+    .viewer-nav-group {
+        flex: 1;
+        justify-content: space-evenly;
+    }
+    .overflow-btn-wrapper {
+        display: flex;
+    }
+    .viewer-tool-btn,
+    .viewer-nav-btn,
+    .viewer-overflow-btn {
+        width: 3rem;
+        height: 3rem;
+        padding: 0.55rem;
+    }
+    #viewer-play {
+        width: 3.5rem;
+        height: 3.5rem;
     }
 }
 
