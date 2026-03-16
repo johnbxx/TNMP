@@ -39,6 +39,7 @@ export default [
                 getComputedStyle: 'readonly',
                 CSS: 'readonly',
                 structuredClone: 'readonly',
+                btoa: 'readonly',
             },
         },
         rules: {

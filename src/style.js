@@ -6,7 +6,7 @@
  * Board colors are applied by regenerating an inline SVG checkerboard.
  */
 
-import { openModal, closeModal } from './modal.js';
+import { openModal } from './modal.js';
 
 // --- Piece themes ---
 
