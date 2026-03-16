@@ -202,7 +202,7 @@ function goToNode(nodeId) {
     if (_nodes[nodeId].deleted) return;
     _currentNodeId = nodeId;
     const node = _nodes[nodeId];
-    _onPositionChange?.(node.fen, node.from, node.to);
+    _onPositionChange?.(node.fen, node.from, node.to, node.annotations);
     notifyChange();
 }
 
@@ -275,7 +275,7 @@ export function playMove(san) {
     if (parent.mainChild === null) parent.mainChild = node.id;
     parent.children.push(node.id);
     _currentNodeId = node.id;
-    _onPositionChange?.(node.fen, node.from, node.to);
+    _onPositionChange?.(node.fen, node.from, node.to, node.annotations);
     notifyChange();
 }
 

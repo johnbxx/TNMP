@@ -1,5 +1,5 @@
 /**
- * Board — dumb chess board renderer.
+ * Board — dumb chess board renderer (chessground).
  *
  * Accepts positions and renders them. Handles drag-and-drop and click-to-move,
  * validates move legality, and reports user moves upstream via onMove callback.
@@ -7,76 +7,37 @@
  */
 
 import { Chess } from 'chess.js';
-import { Chessboard2 } from '@chrisoakman/chessboard2/dist/chessboard2.min.mjs';
-import '@chrisoakman/chessboard2/dist/chessboard2.min.css';
+import { Chessground } from '@lichess-org/chessground';
+import '@lichess-org/chessground/assets/chessground.base.css';
+import '@lichess-org/chessground/assets/chessground.brown.css';
+import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import { START_FEN } from './pgn.js';
 
-let _board = null;
+let _cg = null;
 let _onMove = null;          // callback: (san, from, to) => void
 let _currentFen = null;
-let _selectedSquare = null;
-let _selectedMoves = [];
-let _selectionStyleEl = null;
-let _highlightStyleEl = null;
-let _cssVars = null;
+let _orientation = 'white';
 
-function cssVar(name) {
-    if (!_cssVars) {
-        const s = getComputedStyle(document.documentElement);
-        _cssVars = {
-            '--board-select': s.getPropertyValue('--board-select').trim(),
-            '--board-dot': s.getPropertyValue('--board-dot').trim(),
-            '--board-capture': s.getPropertyValue('--board-capture').trim(),
-            '--board-highlight': s.getPropertyValue('--board-highlight').trim(),
-        };
+/**
+ * Convert a FEN string to a chessground-compatible Dests map.
+ * Returns Map<Key, Key[]> of legal move destinations per square.
+ */
+function computeDests(fen) {
+    const engine = new Chess(fen);
+    const dests = new Map();
+    for (const move of engine.moves({ verbose: true })) {
+        if (!dests.has(move.from)) dests.set(move.from, []);
+        const targets = dests.get(move.from);
+        if (!targets.includes(move.to)) targets.push(move.to);
     }
-    return _cssVars[name];
+    return dests;
 }
 
-function showSelection(square, moves) {
-    const el = _selectionStyleEl;
-    const engine = new Chess(_currentFen);
-    const selColor = cssVar('--board-select');
-    const dotColor = cssVar('--board-dot');
-    const captureRing = cssVar('--board-capture');
-
-    const rules = [
-        `#viewer-board [data-square-coord="${square}"] { box-shadow: inset 0 0 0 100px ${selColor}; }`,
-    ];
-    for (const m of moves) {
-        const isCapture = engine.get(m.to) !== null;
-        if (isCapture) {
-            rules.push(`#viewer-board [data-square-coord="${m.to}"] { box-shadow: inset 0 0 0 4px ${captureRing}; border-radius: 0; }`);
-        } else {
-            rules.push(`#viewer-board [data-square-coord="${m.to}"]::after { content: ''; position: absolute; top: 50%; left: 50%; width: 28%; height: 28%; transform: translate(-50%,-50%); background: ${dotColor}; border-radius: 50%; pointer-events: none; }`);
-        }
-    }
-    el.textContent = rules.join('\n');
-}
-
-function clearSelection() {
-    _selectedSquare = null;
-    _selectedMoves = [];
-    _selectionStyleEl.textContent = '';
-}
-
-function tryMakeMove(from, to, promotion) {
-    const engine = new Chess(_currentFen);
-    const piece = engine.get(from);
-    if (!piece) return false;
-
-    if (!promotion && piece.type === 'p' &&
-        ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))) {
-        if (!engine.moves({ square: from, verbose: true }).some(m => m.to === to)) return false;
-        showPromotionPicker(from, to, piece.color);
-        return true;
-    }
-
-    let move;
-    try { move = engine.move({ from, to, promotion }); } catch { return false; }
-    if (!move) return false;
-    _onMove?.(move.san, move.from, move.to);
-    return true;
+/**
+ * Return the color whose turn it is from a FEN.
+ */
+function turnColor(fen) {
+    return fen.split(' ')[1] === 'w' ? 'white' : 'black';
 }
 
 function showPromotionPicker(from, to, color) {
@@ -102,82 +63,41 @@ function showPromotionPicker(from, to, color) {
         if (!btn) return;
         picker.classList.add('hidden');
         picker.removeEventListener('click', handler);
-        tryMakeMove(from, to, btn.dataset.piece);
+        makeMove(from, to, btn.dataset.piece);
     };
     picker.addEventListener('click', handler);
 }
 
-function onDragStart(evt) {
-    // Click-to-move interaction during drag
-    if (_selectedSquare) {
-        if (evt.square === _selectedSquare) {
-            const sq = document.querySelector(`#viewer-board [data-square-coord="${evt.square}"]`);
-            if (sq) sq.style.opacity = 0.999;
-            return; // allow drag of selected piece
-        }
-        const target = _selectedMoves.find(m => m.to === evt.square);
-        if (target) {
-            clearSelection();
-            tryMakeMove(_selectedSquare, evt.square);
-            return false;
-        }
-        clearSelection();
-        return false;
-    }
-
+/**
+ * Execute a move and report it upstream.
+ * Returns true if the move was legal.
+ */
+function makeMove(from, to, promotion) {
     const engine = new Chess(_currentFen);
-    const piece = evt.piece;
+    const piece = engine.get(from);
     if (!piece) return false;
-    const isWhitePiece = piece.charAt(0) === 'w';
-    const whiteToMove = engine.turn() === 'w';
-    if (isWhitePiece !== whiteToMove) return false;
 
-    const moves = engine.moves({ square: evt.square, verbose: true });
-    if (moves.length === 0) return false;
-
-    const sq = document.querySelector(`#viewer-board [data-square-coord="${evt.square}"]`);
-    if (sq) sq.style.opacity = 0.999;
-}
-
-function onDrop(evt) {
-    if (evt.source !== evt.target) clearSelection();
-    const reset = () => document.querySelectorAll('#viewer-board [data-square-coord]').forEach(sq => sq.style.opacity = 1);
-    if (!tryMakeMove(evt.source, evt.target)) {
-        reset();
-        return 'snapback';
-    }
-    setTimeout(reset, 300);
-}
-
-function onSquareClick(evt) {
-    const square = evt.square;
-    const engine = new Chess(_currentFen);
-
-    if (_selectedSquare) {
-        const target = _selectedMoves.find(m => m.to === square);
-        if (target) {
-            const from = _selectedSquare;
-            clearSelection();
-            tryMakeMove(from, square);
-            return;
-        }
-        if (square === _selectedSquare) {
-            clearSelection();
-            return;
-        }
+    // Detect promotion
+    if (!promotion && piece.type === 'p' &&
+        ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))) {
+        showPromotionPicker(from, to, piece.color);
+        return true;
     }
 
-    const piece = engine.get(square);
-    if (!piece) { clearSelection(); return; }
-    const whiteToMove = engine.turn() === 'w';
-    if ((piece.color === 'w') !== whiteToMove) { clearSelection(); return; }
+    let move;
+    try { move = engine.move({ from, to, promotion }); } catch { return false; }
+    if (!move) return false;
 
-    const moves = engine.moves({ square, verbose: true });
-    if (moves.length === 0) { clearSelection(); return; }
+    _currentFen = engine.fen();
+    _onMove?.(move.san, move.from, move.to);
+    return true;
+}
 
-    _selectedSquare = square;
-    _selectedMoves = moves;
-    showSelection(square, moves);
+/**
+ * Called by chessground after a legal move (drag or click).
+ */
+function onCgMove(orig, dest) {
+    makeMove(orig, dest);
 }
 
 // --- Public API ---
@@ -195,66 +115,86 @@ export function createBoard(containerId, { onMove, orientation = 'white', fen } 
 
     _onMove = onMove || null;
     _currentFen = fen || START_FEN;
+    _orientation = orientation;
 
-    if (!_selectionStyleEl) {
-        _selectionStyleEl = document.createElement('style');
-        _selectionStyleEl.id = 'board-click-selection';
-        document.head.appendChild(_selectionStyleEl);
-    }
-    if (!_highlightStyleEl) {
-        _highlightStyleEl = document.createElement('style');
-        _highlightStyleEl.id = 'board-square-highlights';
-        document.head.appendChild(_highlightStyleEl);
-    }
+    const el = document.getElementById(containerId);
+    if (!el) return null;
 
-    _board = Chessboard2(containerId, {
-        position: _currentFen,
-        orientation,
-        draggable: true,
-        onDragStart,
-        onDrop,
-        onMousedownSquare: onSquareClick,
-        onTouchSquare: onSquareClick,
+    const turn = turnColor(_currentFen);
+    const dests = computeDests(_currentFen);
+
+    _cg = Chessground(el, {
+        fen: _currentFen,
+        orientation: _orientation,
+        turnColor: turn,
+        movable: {
+            free: false,
+            color: turn,
+            dests,
+            showDests: true,
+            events: { after: onCgMove },
+            rookCastle: true,
+        },
+        draggable: { enabled: true, showGhost: true },
+        selectable: { enabled: true },
+        highlight: { lastMove: true, check: true },
+        animation: { enabled: true, duration: 200 },
+        premovable: { enabled: false },
+        predroppable: { enabled: false },
+        coordinates: false,
     });
 
-    return _board;
+    return _cg;
 }
 
 export function setPosition(fen, animate = true) {
-    if (!_board) return;
+    if (!_cg) return;
     _currentFen = fen;
-    clearSelection();
-    _board.position(fen, animate);
+    const turn = turnColor(fen);
+    const dests = computeDests(fen);
+
+    _cg.set({
+        fen,
+        turnColor: turn,
+        movable: { color: turn, dests },
+        animation: { enabled: animate },
+    });
+    // Re-enable animation if we disabled it for this call
+    if (!animate) _cg.set({ animation: { enabled: true } });
 }
 
 export function highlightSquares(from, to) {
-    if (!_board) return;
-    const el = _highlightStyleEl;
-    if (!from || !to) {
-        el.textContent = '';
-        return;
-    }
-    const color = cssVar('--board-highlight');
-    el.textContent = [from, to]
-        .map(sq => `#viewer-board [data-square-coord="${sq}"] { box-shadow: inset 0 0 0 100px ${color}; }`)
-        .join('\n');
+    if (!_cg) return;
+    _cg.set({ lastMove: from && to ? [from, to] : undefined });
+}
+
+export function setAutoShapes(shapes) {
+    if (!_cg) return;
+    _cg.setAutoShapes(shapes || []);
+}
+
+export function setCheck(color) {
+    if (!_cg) return;
+    _cg.set({ check: color || false });
 }
 
 export function flip() {
-    if (!_board) return;
-    _board.orientation('flip');
+    if (!_cg) return;
+    _cg.toggleOrientation();
+    _orientation = _orientation === 'white' ? 'black' : 'white';
 }
 
 export function setOrientation(color) {
-    if (!_board) return;
-    _board.orientation(color);
+    if (!_cg) return;
+    _orientation = color;
+    _cg.set({ orientation: color });
 }
 
 export function resize() {
-    if (!_board) return;
+    if (!_cg) return;
     const boardEl = document.getElementById('viewer-board');
     const main = boardEl?.closest('.viewer-main');
-    if (!boardEl || !main) { _board.resize(); return; }
+    if (!boardEl || !main) { _cg.redrawAll(); return; }
 
     const header = main.querySelector('.viewer-header');
     const toolbar = main.querySelector('.viewer-toolbar:not(.hidden)');
@@ -271,16 +211,13 @@ export function resize() {
     if (available > 0) {
         boardEl.style.maxWidth = `${available}px`;
     }
-    _board.resize();
+    _cg.redrawAll();
 }
 
 export function destroy() {
-    if (_board) {
-        // Cancel pending animations before destroying to prevent chessboard2
-        // transition callbacks from firing on removed DOM elements
-        try { _board.position(_currentFen, false); } catch { /* already torn down */ }
-        _board.destroy();
-        _board = null;
+    if (_cg) {
+        _cg.destroy();
+        _cg = null;
     }
 
     // Replace the board DOM element to strip orphaned event listeners
@@ -292,13 +229,6 @@ export function destroy() {
         oldEl.replaceWith(fresh);
     }
 
-    _selectedSquare = null;
-    _selectedMoves = [];
-
-    if (_highlightStyleEl) { _highlightStyleEl.remove(); _highlightStyleEl = null; }
-    if (_selectionStyleEl) { _selectionStyleEl.remove(); _selectionStyleEl = null; }
-
     _currentFen = null;
     _onMove = null;
-    _cssVars = null;
 }

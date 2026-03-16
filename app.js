@@ -3,6 +3,7 @@ import { showLoading, showState, showError, updateTournamentLink, hideOfflineBan
 import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
 import { shareStatus } from './src/share.js';
 import { openSettings, saveSettings, initSettings } from './src/settings.js';
+import { openStyle, initStyle } from './src/style.js';
 import { previewState, initDebugPanel } from './src/debug.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
@@ -270,6 +271,7 @@ document.addEventListener('keydown', (e) => {
 // --- Action dispatch table ---
 const ACTIONS = {
     'open-settings': openSettings,
+    'open-style': openStyle,
     'share-status': shareStatus,
     'save-settings': () => saveSettings(wrappedCheckPairings),
     'enable-push': enablePush,
@@ -484,6 +486,7 @@ if ('serviceWorker' in navigator) {
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
     initSettings(document.getElementById('settings-mount'));
+    initStyle(document.getElementById('style-mount'));
     initGamePanel(document.getElementById('game-panel-mount'));
 
     // Comments button starts active

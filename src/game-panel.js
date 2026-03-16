@@ -75,9 +75,11 @@ export function initGamePanel(mount) {
                     <div id="explorer-header" class="hidden"></div>
                 </div>
                 <div class="viewer-layout">
-                    <div id="viewer-board" class="viewer-board"></div>
-                    <div id="editor-eco" class="editor-eco hidden"></div>
-                    <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
+                    <div class="viewer-board-col">
+                        <div id="viewer-board" class="viewer-board"></div>
+                        <div id="editor-eco" class="editor-eco hidden"></div>
+                        <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
+                    </div>
                     <div id="viewer-moves" class="viewer-moves"></div>
                 </div>
                 <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
@@ -357,9 +359,41 @@ function onBoardMove(san) {
     }
 }
 
-function onPositionChange(fen, from, to) {
+// Map PGN annotation color codes to chessground brush names
+const BRUSH_MAP = { G: 'green', R: 'red', B: 'blue', Y: 'yellow', O: 'yellow' };
+
+function parseShapeCode(code) {
+    // Standard: G=green, R=red, B=blue, Y=yellow, O=orange→yellow
+    // Some tools prefix with L (light), e.g. LRc3 = light-red on c3
+    const m = code.match(/^([A-Z]*)([a-h][1-8])([a-h][1-8])?$/);
+    if (!m) return null;
+    const colorStr = m[1];
+    const brush = BRUSH_MAP[colorStr[colorStr.length - 1]] || 'green';
+    return { brush, orig: m[2], dest: m[3] || undefined };
+}
+
+function annotationsToShapes(annotations) {
+    if (!annotations) return [];
+    const shapes = [];
+    if (annotations.arrows) {
+        for (const a of annotations.arrows) {
+            const s = parseShapeCode(a);
+            if (s) shapes.push(s);
+        }
+    }
+    if (annotations.squares) {
+        for (const s of annotations.squares) {
+            const parsed = parseShapeCode(s);
+            if (parsed) shapes.push(parsed);
+        }
+    }
+    return shapes;
+}
+
+function onPositionChange(fen, from, to, annotations) {
     board.setPosition(fen, true);
     board.highlightSquares(from, to);
+    board.setAutoShapes(annotationsToShapes(annotations));
 }
 
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
@@ -464,7 +498,7 @@ function setToolbarButtons() {
 }
 
 function ensureBoard() {
-    if (!document.querySelector('#viewer-board chess-board')) {
+    if (!document.querySelector('#viewer-board .cg-wrap')) {
         board.createBoard('viewer-board', { onMove: onBoardMove, orientation: 'white' });
     }
 }
@@ -507,6 +541,7 @@ function loadExplorer({ restoreMoves } = {}) {
         renderExplorerHeader(_gamesState);
         renderExplorerMoveList();
         board.setPosition(_gamesState.explorerFen, false);
+        board.resize();
     } else {
         games.launchExplorer({ restoreMoves });
     }
