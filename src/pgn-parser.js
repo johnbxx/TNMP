@@ -11,9 +11,9 @@ import { getHeader } from './utils.js';
 export const NAG_INFO = {
     1:   ['!',      'Good move',                    'move'],
     2:   ['?',      'Poor move',                    'move'],
-    3:   ['\u203C', 'Brilliant move',               'move'],
+    3:   ['\u203C\uFE0E', 'Brilliant move',               'move'],
     4:   ['\u2047', 'Blunder',                      'move'],
-    5:   ['\u2049', 'Interesting move',             'move'],
+    5:   ['\u2049\uFE0E', 'Interesting move',             'move'],
     6:   ['\u2048', 'Dubious move',                 'move'],
     7:   ['\u25A1', 'Forced move',                  'move'],
     8:   ['\u25A1', 'Only move',                    'move'],

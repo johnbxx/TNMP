@@ -28,9 +28,6 @@ export function openModal(modalId, focusTarget) {
     previousFocus.set(modalId, document.activeElement);
     modal.classList.remove('hidden', 'closing');
     document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.top = `-${window.scrollY}px`;
 
     const container = document.querySelector('.container');
     if (container) container.setAttribute('aria-hidden', 'true');
@@ -63,12 +60,7 @@ export function closeModal(modalId) {
 
         const anyOpen = document.querySelector('.modal:not(.hidden)');
         if (!anyOpen) {
-            const scrollY = Math.abs(parseInt(document.body.style.top || '0', 10));
             document.body.style.overflow = '';
-            document.body.style.position = '';
-            document.body.style.width = '';
-            document.body.style.top = '';
-            window.scrollTo(0, scrollY);
             const container = document.querySelector('.container');
             if (container) container.removeAttribute('aria-hidden');
         }

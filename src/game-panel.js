@@ -195,9 +195,9 @@ export function initGamePanel(mount) {
                 <div class="nag-section-title">Move</div>
                 <button class="nag-btn" data-nag="1"><span class="nag-symbol">!</span><span class="nag-label">Good move</span></button>
                 <button class="nag-btn" data-nag="2"><span class="nag-symbol">?</span><span class="nag-label">Poor move</span></button>
-                <button class="nag-btn" data-nag="3"><span class="nag-symbol">‼</span><span class="nag-label">Brilliant</span></button>
+                <button class="nag-btn" data-nag="3"><span class="nag-symbol">‼︎</span><span class="nag-label">Brilliant</span></button>
                 <button class="nag-btn" data-nag="4"><span class="nag-symbol">⁇</span><span class="nag-label">Blunder</span></button>
-                <button class="nag-btn" data-nag="5"><span class="nag-symbol">⁉</span><span class="nag-label">Interesting</span></button>
+                <button class="nag-btn" data-nag="5"><span class="nag-symbol">⁉︎</span><span class="nag-label">Interesting</span></button>
                 <button class="nag-btn" data-nag="6"><span class="nag-symbol">⁈</span><span class="nag-label">Dubious</span></button>
                 <button class="nag-btn" data-nag="7"><span class="nag-symbol">□</span><span class="nag-label">Forced</span></button>
                 <button class="nag-btn" data-nag="9"><span class="nag-symbol">☒</span><span class="nag-label">Worst move</span></button>
@@ -240,9 +240,9 @@ export function initGamePanel(mount) {
             <div class="ctx-nag-row">
                 <button class="ctx-nag" data-nag="1">!</button>
                 <button class="ctx-nag" data-nag="2">?</button>
-                <button class="ctx-nag" data-nag="3">‼</button>
+                <button class="ctx-nag" data-nag="3">‼︎</button>
                 <button class="ctx-nag" data-nag="4">⁇</button>
-                <button class="ctx-nag" data-nag="5">⁉</button>
+                <button class="ctx-nag" data-nag="5">⁉︎</button>
                 <button class="ctx-nag" data-nag="6">⁈</button>
             </div>
             <button class="ctx-item" data-ctx-action="annotate">More annotations...</button>
@@ -1107,8 +1107,7 @@ function renderMovesInlineHtml(nodes, currentNodeId, startId, isVariation) {
         else if (id === startId && isVariation) html += `<span class="move-number">${moveNum}...</span>`;
         const cls = isVariation ? 'move-variation' : 'move';
         const current = id === currentNodeId ? ' move-current' : '';
-        html += `<span class="${cls}${current}" data-node-id="${id}">${node.san}</span>`;
-        if (node.nags?.length > 0) html += renderNags(node.nags);
+        html += `<span class="${cls}${current}" data-node-id="${id}">${node.san}${renderNags(node.nags)}</span>`;
         html += ' ';
         const comment = cleanComment(node.comment);
         if (comment) html += `<span class="move-comment">${comment}</span> `;
