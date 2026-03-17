@@ -1,6 +1,7 @@
 name = "tnmp-notifications"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
+workers_dev = true
 
 [triggers]
 # Pairings: every minute Mon 8PM-midnight Pacific → Tue in UTC
@@ -19,6 +20,10 @@ id = "69d27221bb904515958233a6c9481e75"
 [[kv_namespaces]]
 binding = "GAMES"
 id = "dd3adec3b60b4002b71eaa1d1bae129e"
+
+[[routes]]
+pattern = "api.tnmpairings.com"
+custom_domain = true
 
 [[d1_databases]]
 binding = "DB"
