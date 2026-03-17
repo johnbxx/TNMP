@@ -18,6 +18,8 @@ Every Monday evening, players in one of the longest-running chess tournaments in
 
 ## Architecture
 
+[Full architecture & API reference →](https://tnmpairings.com/architecture)
+
 Two deployments on Cloudflare, no backend servers:
 
 - **Frontend** — Vanilla JS PWA on Cloudflare Pages. Vite build, zero runtime dependencies.
