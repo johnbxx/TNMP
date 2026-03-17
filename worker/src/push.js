@@ -55,19 +55,15 @@ export async function handlePushSubscribe(request, env) {
         }
     }
 
-    // Migrate: if device-based client, delete any lingering legacy key for this endpoint
+    // Migrate: if device-based client, delete any lingering legacy keys
     if (deviceId) {
+        // Clean up legacy key for current endpoint
         const legacyK = await legacyKey(subscription.endpoint);
-        if (await env.SUBSCRIBERS.get(legacyK)) {
-            console.log(`Migrating legacy key ${legacyK} → ${key}`);
-            await env.SUBSCRIBERS.delete(legacyK);
-        }
-        // Also clean up legacy key for old endpoint
+        try { await env.SUBSCRIBERS.delete(legacyK); } catch { /* ignore */ }
+        // Clean up legacy key for old endpoint too
         if (oldEndpoint && oldEndpoint !== subscription.endpoint) {
             const oldLegacyK = await legacyKey(oldEndpoint);
-            if (await env.SUBSCRIBERS.get(oldLegacyK)) {
-                await env.SUBSCRIBERS.delete(oldLegacyK);
-            }
+            try { await env.SUBSCRIBERS.delete(oldLegacyK); } catch { /* ignore */ }
         }
     }
 
