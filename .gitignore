@@ -3,13 +3,6 @@ dist/
 .wrangler/
 .DS_Store
 .dev.vars
-backups/
-pgn-export/
-pgn-export-bare/
 *.pgn
 *.png
-.gitnexus/
-data/
-scripts/
-public/knight-loader.html
-public/tnm-events.html
+local/
