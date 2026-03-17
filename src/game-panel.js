@@ -532,7 +532,7 @@ function loadExplorer({ restoreMoves } = {}) {
     document.getElementById('explorer-header')?.classList.remove('hidden');
     document.getElementById('editor-comment-input')?.classList.add('hidden');
 
-    board.setOrientation('white');
+    board.setOrientation(_gamesState?.color === 'black' ? 'black' : 'white');
     board.highlightSquares(null, null);
 
     ensureBoard();
@@ -1012,6 +1012,7 @@ function renderExplorerMoveListHtml(stats, moveHistory) {
     html += '<div class="explorer-toolbar">';
     html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset"${dis}><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>`;
     html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back"${dis}><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="18,5 7,12 18,19"/></svg></button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-flip" aria-label="Flip board"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>`;
     if (total > 0) {
         html += `<button class="explorer-tb-btn explorer-tb-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
     }
@@ -1633,7 +1634,13 @@ function wireBrowserListeners(panelEl) {
                 loadExplorer();
                 games.toggleTournamentFilter(chip.dataset.value);
             } else if (chip.dataset.chip === 'color') {
-                games.toggleColorFilter(chip.dataset.value);
+                const toggling = chip.dataset.value;
+                const wasActive = _gamesState?.color === toggling;
+                games.toggleColorFilter(toggling);
+                // Orient board when entering a color filter
+                if (!wasActive && _viewMode === 'explorer') {
+                    board.setOrientation(toggling === 'black' ? 'black' : 'white');
+                }
             }
             return;
         }
@@ -1691,6 +1698,7 @@ export const goToPrev = () => pgn.goToPrev();
 export const goToNext = () => { const c = pgn.goToNext(); if (c) showBranchPopover(c); };
 export const goToEnd = () => pgn.goToEnd();
 export const flipBoard = () => board.flip();
+export const setBoardOrientation = (color) => board.setOrientation(color);
 export const toggleAutoPlay = () => pgn.toggleAutoPlay();
 export const toggleComments = () => pgn.toggleComments();
 export const toggleBranchMode = () => pgn.toggleBranchMode();

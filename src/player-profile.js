@@ -1,7 +1,7 @@
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
 import { normalizeKey, openBrowser, closeExplorer, explorerPlayMove } from './games.js';
-import { openGamePanel } from './game-panel.js';
+import { openGamePanel, setBoardOrientation } from './game-panel.js';
 import { findOpeningByName } from './eco.js';
 
 let currentPlayer = null;
@@ -312,6 +312,9 @@ export function initPlayerProfile(mount) {
         closeExplorer();
         await openGamePanel();
         await openBrowser(query);
+
+        // Orient board to match color filter
+        if (query.color === 'black') setBoardOrientation('black');
 
         // Advance explorer to the opening's root position
         if (query.ecoLabel) {
