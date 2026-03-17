@@ -568,6 +568,58 @@
     header h1 { font-size: 1.5rem; }
     .tab-bar button { padding: 6px 12px; font-size: 0.8rem; }
   }
+
+  /* ── API Docs ── */
+  .api-section { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+  .api-section section { margin-bottom: 64px; }
+  .api-section h2 { font-size: 1.35rem; font-weight: 700; color: var(--heading); letter-spacing: -0.02em; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .api-section h3 { font-size: 0.95rem; font-weight: 600; color: var(--text-dim); margin: 32px 0 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .api-section p { margin-bottom: 16px; font-size: 0.9rem; color: var(--text-dim); }
+  .api-section p code, .api-section li code, .api-section td code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.82em; background: var(--surface2); padding: 2px 6px; border-radius: 3px; color: var(--cyan); border: 1px solid var(--border); }
+  #view-api table, #view-tester table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 0.85rem; }
+  #view-api th, #view-tester th { text-align: left; font-weight: 600; color: var(--text-dim); padding: 8px 12px; border-bottom: 2px solid var(--border); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  #view-api td, #view-tester td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text-dim); }
+  #view-api tr:last-child td, #view-tester tr:last-child td { border-bottom: none; }
+  #view-api td:first-child, #view-tester td:first-child { white-space: nowrap; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  .split .docs { min-width: 0; }
+  .split .examples { min-width: 0; position: sticky; top: 80px; }
+  .param-name { color: var(--cyan); font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; font-size: 0.82rem; }
+  .param-type { color: #607080; font-size: 0.75rem; margin-left: 6px; }
+  .param-default { color: #505060; font-style: italic; }
+  .param-note { color: var(--text-dim); }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; overflow-x: auto; margin-bottom: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; line-height: 1.7; color: #b8b8c0; }
+  pre .comment { color: #4a4a58; } pre .method { color: var(--blue); font-weight: 600; } pre .url { color: #d0c8a0; } pre .param { color: var(--orange); } pre .string { color: #a0c8a0; } pre .key { color: #c0a090; } pre .number { color: #a0b8d0; } pre .punct { color: #606070; }
+  pre .label { display: block; color: #606068; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; }
+  .callout { background: var(--surface); border-left: 3px solid var(--orange); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 0.82rem; color: var(--text-dim); }
+  .callout strong { color: var(--cyan); } .callout.info { border-left-color: var(--blue); }
+  .response-field { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+  .response-field .field-name { font-family: 'SF Mono', 'Fira Code', monospace; color: #c0a090; font-size: 0.82rem; }
+  .response-field .field-type { color: #506070; font-size: 0.75rem; }
+  .response-field .field-desc { color: var(--text-dim); font-size: 0.8rem; }
+  .field-indent { padding-left: 20px; border-left: 1px solid var(--border); margin-left: 4px; }
+  .badge-get { background: #1a2a1a; color: var(--green); border: 1px solid #2a3a2a; }
+  .endpoint-divider { border-top: 2px solid var(--border); margin: 64px 0 0; padding-top: 16px; }
+  ul.plain { list-style: none; padding: 0; } ul.plain li { padding: 3px 0; font-size: 0.82rem; color: var(--text-dim); } ul.plain li::before { content: '\2022'; color: #3a3a48; margin-right: 8px; }
+  .tester { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-top: 16px; }
+  .tester-row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
+  .tester-field { display: flex; flex-direction: column; gap: 4px; }
+  .tester-field label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: #606068; font-weight: 600; }
+  .tester-field select, .tester-field input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--cyan); padding: 8px 12px; font-size: 0.82rem; font-family: 'SF Mono', 'Fira Code', monospace; outline: none; }
+  .tester-field select:focus, .tester-field input:focus { border-color: var(--blue); }
+  .tester-field select { cursor: pointer; } .tester-field input { min-width: 180px; } .tester-field input::placeholder { color: #3a3a48; }
+  .tester-url { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.78rem; color: #606068; padding: 8px 0; word-break: break-all; margin-bottom: 8px; }
+  .tester-url .tester-url-method { color: var(--blue); font-weight: 600; } .tester-url .tester-url-path { color: #d0c8a0; }
+  .tester-btn { background: #1a2a1a; color: var(--green); border: 1px solid #2a3a2a; padding: 8px 20px; border-radius: 5px; font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .tester-btn:hover { background: #223222; } .tester-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tester-result { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; overflow-x: auto; max-height: 500px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.78rem; line-height: 1.6; color: #b8b8c0; white-space: pre-wrap; word-break: break-word; }
+  .tester-result.error { color: var(--red); }
+  .tester-meta { font-size: 0.72rem; color: #505060; margin-top: 8px; display: flex; gap: 16px; }
+  .tester-params { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 16px; margin-bottom: 16px; }
+  .tester-params .tester-field input { min-width: 0; width: 100%; }
+  .nav-divider { width: 1px; background: var(--border); margin: 4px 8px; align-self: stretch; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } .split .examples { position: static; } .api-section { padding: 0 16px; } }
+
 </style>
 </head>
 <body>
@@ -577,6 +629,10 @@
   <p>"Are the Pairings Up?" — Chess tournament pairings checker PWA</p>
 </header>
 
+<div class="canvas" style="padding-bottom:0">
+  <p style="color:var(--text-dim);font-size:0.9rem;max-width:720px;margin:0 auto;text-align:center;line-height:1.7;padding-top:24px">A real-time chess tournament companion for the <a href="https://www.milibrary.org/chess" style="color:var(--orange);text-decoration:none;border-bottom:1px solid var(--border)">Tuesday Night Marathon</a> at San Francisco's Mechanics' Institute. Vanilla JS progressive web app on Cloudflare's edge stack — Pages, Workers, D1, KV. No framework, ~215KB bundled.</p>
+</div>
+
 <nav class="tab-bar" role="navigation">
   <button class="active" data-section="view-overview" onclick="scrollToSection('view-overview', event)">Overview</button>
   <button data-section="view-frontend" onclick="scrollToSection('view-frontend', event)">Frontend</button>
@@ -584,6 +640,9 @@
   <button data-section="view-data-flow" onclick="scrollToSection('view-data-flow', event)">Data Flow</button>
   <button data-section="view-storage" onclick="scrollToSection('view-storage', event)">Storage</button>
   <button data-section="view-endpoints" onclick="scrollToSection('view-endpoints', event)">Endpoints</button>
+  <span class="nav-divider"></span>
+  <button data-section="view-api" onclick="scrollToSection('view-api', event)">API</button>
+  <button data-section="view-tester" onclick="scrollToSection('view-tester', event)">Try It</button>
 </nav>
 
 <div class="canvas">
@@ -1841,6 +1900,410 @@
   </table>
 </div>
 
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- API                                                  -->
+<!-- ════════════════════════════════════════════════════ -->
+<div id="view-api" class="view">
+  <h2 class="view-title">API</h2>
+  <div class="api-section">
+<section id="intro" style="margin-bottom:48px">
+  <p>The TNMP API provides open access to game data from the <a href="https://www.milibrary.org/chess" style="color:#c0a878;text-decoration:none;border-bottom:1px solid #3a3a48">Tuesday Night Marathon</a> at San Francisco's Mechanics' Institute. Query historical games, player records, and tournament metadata. Built for fellow chess players, club organizers, and anyone curious about the data.</p>
+  <p style="color:#606068;font-size:0.82rem">Three endpoints, all <code>GET</code>, no authentication required. Discover tournaments and players first, then query games with composable filters.</p>
+</section>
+
+<section id="tournaments">
+  <h2><span class="badge badge-get">GET</span> /tournaments</h2>
+  <div class="split">
+    <div class="docs">
+      <p>List all tournaments in the database. Returns slugs (used as filter values in <code>/query</code>), display names, round dates, and MI page URLs.</p>
+      <p>Sorted by start date, most recent first. No parameters.</p>
+
+      <h3>Response Shape</h3>
+      <p><code>tournaments</code> array of:</p>
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">slug</span></td><td><span class="param-type">string</span></td><td class="param-note">URL-safe identifier (use in <code>/query?tournament=</code>)</td></tr>
+          <tr><td><span class="param-name">name</span></td><td><span class="param-type">string</span></td><td class="param-note">Full display name</td></tr>
+          <tr><td><span class="param-name">roundDates</span></td><td><span class="param-type">array</span></td><td class="param-note">ISO date strings, one per round</td></tr>
+          <tr><td><span class="param-name">url</span></td><td><span class="param-type">string|null</span></td><td class="param-note">MI tournament page</td></tr>
+          <tr><td><span class="param-name">uscfEventId</span></td><td><span class="param-type">string|null</span></td><td class="param-note">US Chess rated event ID</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Request</span><span class="method">GET</span> <span class="url">/tournaments</span></pre>
+      <pre><span class="label">Response</span><span class="punct">{</span>
+  <span class="key">"tournaments"</span><span class="punct">: [</span>
+    <span class="punct">{</span>
+      <span class="key">"slug"</span><span class="punct">:</span> <span class="string">"2026-spring-tuesday-night-marathon"</span><span class="punct">,</span>
+      <span class="key">"name"</span><span class="punct">:</span> <span class="string">"2026 Spring Tuesday Night Marathon"</span><span class="punct">,</span>
+      <span class="key">"roundDates"</span><span class="punct">:</span> <span class="punct">[</span><span class="string">"2026-03-03"</span><span class="punct">,</span> <span class="string">"2026-03-11"</span><span class="punct">,</span> <span class="string">...</span><span class="punct">],</span>
+      <span class="key">"url"</span><span class="punct">:</span> <span class="string">"https://www.milibrary.org/chess/..."</span><span class="punct">,</span>
+      <span class="key">"uscfEventId"</span><span class="punct">:</span> <span class="number">null</span>
+    <span class="punct">},</span>
+    <span class="comment">// ... more tournaments</span>
+  <span class="punct">]</span>
+<span class="punct">}</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="players" class="endpoint-divider">
+  <h2><span class="badge badge-get">GET</span> /players</h2>
+  <div class="split">
+    <div class="docs">
+      <p>List all players who have appeared in any tournament. Returns display names, database names (for use in <code>/query</code>), USCF IDs, and current ratings.</p>
+      <p>Sorted alphabetically by display name. No parameters.</p>
+
+      <h3>Response Shape</h3>
+      <p><code>players</code> array of:</p>
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">name</span></td><td><span class="param-type">string</span></td><td class="param-note">"First Last" display format</td></tr>
+          <tr><td><span class="param-name">dbName</span></td><td><span class="param-type">string</span></td><td class="param-note">"Last, First" database format</td></tr>
+          <tr><td><span class="param-name">uscfId</span></td><td><span class="param-type">string|null</span></td><td class="param-note">US Chess member ID</td></tr>
+          <tr><td><span class="param-name">rating</span></td><td><span class="param-type">integer|null</span></td><td class="param-note">Current USCF regular rating</td></tr>
+        </tbody>
+      </table>
+      <div class="callout info">
+        <strong>Name resolution:</strong> Either <code>name</code> ("First Last") or <code>dbName</code> ("Last, First") can be used as the <code>player</code> parameter in <code>/query</code>. The alias system resolves both.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Request</span><span class="method">GET</span> <span class="url">/players</span></pre>
+      <pre><span class="label">Response</span><span class="punct">{</span>
+  <span class="key">"players"</span><span class="punct">: [</span>
+    <span class="punct">{</span>
+      <span class="key">"name"</span><span class="punct">:</span> <span class="string">"John Boyer"</span><span class="punct">,</span>
+      <span class="key">"dbName"</span><span class="punct">:</span> <span class="string">"Boyer, John"</span><span class="punct">,</span>
+      <span class="key">"uscfId"</span><span class="punct">:</span> <span class="string">"16865157"</span><span class="punct">,</span>
+      <span class="key">"rating"</span><span class="punct">:</span> <span class="number">1761</span>
+    <span class="punct">},</span>
+    <span class="comment">// ... 300+ players</span>
+  <span class="punct">]</span>
+<span class="punct">}</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="query-overview" class="endpoint-divider">
+  <h2><span class="badge badge-get">GET</span> /query</h2>
+  <div class="split">
+    <div class="docs">
+      <p>Composable game query endpoint backed by D1. Returns games with optional PGN text, byes, and USCF IDs. All filters are optional and combine with AND logic.</p>
+      <p>By default, queries are scoped to the <strong>current tournament</strong>. Use <code>tournament=all</code> to search across all tournaments, or pass a specific slug from <code>/tournaments</code>.</p>
+      <div class="callout">
+        <strong>Name resolution:</strong> Player names are resolved through the alias system automatically. Old name variants, different capitalizations, and "First Last" or "Last, First" formats all resolve to the same canonical player.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Basic request</span><span class="method">GET</span> <span class="url">/query</span>
+
+<span class="comment">// Returns up to 100 games from the current tournament</span></pre>
+      <pre><span class="label">With filters</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John<span class="punct">&</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">include</span>=pgn</pre>
+    </div>
+  </div>
+</section>
+
+<section id="tournament-scope">
+  <h3>Tournament Scope</h3>
+  <div class="split">
+    <div class="docs">
+      <table>
+        <thead><tr><th>Usage</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">tournament</span> <em class="param-default">omitted</em></td>
+            <td class="param-note">Current tournament only (resolved from D1)</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">tournament=</span><code>all</code></td>
+            <td class="param-note">Search across all tournaments</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">tournament=</span><code>{slug}</code></td>
+            <td class="param-note">Specific tournament by slug</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout info">
+        <strong>Finding slugs:</strong> Slugs follow the pattern <code>YYYY-season-tuesday-night-marathon</code>. Hit <code>/tournaments</code> to list all available slugs.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Current tournament</span><span class="method">GET</span> <span class="url">/query</span>
+
+<span class="label">All tournaments</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all
+
+<span class="label">Specific tournament</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=2026-spring-tuesday-night-marathon</pre>
+    </div>
+  </div>
+</section>
+
+<section id="filters">
+  <h3>Filters</h3>
+  <div class="split">
+    <div class="docs">
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">player</span> <span class="param-type">string</span></td>
+            <td class="param-note">Player name. Matches white or black. Alias-resolved.<br>e.g. <code>Boyer, John</code> or <code>John Boyer</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">color</span> <span class="param-type">string</span></td>
+            <td class="param-note"><code>white</code> or <code>black</code>. Requires <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">opponent</span> <span class="param-type">string</span></td>
+            <td class="param-note">Filter to games between <code>player</code> and this opponent</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">result</span> <span class="param-type">string</span></td>
+            <td class="param-note"><code>win</code>, <code>loss</code>, or <code>draw</code>. Relative to <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">round</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Round number</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">board</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Board number</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">gameId</span> <span class="param-type">string</span></td>
+            <td class="param-note">Globally unique game ID. Ignores tournament scope</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">eco</span> <span class="param-type">string</span></td>
+            <td class="param-note">ECO code or range. <code>B23</code> or <code>B00-B99</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">section</span> <span class="param-type">string</span></td>
+            <td class="param-note">Section name, e.g. <code>2000+</code>, <code>1600-1999</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">minRating</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Opponent's minimum rating. Requires <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">maxRating</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Opponent's maximum rating. Requires <code>player</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">after</span> <span class="param-type">date</span></td>
+            <td class="param-note">Games on or after this date. <code>YYYY-MM-DD</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">before</span> <span class="param-type">date</span></td>
+            <td class="param-note">Games on or before this date. <code>YYYY-MM-DD</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Player + color + result</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+      <span class="punct">&</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">color</span>=white
+      <span class="punct">&</span><span class="param">result</span>=win
+
+<span class="label">ECO range</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">eco</span>=B00-B99
+
+<span class="label">Head to head</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+      <span class="punct">&</span><span class="param">opponent</span>=Smith, Alice
+      <span class="punct">&</span><span class="param">tournament</span>=all
+
+<span class="label">Rating filter</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+      <span class="punct">&</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">minRating</span>=1800
+      <span class="punct">&</span><span class="param">maxRating</span>=2200
+
+<span class="label">Date range</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">after</span>=2025-01-01
+      <span class="punct">&</span><span class="param">before</span>=2025-12-31</pre>
+    </div>
+  </div>
+</section>
+
+<section id="pagination">
+  <h3>Pagination & Output</h3>
+  <div class="split">
+    <div class="docs">
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">limit</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Results per page. Default <code>100</code>, max <code>500</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">offset</span> <span class="param-type">integer</span></td>
+            <td class="param-note">Skip this many results. Default <code>0</code></td>
+          </tr>
+          <tr>
+            <td><span class="param-name">include</span> <span class="param-type">string</span></td>
+            <td class="param-note">
+              Comma-separated extras:<br>
+              <code>pgn</code> &mdash; include full PGN text<br>
+              <code>submissions</code> &mdash; include pending community PGNs
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>PGN is excluded by default</strong> to keep responses small. Add <code>include=pgn</code> when you need move data.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Paginated with PGN</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all
+      <span class="punct">&</span><span class="param">limit</span>=50
+      <span class="punct">&</span><span class="param">offset</span>=100
+      <span class="punct">&</span><span class="param">include</span>=pgn
+
+<span class="label">Multiple includes</span><span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">include</span>=pgn,submissions</pre>
+    </div>
+  </div>
+</section>
+
+<section id="response">
+  <h3>Response Shape</h3>
+  <div class="split">
+    <div class="docs">
+      <p><code>games</code> array of:</p>
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">tournament</span></td><td><span class="param-type">string</span></td><td class="param-note">Display name</td></tr>
+          <tr><td><span class="param-name">tournamentSlug</span></td><td><span class="param-type">string</span></td><td class="param-note">URL-safe slug</td></tr>
+          <tr><td><span class="param-name">round</span></td><td><span class="param-type">integer</span></td><td class="param-note">Round number</td></tr>
+          <tr><td><span class="param-name">board</span></td><td><span class="param-type">integer</span></td><td class="param-note">Board number</td></tr>
+          <tr><td><span class="param-name">white</span> / <span class="param-name">black</span></td><td><span class="param-type">string</span></td><td class="param-note">"First Last" display format</td></tr>
+          <tr><td><span class="param-name">whiteNorm</span> / <span class="param-name">blackNorm</span></td><td><span class="param-type">string</span></td><td class="param-note">"last,first" canonical key</td></tr>
+          <tr><td><span class="param-name">whiteElo</span> / <span class="param-name">blackElo</span></td><td><span class="param-type">integer|null</span></td><td class="param-note">Rating at time of game</td></tr>
+          <tr><td><span class="param-name">result</span></td><td><span class="param-type">string</span></td><td class="param-note"><code>1-0</code>, <code>0-1</code>, <code>1/2-1/2</code>, or <code>*</code></td></tr>
+          <tr><td><span class="param-name">eco</span></td><td><span class="param-type">string|null</span></td><td class="param-note">ECO classification code</td></tr>
+          <tr><td><span class="param-name">openingName</span></td><td><span class="param-type">string|null</span></td><td class="param-note">Full opening name</td></tr>
+          <tr><td><span class="param-name">section</span></td><td><span class="param-type">string</span></td><td class="param-note">e.g. "2000+", "1600-1999"</td></tr>
+          <tr><td><span class="param-name">date</span></td><td><span class="param-type">string</span></td><td class="param-note">"YYYY.MM.DD"</td></tr>
+          <tr><td><span class="param-name">gameId</span></td><td><span class="param-type">string|null</span></td><td class="param-note">Globally unique game ID</td></tr>
+          <tr><td><span class="param-name">hasPgn</span></td><td><span class="param-type">boolean</span></td><td class="param-note">Whether PGN moves exist</td></tr>
+          <tr><td><span class="param-name">pgn</span></td><td><span class="param-type">string</span></td><td class="param-note">Only with <code>include=pgn</code></td></tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top:16px">Top-level fields:</p>
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">total</span></td><td><span class="param-type">integer</span></td><td class="param-note">Total matching games (for pagination)</td></tr>
+          <tr><td><span class="param-name">limit</span> / <span class="param-name">offset</span></td><td><span class="param-type">integer</span></td><td class="param-note">Echo of pagination params</td></tr>
+          <tr><td><span class="param-name">byes</span></td><td><span class="param-type">array</span></td><td class="param-note">Only with <code>player</code> + specific tournament. Each: <code>{ round, type }</code></td></tr>
+          <tr><td><span class="param-name">uscfId</span></td><td><span class="param-type">string</span></td><td class="param-note">Player's USCF ID. Only with <code>player</code> filter</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Example response</span><span class="punct">{</span>
+  <span class="key">"games"</span><span class="punct">: [</span>
+    <span class="punct">{</span>
+      <span class="key">"tournament"</span><span class="punct">:</span> <span class="string">"2026 Spring Tuesday Night Marathon"</span><span class="punct">,</span>
+      <span class="key">"tournamentSlug"</span><span class="punct">:</span> <span class="string">"2026-spring-tuesday-night-marathon"</span><span class="punct">,</span>
+      <span class="key">"round"</span><span class="punct">:</span> <span class="number">2</span><span class="punct">,</span>
+      <span class="key">"board"</span><span class="punct">:</span> <span class="number">27</span><span class="punct">,</span>
+      <span class="key">"white"</span><span class="punct">:</span> <span class="string">"John Boyer"</span><span class="punct">,</span>
+      <span class="key">"black"</span><span class="punct">:</span> <span class="string">"Bennett Mccutcheon"</span><span class="punct">,</span>
+      <span class="key">"whiteNorm"</span><span class="punct">:</span> <span class="string">"boyer,john"</span><span class="punct">,</span>
+      <span class="key">"blackNorm"</span><span class="punct">:</span> <span class="string">"mccutcheon,bennett"</span><span class="punct">,</span>
+      <span class="key">"whiteElo"</span><span class="punct">:</span> <span class="number">1761</span><span class="punct">,</span>
+      <span class="key">"blackElo"</span><span class="punct">:</span> <span class="number">1565</span><span class="punct">,</span>
+      <span class="key">"result"</span><span class="punct">:</span> <span class="string">"1-0"</span><span class="punct">,</span>
+      <span class="key">"eco"</span><span class="punct">:</span> <span class="string">"C47"</span><span class="punct">,</span>
+      <span class="key">"openingName"</span><span class="punct">:</span> <span class="string">"Four Knights: Naroditsky"</span><span class="punct">,</span>
+      <span class="key">"section"</span><span class="punct">:</span> <span class="string">"1600-1999"</span><span class="punct">,</span>
+      <span class="key">"date"</span><span class="punct">:</span> <span class="string">"2026.03.10"</span><span class="punct">,</span>
+      <span class="key">"gameId"</span><span class="punct">:</span> <span class="string">"2286569907722448"</span><span class="punct">,</span>
+      <span class="key">"hasPgn"</span><span class="punct">:</span> <span class="number">true</span><span class="punct">,</span>
+      <span class="key">"pgn"</span><span class="punct">:</span> <span class="string">"[Event \"2026 Spring TNM\"] ..."</span>
+    <span class="punct">}</span>
+  <span class="punct">],</span>
+  <span class="key">"total"</span><span class="punct">:</span> <span class="number">2</span><span class="punct">,</span>
+  <span class="key">"limit"</span><span class="punct">:</span> <span class="number">100</span><span class="punct">,</span>
+  <span class="key">"offset"</span><span class="punct">:</span> <span class="number">0</span><span class="punct">,</span>
+  <span class="key">"byes"</span><span class="punct">: [</span>
+    <span class="punct">{</span> <span class="key">"round"</span><span class="punct">:</span> <span class="number">3</span><span class="punct">,</span> <span class="key">"type"</span><span class="punct">:</span> <span class="string">"half"</span> <span class="punct">}</span>
+  <span class="punct">],</span>
+  <span class="key">"uscfId"</span><span class="punct">:</span> <span class="string">"16865157"</span>
+<span class="punct">}</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="examples">
+  <h3>Recipe Book</h3>
+  <pre><span class="comment"># My games this tournament</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John
+
+<span class="comment"># All my games ever, with PGNs</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John<span class="punct">&</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">include</span>=pgn
+
+<span class="comment"># Round 2 of current tournament</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">round</span>=2
+
+<span class="comment"># Specific game by ID</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">gameId</span>=2286569907722448<span class="punct">&</span><span class="param">include</span>=pgn
+
+<span class="comment"># All Sicilian games across all tournaments</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">eco</span>=B20-B99
+
+<span class="comment"># My wins as white against 1800+ opponents</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">player</span>=Boyer, John<span class="punct">&</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">color</span>=white<span class="punct">&</span><span class="param">result</span>=win<span class="punct">&</span><span class="param">minRating</span>=1800
+
+<span class="comment"># All 2025 games</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">after</span>=2025-01-01<span class="punct">&</span><span class="param">before</span>=2025-12-31<span class="punct">&</span><span class="param">limit</span>=500
+
+<span class="comment"># Page 2 of results (games 101-200)</span>
+<span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">limit</span>=100<span class="punct">&</span><span class="param">offset</span>=100</pre>
+</section>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- TRY IT                                               -->
+<!-- ════════════════════════════════════════════════════ -->
+<div id="view-tester" class="view">
+  <h2 class="view-title">Try It</h2>
+  <div class="api-section">
+  <p>Run live queries against the API. Responses come directly from <code>api.tnmpairings.com</code>.</p>
+  <div class="tester">
+    <div class="tester-row">
+      <div class="tester-field"><label>Endpoint</label><select id="t-endpoint"><option value="/tournaments">/tournaments</option><option value="/players">/players</option><option value="/query" selected>/query</option></select></div>
+      <button class="tester-btn" id="t-send">Send</button>
+    </div>
+    <div id="t-query-params">
+      <div class="tester-params">
+        <div class="tester-field"><label>player</label><input type="text" id="t-player" placeholder="Boyer, John"></div>
+        <div class="tester-field"><label>tournament</label><input type="text" id="t-tournament" placeholder="all" value="all"></div>
+        <div class="tester-field"><label>round</label><input type="text" id="t-round" placeholder=""></div>
+        <div class="tester-field"><label>color</label><select id="t-color"><option value="">any</option><option value="white">white</option><option value="black">black</option></select></div>
+        <div class="tester-field"><label>result</label><select id="t-result"><option value="">any</option><option value="win">win</option><option value="loss">loss</option><option value="draw">draw</option></select></div>
+        <div class="tester-field"><label>eco</label><input type="text" id="t-eco" placeholder="B20-B99"></div>
+        <div class="tester-field"><label>opponent</label><input type="text" id="t-opponent" placeholder=""></div>
+        <div class="tester-field"><label>section</label><input type="text" id="t-section" placeholder="1600-1999"></div>
+        <div class="tester-field"><label>limit</label><input type="text" id="t-limit" placeholder="100"></div>
+        <div class="tester-field"><label>include</label><select id="t-include"><option value="">none</option><option value="pgn">pgn</option><option value="submissions">submissions</option><option value="pgn,submissions">pgn,submissions</option></select></div>
+      </div>
+    </div>
+    <div class="tester-url" id="t-url"><span class="tester-url-method">GET</span> <span id="t-url-text" class="tester-url-path">/query?tournament=all</span></div>
+    <div class="tester-result" id="t-result-box">Click "Send" to run a query...</div>
+    <div class="tester-meta" id="t-meta"></div>
+  </div>
+  </div>
+</div>
+
 </div><!-- /canvas -->
 
 <script>
@@ -2170,6 +2633,82 @@ function drawAllArrows() {
 }
 window.addEventListener('load', drawAllArrows);
 window.addEventListener('resize', drawAllArrows);
+
+const API = 'https://api.tnmpairings.com';
+const endpointEl = document.getElementById('t-endpoint');
+const paramsEl = document.getElementById('t-query-params');
+const urlText = document.getElementById('t-url-text');
+const resultBox = document.getElementById('t-result-box');
+const metaEl = document.getElementById('t-meta');
+const sendBtn = document.getElementById('t-send');
+
+const queryFields = ['t-player', 't-tournament', 't-round', 't-color', 't-result',
+                     't-eco', 't-opponent', 't-section', 't-limit', 't-include'];
+
+function buildUrl() {
+  const endpoint = endpointEl.value;
+  if (endpoint !== '/query') {
+    paramsEl.style.display = 'none';
+    urlText.textContent = endpoint;
+    return API + endpoint;
+  }
+  paramsEl.style.display = '';
+  const params = new URLSearchParams();
+  for (const id of queryFields) {
+    const el = document.getElementById(id);
+    const val = el.value.trim();
+    if (val) params.set(id.replace('t-', ''), val);
+  }
+  const qs = params.toString();
+  urlText.textContent = '/query' + (qs ? '?' + decodeURIComponent(qs) : '');
+  return API + '/query' + (qs ? '?' + qs : '');
+}
+
+// Update URL preview on any change
+endpointEl.addEventListener('change', buildUrl);
+for (const id of queryFields) {
+  document.getElementById(id).addEventListener('input', buildUrl);
+  document.getElementById(id).addEventListener('change', buildUrl);
+}
+buildUrl();
+
+sendBtn.addEventListener('click', async () => {
+  const url = buildUrl();
+  resultBox.textContent = 'Loading...';
+  resultBox.classList.remove('error');
+  metaEl.textContent = '';
+  sendBtn.disabled = true;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(url);
+    const ms = Math.round(performance.now() - t0);
+    const data = await res.json();
+    const text = JSON.stringify(data, null, 2);
+
+    resultBox.textContent = text;
+    if (!res.ok) resultBox.classList.add('error');
+
+    const parts = [`${res.status} ${res.statusText}`, `${ms}ms`];
+    if (data.total != null) parts.push(`${data.total} games`);
+    if (data.tournaments) parts.push(`${data.tournaments.length} tournaments`);
+    if (data.players) parts.push(`${data.players.length} players`);
+    const bytes = new Blob([text]).size;
+    parts.push(bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`);
+    metaEl.textContent = parts.join('  \u00b7  ');
+  } catch (err) {
+    resultBox.textContent = 'Network error: ' + err.message;
+    resultBox.classList.add('error');
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+// Enter key sends
+document.querySelector('.tester').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !sendBtn.disabled) sendBtn.click();
+});
+
 </script>
 
 </body>

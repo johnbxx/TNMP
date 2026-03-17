@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TNMP Query API</title>
+<title>TNMP API</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -129,28 +129,96 @@
   }
   .badge-get { background: #1a2a1a; color: #6ab06a; border: 1px solid #2a3a2a; }
 
-  /* Nav */
-  nav { margin-bottom: 48px; }
-  nav ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
-  nav a {
-    display: block; padding: 6px 14px; border-radius: 6px;
-    font-size: 0.78rem; color: #808088; text-decoration: none;
-    background: #12121a; border: 1px solid #1a1a24;
-    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  /* Nav (sticky) */
+  nav {
+    display: flex; justify-content: center; gap: 4px; padding: 10px 20px;
+    flex-wrap: wrap; position: sticky; top: 0; z-index: 100;
+    background: #0a0a0fee; backdrop-filter: blur(12px);
+    border-bottom: 1px solid #1e1e2a; margin: -48px -32px 48px;
+    padding: 12px 32px;
   }
-  nav a:hover { color: #d0c8b8; border-color: #2a2a38; background: #1a1a24; }
+  nav a {
+    display: block; padding: 8px 18px;
+    font-size: 0.78rem; color: #808088; text-decoration: none;
+    border: 1px solid transparent; border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+    font-family: inherit; cursor: pointer;
+  }
+  nav a:hover { color: #c8c8cc; background: #12121a; }
+  nav a.active { color: #f0ede6; border-bottom-color: #c0a878; }
 
   /* Utility */
   ul.plain { list-style: none; padding: 0; }
   ul.plain li { padding: 3px 0; font-size: 0.82rem; color: #888890; }
   ul.plain li::before { content: '\2022'; color: #3a3a48; margin-right: 8px; }
+
+  /* Divider */
+  .endpoint-divider { border-top: 2px solid #1e1e2a; margin: 64px 0 0; padding-top: 16px; }
+
+  /* ── API Tester ── */
+  .tester {
+    background: #12121a; border: 1px solid #1e1e2a; border-radius: 10px;
+    padding: 24px; margin-top: 16px;
+  }
+  .tester-row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
+  .tester-field { display: flex; flex-direction: column; gap: 4px; }
+  .tester-field label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #606068; font-weight: 600;
+  }
+  .tester-field select, .tester-field input {
+    background: #0a0a0f; border: 1px solid #2a2a38; border-radius: 5px;
+    color: #d0c8b8; padding: 8px 12px; font-size: 0.82rem;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    outline: none;
+  }
+  .tester-field select:focus, .tester-field input:focus { border-color: #5080a0; }
+  .tester-field select { cursor: pointer; }
+  .tester-field input { min-width: 180px; }
+  .tester-field input::placeholder { color: #3a3a48; }
+  .tester-url {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.78rem; color: #606068; padding: 8px 0;
+    word-break: break-all; margin-bottom: 8px;
+  }
+  .tester-url .tester-url-method { color: #8ab4d0; font-weight: 600; }
+  .tester-url .tester-url-path { color: #d0c8a0; }
+  .tester-url .tester-url-param { color: #c0a878; }
+  .tester-btn {
+    background: #1a2a1a; color: #6ab06a; border: 1px solid #2a3a2a;
+    padding: 8px 20px; border-radius: 5px; font-size: 0.82rem;
+    font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .tester-btn:hover { background: #223222; border-color: #3a4a3a; }
+  .tester-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tester-result {
+    background: #0a0a0f; border: 1px solid #1e1e2a; border-radius: 8px;
+    padding: 16px 20px; overflow-x: auto; max-height: 500px; overflow-y: auto;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.78rem; line-height: 1.6; color: #b8b8c0;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .tester-result.error { color: #d08080; }
+  .tester-meta {
+    font-size: 0.72rem; color: #505060; margin-top: 8px;
+    display: flex; gap: 16px;
+  }
+
+  /* Params grid for /query tester */
+  .tester-params {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px 16px; margin-bottom: 16px;
+  }
+  .tester-params .tester-field input { min-width: 0; width: 100%; }
 </style>
 </head>
 <body>
 
 <header>
   <div class="page">
-    <h1>TNMP Query API</h1>
+    <h1>TNMP API</h1>
     <span class="base-url">https://api.tnmpairings.com</span>
   </div>
 </header>
@@ -158,25 +226,114 @@
 <main>
 <div class="page">
 
-<nav>
-  <ul>
-    <li><a href="#overview">Overview</a></li>
-    <li><a href="#tournament-scope">Tournament Scope</a></li>
-    <li><a href="#filters">Filters</a></li>
-    <li><a href="#pagination">Pagination & Output</a></li>
-    <li><a href="#response">Response</a></li>
-    <li><a href="#examples">Examples</a></li>
-    <li><a href="#tips">Tips</a></li>
-  </ul>
+<nav id="api-nav">
+  <a href="#tournaments" data-section="tournaments">Tournaments</a>
+  <a href="#players" data-section="players">Players</a>
+  <a href="#query-overview" data-section="query-overview" class="active">Query</a>
+  <a href="#filters" data-section="filters">Filters</a>
+  <a href="#pagination" data-section="pagination">Pagination</a>
+  <a href="#response" data-section="response">Response</a>
+  <a href="#examples" data-section="examples">Recipes</a>
+  <a href="#tester" data-section="tester">Try It</a>
 </nav>
 
-<!-- Overview -->
-<section id="overview">
+<section id="intro" style="margin-bottom:48px">
+  <p>The TNMP API provides open access to game data from the <a href="https://www.milibrary.org/chess" style="color:#c0a878;text-decoration:none;border-bottom:1px solid #3a3a48">Tuesday Night Marathon</a> at San Francisco's Mechanics' Institute. Query historical games, player records, and tournament metadata. Built for fellow chess players, club organizers, and anyone curious about the data.</p>
+  <p style="color:#606068;font-size:0.82rem">Three endpoints, all <code>GET</code>, no authentication required. Discover tournaments and players first, then query games with composable filters.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- TOURNAMENTS                                         -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tournaments">
+  <h2><span class="badge badge-get">GET</span> /tournaments</h2>
+  <div class="split">
+    <div class="docs">
+      <p>List all tournaments in the database. Returns slugs (used as filter values in <code>/query</code>), display names, round dates, and MI page URLs.</p>
+      <p>Sorted by start date, most recent first. No parameters.</p>
+
+      <h3>Response Shape</h3>
+      <div class="response-field">
+        <span class="field-name">tournaments</span>
+        <span class="field-type">array</span>
+      </div>
+      <div class="field-indent">
+        <div class="response-field"><span class="field-name">slug</span> <span class="field-type">string</span> <span class="field-desc">URL-safe identifier (use in <code>/query?tournament=</code>)</span></div>
+        <div class="response-field"><span class="field-name">name</span> <span class="field-type">string</span> <span class="field-desc">Full display name</span></div>
+        <div class="response-field"><span class="field-name">roundDates</span> <span class="field-type">array</span> <span class="field-desc">ISO date strings, one per round</span></div>
+        <div class="response-field"><span class="field-name">url</span> <span class="field-type">string|null</span> <span class="field-desc">MI tournament page</span></div>
+        <div class="response-field"><span class="field-name">uscfEventId</span> <span class="field-type">string|null</span> <span class="field-desc">US Chess rated event ID</span></div>
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Request</span><span class="method">GET</span> <span class="url">/tournaments</span></pre>
+      <pre><span class="label">Response</span><span class="punct">{</span>
+  <span class="key">"tournaments"</span><span class="punct">: [</span>
+    <span class="punct">{</span>
+      <span class="key">"slug"</span><span class="punct">:</span> <span class="string">"2026-spring-tuesday-night-marathon"</span><span class="punct">,</span>
+      <span class="key">"name"</span><span class="punct">:</span> <span class="string">"2026 Spring Tuesday Night Marathon"</span><span class="punct">,</span>
+      <span class="key">"roundDates"</span><span class="punct">:</span> <span class="punct">[</span><span class="string">"2026-03-03"</span><span class="punct">,</span> <span class="string">"2026-03-11"</span><span class="punct">,</span> <span class="string">...</span><span class="punct">],</span>
+      <span class="key">"url"</span><span class="punct">:</span> <span class="string">"https://www.milibrary.org/chess/..."</span><span class="punct">,</span>
+      <span class="key">"uscfEventId"</span><span class="punct">:</span> <span class="number">null</span>
+    <span class="punct">},</span>
+    <span class="comment">// ... more tournaments</span>
+  <span class="punct">]</span>
+<span class="punct">}</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- PLAYERS                                              -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="players" class="endpoint-divider">
+  <h2><span class="badge badge-get">GET</span> /players</h2>
+  <div class="split">
+    <div class="docs">
+      <p>List all players who have appeared in any tournament. Returns display names, database names (for use in <code>/query</code>), USCF IDs, and current ratings.</p>
+      <p>Sorted alphabetically by display name. No parameters.</p>
+
+      <h3>Response Shape</h3>
+      <div class="response-field">
+        <span class="field-name">players</span>
+        <span class="field-type">array</span>
+      </div>
+      <div class="field-indent">
+        <div class="response-field"><span class="field-name">name</span> <span class="field-type">string</span> <span class="field-desc">"First Last" display format</span></div>
+        <div class="response-field"><span class="field-name">dbName</span> <span class="field-type">string</span> <span class="field-desc">"Last, First" database format</span></div>
+        <div class="response-field"><span class="field-name">uscfId</span> <span class="field-type">string|null</span> <span class="field-desc">US Chess member ID</span></div>
+        <div class="response-field"><span class="field-name">rating</span> <span class="field-type">integer|null</span> <span class="field-desc">Current USCF regular rating</span></div>
+      </div>
+      <div class="callout info">
+        <strong>Name resolution:</strong> Either <code>name</code> ("First Last") or <code>dbName</code> ("Last, First") can be used as the <code>player</code> parameter in <code>/query</code>. The alias system resolves both.
+      </div>
+    </div>
+    <div class="examples">
+      <pre><span class="label">Request</span><span class="method">GET</span> <span class="url">/players</span></pre>
+      <pre><span class="label">Response</span><span class="punct">{</span>
+  <span class="key">"players"</span><span class="punct">: [</span>
+    <span class="punct">{</span>
+      <span class="key">"name"</span><span class="punct">:</span> <span class="string">"John Boyer"</span><span class="punct">,</span>
+      <span class="key">"dbName"</span><span class="punct">:</span> <span class="string">"Boyer, John"</span><span class="punct">,</span>
+      <span class="key">"uscfId"</span><span class="punct">:</span> <span class="string">"16865157"</span><span class="punct">,</span>
+      <span class="key">"rating"</span><span class="punct">:</span> <span class="number">1761</span>
+    <span class="punct">},</span>
+    <span class="comment">// ... 300+ players</span>
+  <span class="punct">]</span>
+<span class="punct">}</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- QUERY                                                -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="query-overview" class="endpoint-divider">
   <h2><span class="badge badge-get">GET</span> /query</h2>
   <div class="split">
     <div class="docs">
       <p>Composable game query endpoint backed by D1. Returns games with optional PGN text, byes, and USCF IDs. All filters are optional and combine with AND logic.</p>
-      <p>By default, queries are scoped to the <strong>current tournament</strong>. Use <code>tournament=all</code> to search across all tournaments, or pass a specific slug.</p>
+      <p>By default, queries are scoped to the <strong>current tournament</strong>. Use <code>tournament=all</code> to search across all tournaments, or pass a specific slug from <code>/tournaments</code>.</p>
       <div class="callout">
         <strong>Name resolution:</strong> Player names are resolved through the alias system automatically. Old name variants, different capitalizations, and "First Last" or "Last, First" formats all resolve to the same canonical player.
       </div>
@@ -471,34 +628,211 @@
 <span class="method">GET</span> <span class="url">/query</span><span class="punct">?</span><span class="param">tournament</span>=all<span class="punct">&</span><span class="param">limit</span>=100<span class="punct">&</span><span class="param">offset</span>=100</pre>
 </section>
 
-<!-- Tips -->
-<section id="tips">
-  <h3>Tips</h3>
-  <div class="split">
-    <div class="docs">
-      <ul class="plain">
-        <li>Player names are flexible: <code>Boyer, John</code> and <code>John Boyer</code> both work</li>
-        <li>Use <code>/tournaments</code> to list all tournament slugs</li>
-        <li>Use <code>/players</code> to list all player names and USCF IDs</li>
-        <li><code>gameId</code> is globally unique &mdash; no tournament scope needed</li>
-        <li><code>result</code>, <code>color</code>, <code>minRating</code>, <code>maxRating</code>, and <code>opponent</code> all require <code>player</code></li>
-        <li><code>byes</code> array only appears when filtering by player + specific tournament</li>
-        <li>Results: <code>1-0</code> = white wins, <code>0-1</code> = black wins, <code>1/2-1/2</code> = draw, <code>*</code> = pending</li>
-      </ul>
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- API TESTER                                           -->
+<!-- ═══════════════════════════════════════════════════ -->
+<section id="tester" class="endpoint-divider">
+  <h2>Try It</h2>
+  <p>Run live queries against the API. Responses come directly from <code>api.tnmpairings.com</code>.</p>
+
+  <div class="tester">
+    <div class="tester-row">
+      <div class="tester-field">
+        <label>Endpoint</label>
+        <select id="t-endpoint">
+          <option value="/tournaments">/tournaments</option>
+          <option value="/players">/players</option>
+          <option value="/query" selected>/query</option>
+        </select>
+      </div>
+      <button class="tester-btn" id="t-send">Send</button>
     </div>
-    <div class="examples">
-      <pre><span class="label">Console PGN viewer</span><span class="comment">// Paste in browser console on a /query?include=pgn page</span>
-fetch(location.href)
-  .then(r => r.json())
-  .then(d => d.games.forEach(g =>
-    g.pgn && console.log(g.pgn)
-  ))</pre>
+
+    <div id="t-query-params">
+      <div class="tester-params">
+        <div class="tester-field">
+          <label>player</label>
+          <input type="text" id="t-player" placeholder="Boyer, John">
+        </div>
+        <div class="tester-field">
+          <label>tournament</label>
+          <input type="text" id="t-tournament" placeholder="all" value="all">
+        </div>
+        <div class="tester-field">
+          <label>round</label>
+          <input type="text" id="t-round" placeholder="">
+        </div>
+        <div class="tester-field">
+          <label>color</label>
+          <select id="t-color">
+            <option value="">any</option>
+            <option value="white">white</option>
+            <option value="black">black</option>
+          </select>
+        </div>
+        <div class="tester-field">
+          <label>result</label>
+          <select id="t-result">
+            <option value="">any</option>
+            <option value="win">win</option>
+            <option value="loss">loss</option>
+            <option value="draw">draw</option>
+          </select>
+        </div>
+        <div class="tester-field">
+          <label>eco</label>
+          <input type="text" id="t-eco" placeholder="B20-B99">
+        </div>
+        <div class="tester-field">
+          <label>opponent</label>
+          <input type="text" id="t-opponent" placeholder="">
+        </div>
+        <div class="tester-field">
+          <label>section</label>
+          <input type="text" id="t-section" placeholder="1600-1999">
+        </div>
+        <div class="tester-field">
+          <label>limit</label>
+          <input type="text" id="t-limit" placeholder="100">
+        </div>
+        <div class="tester-field">
+          <label>include</label>
+          <select id="t-include">
+            <option value="">none</option>
+            <option value="pgn">pgn</option>
+            <option value="submissions">submissions</option>
+            <option value="pgn,submissions">pgn,submissions</option>
+          </select>
+        </div>
+      </div>
     </div>
+
+    <div class="tester-url" id="t-url">
+      <span class="tester-url-method">GET</span> <span id="t-url-text" class="tester-url-path">/query?tournament=all</span>
+    </div>
+
+    <div class="tester-result" id="t-result-box">Click "Send" to run a query...</div>
+    <div class="tester-meta" id="t-meta"></div>
   </div>
 </section>
 
 </div>
 </main>
+
+<script>
+/* ── Scroll Navigation + Spy ── */
+const navEl = document.getElementById('api-nav');
+const navLinks = navEl.querySelectorAll('a[data-section]');
+let scrollSpyPaused = false;
+
+navEl.addEventListener('click', (e) => {
+  const link = e.target.closest('a[data-section]');
+  if (!link) return;
+  e.preventDefault();
+  const el = document.getElementById(link.dataset.section);
+  if (!el) return;
+  const navHeight = navEl.offsetHeight;
+  const top = el.getBoundingClientRect().top + window.scrollY - navHeight - 12;
+  scrollSpyPaused = true;
+  window.scrollTo({ top, behavior: 'smooth' });
+  navLinks.forEach(a => a.classList.remove('active'));
+  link.classList.add('active');
+  setTimeout(() => { scrollSpyPaused = false; }, 800);
+});
+
+// Scroll spy
+const sections = document.querySelectorAll('section[id]');
+const observer = new IntersectionObserver((entries) => {
+  if (scrollSpyPaused) return;
+  let topSection = null, topY = Infinity;
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const y = entry.boundingClientRect.top;
+      if (y < topY) { topY = y; topSection = entry.target.id; }
+    }
+  });
+  if (topSection) {
+    navLinks.forEach(a => a.classList.toggle('active', a.dataset.section === topSection));
+  }
+}, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+sections.forEach(s => { if (s.id !== 'intro') observer.observe(s); });
+
+/* ── API Tester ── */
+const API = 'https://api.tnmpairings.com';
+const endpointEl = document.getElementById('t-endpoint');
+const paramsEl = document.getElementById('t-query-params');
+const urlText = document.getElementById('t-url-text');
+const resultBox = document.getElementById('t-result-box');
+const metaEl = document.getElementById('t-meta');
+const sendBtn = document.getElementById('t-send');
+
+const queryFields = ['t-player', 't-tournament', 't-round', 't-color', 't-result',
+                     't-eco', 't-opponent', 't-section', 't-limit', 't-include'];
+
+function buildUrl() {
+  const endpoint = endpointEl.value;
+  if (endpoint !== '/query') {
+    paramsEl.style.display = 'none';
+    urlText.textContent = endpoint;
+    return API + endpoint;
+  }
+  paramsEl.style.display = '';
+  const params = new URLSearchParams();
+  for (const id of queryFields) {
+    const el = document.getElementById(id);
+    const val = el.value.trim();
+    if (val) params.set(id.replace('t-', ''), val);
+  }
+  const qs = params.toString();
+  urlText.textContent = '/query' + (qs ? '?' + decodeURIComponent(qs) : '');
+  return API + '/query' + (qs ? '?' + qs : '');
+}
+
+// Update URL preview on any change
+endpointEl.addEventListener('change', buildUrl);
+for (const id of queryFields) {
+  document.getElementById(id).addEventListener('input', buildUrl);
+  document.getElementById(id).addEventListener('change', buildUrl);
+}
+buildUrl();
+
+sendBtn.addEventListener('click', async () => {
+  const url = buildUrl();
+  resultBox.textContent = 'Loading...';
+  resultBox.classList.remove('error');
+  metaEl.textContent = '';
+  sendBtn.disabled = true;
+
+  const t0 = performance.now();
+  try {
+    const res = await fetch(url);
+    const ms = Math.round(performance.now() - t0);
+    const data = await res.json();
+    const text = JSON.stringify(data, null, 2);
+
+    resultBox.textContent = text;
+    if (!res.ok) resultBox.classList.add('error');
+
+    const parts = [`${res.status} ${res.statusText}`, `${ms}ms`];
+    if (data.total != null) parts.push(`${data.total} games`);
+    if (data.tournaments) parts.push(`${data.tournaments.length} tournaments`);
+    if (data.players) parts.push(`${data.players.length} players`);
+    const bytes = new Blob([text]).size;
+    parts.push(bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`);
+    metaEl.textContent = parts.join('  \u00b7  ');
+  } catch (err) {
+    resultBox.textContent = 'Network error: ' + err.message;
+    resultBox.classList.add('error');
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+// Enter key sends
+document.querySelector('.tester').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !sendBtn.disabled) sendBtn.click();
+});
+</script>
 
 </body>
 </html>
