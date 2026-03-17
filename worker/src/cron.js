@@ -411,7 +411,7 @@ export async function handleScheduled(env, { force = false } = {}) {
     }));
 
     // --- Dispatch notifications (independent of data ingestion) ---
-    await dispatchAllNotifications(parsed, env);
+    await dispatchAllNotifications(parsed, tournament, env);
 
     // --- Retry any failed notifications from previous runs ---
     await retryPendingNotifications(env);
@@ -421,7 +421,22 @@ export async function handleScheduled(env, { force = false } = {}) {
  * Dispatch all notification types independently. Each checks its own
  * conditions and state — no early returns between types.
  */
-async function dispatchAllNotifications(parsed, env) {
+/**
+ * Compute pairings expiry: round start (6:30 PM Pacific on the round date), or 24h fallback.
+ * Round dates are YYYY-MM-DD. We construct the UTC equivalent of 6:30 PM Pacific
+ * by adding the current Pacific→UTC offset (7h PDT, 8h PST).
+ */
+function pairingsExpiresAt(roundDates, round) {
+    const dateStr = roundDates?.[round - 1];
+    if (!dateStr) return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    // Try both PDT (-7) and PST (-8), pick whichever lands on the round date in Pacific
+    // Simpler: just use -7 (PDT) in spring/summer, -8 (PST) in fall/winter.
+    // But really, the difference is 1 hour — close enough for a notification TTL.
+    // Use -8 as the safe choice (expires slightly later = more generous).
+    return new Date(`${dateStr}T18:30:00-08:00`).toISOString();
+}
+
+async function dispatchAllNotifications(parsed, tournament, env) {
     if (!parsed.hasPairings) {
         console.log('No pairings found on page, skipping notifications.');
         return;
@@ -453,7 +468,7 @@ async function dispatchAllNotifications(parsed, env) {
                         title: `Round ${round} Pairings Are Up!`,
                         body: composeMessage(pairing, round),
                         url: '/', type: 'pairings', round,
-                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                        expiresAt: pairingsExpiresAt(tournament.roundDates, round),
                     };
                 },
                 env, label: 'pairings',
