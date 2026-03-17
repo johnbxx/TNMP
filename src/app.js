@@ -1,12 +1,12 @@
-import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState, DEBUG_PGN } from './src/config.js';
-import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker } from './src/ui.js';
-import { resetCountdown, stopCountdown, startCountdown } from './src/countdown.js';
-import { shareStatus } from './src/share.js';
-import { openSettings, saveSettings, initSettings } from './src/settings.js';
-import { openStyle, initStyle } from './src/style.js';
-import { previewState, initDebugPanel } from './src/debug.js';
-import { openModal, closeModal, onModalClose, trapFocus } from './src/modal.js';
-import { enablePush, disablePush, syncPushSubscription } from './src/push.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState, DEBUG_PGN } from './config.js';
+import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker } from './ui.js';
+import { resetCountdown, stopCountdown, startCountdown } from './countdown.js';
+import { shareStatus } from './share.js';
+import { openSettings, saveSettings, initSettings } from './settings.js';
+import { openStyle, initStyle } from './style.js';
+import { previewState, initDebugPanel } from './debug.js';
+import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
+import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
     openGamePanel as openGameViewer, openGameWithPlayerNav, closeGamePanel, handlePanelKeydown,
     explorerBackToBrowser,
@@ -17,11 +17,11 @@ import {
     toggleNag, showImportDialog, showSubmitDialog, hideImportDialog, doImport, submitGame,
     showHeaderEditor, hideHeaderEditor, saveHeaderEditor,
     launchExplorer, debugInjectSkeletons, initGamePanel,
-} from './src/game-panel.js';
-import { showToast } from './src/toast.js';
-import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './src/games.js';
-import { formatName, getHeader } from './src/utils.js';
-import { initPlayerProfile, openPlayerProfile } from './src/player-profile.js';
+} from './game-panel.js';
+import { showToast } from './toast.js';
+import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './games.js';
+import { formatName, getHeader } from './utils.js';
+import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
