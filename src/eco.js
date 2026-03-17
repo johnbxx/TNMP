@@ -9,7 +9,7 @@
 import { WORKER_URL } from './config.js';
 import { fenToEpd } from './utils.js';
 
-const STORAGE_KEY = 'eco-epd-data';
+const STORAGE_KEY = 'eco-epd-data-v2';
 
 /** @type {Record<string, {eco: string, name: string}> | null} */
 let _ecoData = null;
@@ -22,6 +22,9 @@ let _ecoData = null;
  */
 export async function loadEcoData() {
     if (_ecoData) return;
+
+    // Clean up old cache key
+    try { localStorage.removeItem('eco-epd-data'); } catch { /* */ }
 
     // Try localStorage
     try {
