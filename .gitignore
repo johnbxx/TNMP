@@ -11,3 +11,5 @@ pgn-export-bare/
 .gitnexus/
 data/
 scripts/
+public/knight-loader.html
+public/tnm-events.html
