@@ -10,7 +10,4 @@ pgn-export-bare/
 *.png
 .gitnexus/
 data/
-scripts/match-uscf-ids.mjs
-scripts/merge-player-names.mjs
-scripts/populate-players.mjs
-scripts/refresh-ratings.mjs
+scripts/

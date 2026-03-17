@@ -1532,78 +1532,17 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div id="view-storage" class="view">
   <h2 class="view-title">Storage</h2>
-  <div class="section-label">Cloudflare KV — <code>SUBSCRIBERS</code> namespace</div>
-  <table class="data-table">
-    <thead>
-      <tr><th>Key Pattern</th><th>Type</th><th>Purpose</th><th>TTL</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><code>device:{uuid}</code></td>
-        <td>JSON</td>
-        <td>Device record — endpoint, keys, player name, device label, prefs, delivery tracking (lastDeliveredAt, lastDisplayedAt, lastClickedAt), failCount, retry state</td>
-        <td>90 days</td>
-      </tr>
-      <tr>
-        <td><code>push:{sha256}</code></td>
-        <td>JSON</td>
-        <td>Legacy push subscription (pre-upgrade clients, auto-migrated to <code>device:</code> on next visit)</td>
-        <td>90 days</td>
-      </tr>
-      <tr>
-        <td><code>cache:tournamentHtml</code></td>
-        <td>JSON</td>
-        <td>Stripped SwissSys HTML + round number</td>
-        <td>Refreshed hourly</td>
-      </tr>
-      <tr>
-        <td><code>cache:tournamentMeta</code></td>
-        <td>JSON</td>
-        <td>Tournament name, URL, round dates, next tournament</td>
-        <td>6h</td>
-      </tr>
-      <tr>
-        <td><code>cache:appState</code></td>
-        <td>JSON</td>
-        <td>Pre-computed <code>/tournament-state</code> response (written by cron)</td>
-        <td>Refreshed by cron</td>
-      </tr>
-      <tr>
-        <td><code>state:pairingsUp</code></td>
-        <td>JSON</td>
-        <td>Last notified pairings round + timestamp (prevents re-notification)</td>
-        <td>None</td>
-      </tr>
-      <tr>
-        <td><code>state:resultsPosted</code></td>
-        <td>JSON</td>
-        <td>Last notified results round + timestamp</td>
-        <td>None</td>
-      </tr>
-      <tr>
-        <td><code>state:lastCheck</code></td>
-        <td>JSON</td>
-        <td>Timestamp of last cron check</td>
-        <td>None</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="section-label" style="margin-top:24px">Cloudflare KV — <code>GAMES</code> namespace</div>
-  <table class="data-table">
-    <thead>
-      <tr><th>Key Pattern</th><th>Type</th><th>Purpose</th><th>TTL</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><code>og-image:{gameId}</code></td>
-        <td>PNG blob</td>
-        <td>Cached chess board image for social media previews</td>
-        <td>None*</td>
-      </tr>
-    </tbody>
-  </table>
-  <p style="font-size:0.75rem;color:var(--text-dim);margin-top:6px">* OG images accumulate forever — should add <code>expirationTtl: 604800</code> (7 days)</p>
+  <div class="section-label">Cloudflare KV</div>
+  <div class="module-grid">
+    <div class="module-card" style="border-left:3px solid var(--orange)">
+      <h4 style="color:var(--orange)">SUBSCRIBERS</h4>
+      <p>Device registry for push notifications (stable UUIDs, delivery tracking, retry state). Tournament HTML cache, pre-computed app state, notification deduplication state. All records use TTL-based expiration.</p>
+    </div>
+    <div class="module-card" style="border-left:3px solid var(--orange)">
+      <h4 style="color:var(--orange)">GAMES</h4>
+      <p>Cached OG board images for social media previews (SVG-rendered chess positions, stored as PNG blobs with 2-day TTL).</p>
+    </div>
+  </div>
 
   <div class="section-label" style="margin-top:40px">Cloudflare D1 — <code>tnmp-games</code> database</div>
   <div class="module-grid">
@@ -1726,153 +1665,31 @@
 <!-- ════════════════════════════════════════════════════ -->
 <div id="view-endpoints" class="view">
   <h2 class="view-title">Endpoints</h2>
-  <div class="section-label">Tournament Endpoints</div>
-  <table class="data-table">
-    <thead><tr><th>Route</th><th>Method</th><th>Purpose</th><th>Called By</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>/tournament-state</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Current app state + metadata (state, round, tournamentName, roundDates, fetchedAt)</td>
-        <td>Frontend (app.js)</td>
-      </tr>
-      <tr>
-        <td><code>/tournament-html</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Cached tournament HTML + round number</td>
-        <td>Internal / debug</td>
-      </tr>
-      <tr>
-        <td><code>/og-state</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Current state for OG meta tag injection</td>
-        <td>Pages Function</td>
-      </tr>
-      <tr>
-        <td><code>/health</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Worker health check (KV + D1 connectivity)</td>
-        <td>Monitoring</td>
-      </tr>
-    </tbody>
-  </table>
 
-  <div class="section-label">Game Endpoints</div>
+  <div class="section-label">Public API</div>
   <table class="data-table">
-    <thead><tr><th>Route</th><th>Method</th><th>Purpose</th><th>Called By</th></tr></thead>
+    <thead><tr><th>Route</th><th>Method</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr>
-        <td><code>/query</code></td>
+        <td><code>/tournaments</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Primary game endpoint. Composable filters: <code>player</code>, <code>tournament</code>, <code>round</code>, <code>board</code>, <code>gameId</code>, <code>hasPgn</code>, <code>include=submissions</code>. Response includes <code>whiteNorm</code>/<code>blackNorm</code> canonical keys.</td>
-        <td>games.js, player profiles, deep links</td>
+        <td>List all tournaments (slugs, names, round dates)</td>
       </tr>
       <tr>
         <td><code>/players</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>List all players (name, dbName, uscfId, rating)</td>
-        <td>games.js (player search)</td>
+        <td>List all players (names, USCF IDs, ratings)</td>
       </tr>
       <tr>
-        <td><code>/tournaments</code></td>
+        <td><code>/query</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>List all tournaments in D1</td>
-        <td>Tournament dropdown</td>
-      </tr>
-      <tr>
-        <td><code>/eco-classify</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Classify opening from FEN position</td>
-        <td>PGN editor</td>
-      </tr>
-      <tr>
-        <td><code>/eco-data</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Full EPD→ECO mapping for frontend classification cache (7-day Cache-Control)</td>
-        <td>eco.js (once, cached in localStorage)</td>
-      </tr>
-      <tr>
-        <td><code>/submit-game</code></td>
-        <td><span class="method method-post">POST</span></td>
-        <td>Submit a community PGN (goes to <code>game_submissions</code> table)</td>
-        <td>PGN editor</td>
-      </tr>
-      <tr>
-        <td><code>/backfill-eco</code></td>
-        <td><span class="method method-post">POST</span></td>
-        <td>Backfill ECO classifications for existing D1 games</td>
-        <td>Admin</td>
+        <td>Composable game queries with filters (player, tournament, round, ECO, rating range, date). See <a href="#view-api" onclick="scrollToSection('view-api', event); return false;" style="color:var(--orange)">API documentation</a> below.</td>
       </tr>
     </tbody>
   </table>
 
-  <div class="section-label">OG Image Endpoints</div>
-  <table class="data-table">
-    <thead><tr><th>Route</th><th>Method</th><th>Purpose</th><th>Called By</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>/og-game</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Game metadata for OG tags (white, black, result, ECO)</td>
-        <td>Pages Function</td>
-      </tr>
-      <tr>
-        <td><code>/og-game-image</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Chess board PNG for social preview (SVG → PNG, cached in KV)</td>
-        <td>Social crawlers (via og:image)</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="section-label">Push Notification Endpoints</div>
-  <table class="data-table">
-    <thead><tr><th>Route</th><th>Method</th><th>Purpose</th><th>Called By</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>/push-subscribe</code></td>
-        <td><span class="method method-post">POST</span></td>
-        <td>Create/update device record: <code>{ subscription, playerName, deviceId, deviceLabel, oldEndpoint }</code></td>
-        <td>push.js (enable/sync)</td>
-      </tr>
-      <tr>
-        <td><code>/push-unsubscribe</code></td>
-        <td><span class="method method-post">POST</span></td>
-        <td>Delete device record: <code>{ endpoint, deviceId }</code></td>
-        <td>push.js (disable)</td>
-      </tr>
-      <tr>
-        <td><code>/push-status</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Check if device exists + prefs: <code>?deviceId=...&amp;endpoint=...</code></td>
-        <td>push.js (page load)</td>
-      </tr>
-      <tr>
-        <td><code>/push-preferences</code></td>
-        <td><span class="method method-post">POST</span></td>
-        <td>Update prefs: <code>{ endpoint, deviceId, notifyPairings, notifyResults }</code></td>
-        <td>Settings modal</td>
-      </tr>
-      <tr>
-        <td><code>/push-test</code></td>
-        <td><span class="method method-post">POST</span></td>
-        <td>Admin: send test notification to all subscribers</td>
-        <td>Admin/debug</td>
-      </tr>
-      <tr>
-        <td><code>/push-ack</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Delivery ack: update <code>lastDisplayedAt</code>, reset KV TTL. <code>?deviceId=...</code></td>
-        <td>Service worker (on push display)</td>
-      </tr>
-      <tr>
-        <td><code>/push-click</code></td>
-        <td><span class="method method-get">GET</span></td>
-        <td>Click tracking: update <code>lastClickedAt</code>, reset KV TTL. <code>?deviceId=...</code></td>
-        <td>Service worker (on notification tap)</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="section-label">Internal</div>
+  <p style="font-size:0.85rem;color:var(--text-dim)">17 additional internal endpoints for tournament state, push notifications (device registry, delivery tracking, retry), OG image generation, ECO classification, cron triggers, and admin operations. All internal endpoints require either frontend origin (CORS) or VAPID key authentication.</p>
 
   <div class="section-label">Cron Schedules</div>
   <table class="data-table">
