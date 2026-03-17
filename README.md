@@ -6,7 +6,7 @@ A chess tournament companion for the [Tuesday Night Marathon](https://www.milibr
 
 ## What it does
 
-Every Tuesday evening, players in the longest-running chess tournament in the US check whether pairings have been posted. This app automates that — and then does a lot more:
+Every Monday evening, players in one of the longest-running chess tournaments in the US check whether pairings have been posted. This app automates that — and then does a lot more:
 
 - **Push notifications** when pairings or results are posted (Web Push, no app install)
 - **Game browser** with tournament/round/section/player filtering
@@ -29,7 +29,7 @@ A Pages Function at the edge intercepts crawler requests to inject dynamic Open 
 
 ### Key technical decisions
 
-- **No framework** — vanilla JS, ES modules, ~85 KB gzipped. Every line is intentional.
+- **No framework** — vanilla JS, ES modules, ~85 KB gzipped.
 - **Server-side state computation** — the worker pre-computes tournament state on a cron schedule. The frontend is a thin rendering layer.
 - **Web Push from scratch** — VAPID JWT generation and RFC 8291 payload encryption implemented directly, no push service SDK.
 - **Position-based ECO classification** — 3,641 EPD positions from lichess chess-openings, matched by board state rather than move sequence.
