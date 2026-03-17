@@ -23,8 +23,8 @@ export async function handleScheduled(env, { force = false } = {}) {
     const pHour = pacific.getHours();
     const pMinute = pacific.getMinutes();
 
-    // Mon 8PM-11:59PM: pairings check (every minute)
-    const isPairingsWindow = pDay === 1 && pHour >= 20;
+    // Mon 7PM-11:59PM: pairings check (every minute)
+    const isPairingsWindow = pDay === 1 && pHour >= 19;
     // Tue 7PM-11:59PM: results check (every 5 min)
     const isResultsWindow = pDay === 2 && pHour >= 19;
 

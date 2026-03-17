@@ -21,7 +21,7 @@ const { Chess } = require('chess.js');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ecoEpd = JSON.parse(readFileSync(resolve(__dirname, '../worker/src/eco-epd.json'), 'utf-8'));
 
-const WORKER_URL = 'https://tnmp-notifications.johnfranklinboyer.workers.dev';
+const WORKER_URL = 'https://api.tnmpairings.com';
 
 /**
  * Convert a FEN string to EPD (strip halfmove and fullmove clocks).

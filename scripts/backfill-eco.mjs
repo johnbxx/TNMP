@@ -13,7 +13,7 @@
  *   ADMIN_KEY=... node scripts/backfill-eco.mjs [--dry-run]
  */
 
-const WORKER_URL = 'https://tnmp-notifications.johnfranklinboyer.workers.dev';
+const WORKER_URL = 'https://api.tnmpairings.com';
 const DRY_RUN = process.argv.includes('--dry-run');
 const BATCH_SIZE = 200;
 
