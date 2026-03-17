@@ -35,6 +35,7 @@ A Pages Function at the edge intercepts crawler requests to inject dynamic Open 
 - **Server-side state computation** — the worker pre-computes tournament state on a cron schedule. The frontend is a thin rendering layer.
 - **Web Push from scratch** — VAPID JWT generation and RFC 8291 payload encryption implemented directly, no push service SDK.
 - **Position-based ECO classification** — 3,641 EPD positions from lichess chess-openings, matched by board state rather than move sequence.
+- **Public composable game API** — `/query` supports filtering by player, opponent, color, ECO, rating range, result, round, and date across the full TNM archive. No auth required, freely explorable.
 
 ## Stack
 
