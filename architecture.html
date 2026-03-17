@@ -657,7 +657,7 @@
       <div class="box c-green" id="o-worker" style="--area:worker">
         <h3>⚙️ Worker <span class="badge" style="background:rgba(63,185,80,0.15);color:var(--green)">Cloudflare Workers</span></h3>
         <ul>
-          <li>HTTP API: 18 endpoints (tournament, games, push, OG)</li>
+          <li>HTTP API: 20 endpoints (tournament, games, push, OG)</li>
           <li>Cron: 3 schedules (pairings, results, cache refresh)</li>
           <li>Regex parser for MI website</li>
           <li>Web Push (VAPID JWT + AES-128-GCM encryption)</li>
@@ -671,11 +671,10 @@
       <div class="box c-orange" id="o-kv" style="--area:kv">
         <h3>🗄️ KV Store</h3>
         <ul>
-          <li>Push subscriptions</li>
+          <li>Device registry (push subscriptions)</li>
           <li>Tournament HTML cache</li>
           <li>Notification state</li>
-          <li>OG image cache</li>
-          <li>OG image blobs</li>
+          <li>OG image blobs (GAMES namespace)</li>
         </ul>
       </div>
 
@@ -840,12 +839,13 @@
     <div class="module-card" style="border-left:3px solid var(--purple)">
       <h4 style="color:var(--purple)">push.js</h4>
       <div class="path">src/push.js</div>
-      <p>Push notification lifecycle. Subscribe via PushManager, POST to worker, sync on endpoint rotation, manage notification prefs.</p>
+      <p>Push notification lifecycle. Generates stable device UUID on first enable, derives device label from UA. Subscribe via PushManager, POST to worker with deviceId, sync on endpoint rotation.</p>
       <div class="exports">
         <span>enablePush()</span>
         <span>disablePush()</span>
         <span>checkPushStatus()</span>
         <span>syncPushSubscription()</span>
+        <span>updatePushPrefs()</span>
       </div>
     </div>
   </div>
@@ -1001,7 +1001,7 @@
     <div class="module-card" style="border-left:3px solid var(--teal)">
       <h4 style="color:var(--teal)">sw.js</h4>
       <div class="path">public/sw.js</div>
-      <p>Service worker. Network-first for HTML shell, cache-first for assets/memes/pieces. Push notification display and click handling.</p>
+      <p>Service worker. Network-first for HTML shell, cache-first for assets/memes/pieces. Push notification display with delivery ack, click tracking via worker API.</p>
       <div class="exports">
         <span>install</span>
         <span>activate</span>
@@ -1050,7 +1050,7 @@
         <div class="fe-cluster c-green" id="wd-router">
           <h4 style="color:var(--green)">Router</h4>
           <ul>
-            <li><code>index.js</code> — HTTP router (18 routes) + cron dispatcher</li>
+            <li><code>index.js</code> — HTTP router (20 routes) + cron dispatcher</li>
             <li>Routes HTTP to Tournament, Push, Game Data</li>
             <li><code>fetch()</code> and <code>scheduled()</code> entry points</li>
           </ul>
@@ -1077,9 +1077,9 @@
         <div class="fe-cluster c-purple" id="wd-push">
           <h4 style="color:var(--purple)">Push</h4>
           <ul>
-            <li><code>push.js</code> — subscription CRUD + dispatch</li>
+            <li><code>push.js</code> — device registry, dispatch, retry</li>
             <li><code>webpush.js</code> — VAPID JWT + AES-128-GCM</li>
-            <li>Filter by player prefs, deduplicate by round</li>
+            <li>Delivery tracking (ack/click), 90-day KV TTL</li>
           </ul>
         </div>
 
@@ -1106,7 +1106,7 @@
     <div class="module-card" style="border-left:3px solid var(--green)">
       <h4 style="color:var(--green)">index.js</h4>
       <div class="path">worker/src/index.js</div>
-      <p>HTTP router (18 routes) and cron dispatcher. CORS handling. Entry point for both <code>fetch</code> and <code>scheduled</code> events.</p>
+      <p>HTTP router (20 routes) and cron dispatcher. CORS handling. Entry point for both <code>fetch</code> and <code>scheduled</code> events.</p>
       <div class="exports">
         <span>fetch()</span>
         <span>scheduled()</span>
@@ -1157,12 +1157,16 @@
     <div class="module-card" style="border-left:3px solid var(--purple)">
       <h4 style="color:var(--purple)">push.js</h4>
       <div class="path">worker/src/push.js</div>
-      <p>Subscription CRUD endpoints and notification dispatch. Iterates subscribers, filters by prefs, deduplicates by round, sends via webpush.js.</p>
+      <p>Device registry with stable UUIDs, subscription CRUD, delivery tracking (ack/click), notification dispatch with retry. 90-day KV TTL on all records, reset on any proof-of-life.</p>
       <div class="exports">
         <span>handlePushSubscribe()</span>
         <span>handlePushUnsubscribe()</span>
         <span>handlePushStatus()</span>
+        <span>handlePushPreferences()</span>
+        <span>handlePushAck()</span>
+        <span>handlePushClick()</span>
         <span>dispatchPushNotifications()</span>
+        <span>retryPendingNotifications()</span>
         <span>listPushSubscriptions()</span>
       </div>
     </div>
@@ -1287,16 +1291,18 @@
         <div class="flow-row">
           <div class="flow-step" style="border-left:3px solid var(--blue)">
             <h4 style="color:var(--blue)">📱 PushManager.subscribe()</h4>
-            <p>applicationServerKey = VAPID public key</p>
+            <p>Generate stable UUID (<code>pushDeviceId</code> in localStorage)</p>
+            <p>Derive device label from UA ("Safari on iPhone")</p>
             <p>Returns { endpoint, keys: { p256dh, auth } }</p>
           </div>
         </div>
-        <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">POST /push-subscribe</span></div>
+        <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">POST /push-subscribe + deviceId</span></div>
         <div class="flow-row">
           <div class="flow-step" style="border-left:3px solid var(--green)">
-            <h4 style="color:var(--green)">⚙️ Worker Stores Subscription</h4>
-            <p>SHA256(endpoint) → KV key <code>push:{hash}</code></p>
-            <p>Stores: endpoint, keys, playerName, prefs</p>
+            <h4 style="color:var(--green)">⚙️ Worker Creates Device Record</h4>
+            <p>KV key = <code>device:{uuid}</code> (90-day TTL)</p>
+            <p>Stores: endpoint, keys, playerName, deviceLabel, prefs, tracking fields</p>
+            <p>Migrates any legacy <code>push:{hash}</code> record</p>
           </div>
         </div>
       </div>
@@ -1372,13 +1378,15 @@
           <div class="flow-step" style="border-left:3px solid var(--blue)">
             <h4 style="color:var(--blue)">🔄 Endpoint Rotation</h4>
             <p>Browser may change endpoint at any time</p>
-            <p><code>syncPushSubscription()</code> detects on page load</p>
+            <p><code>syncPushSubscription()</code> sends deviceId on page load</p>
+            <p>Same <code>device:{uuid}</code> key — updated in place, no orphan</p>
           </div>
           <div class="flow-arrow">|</div>
           <div class="flow-step" style="border-left:3px solid var(--red)">
-            <h4 style="color:var(--red)">🗑️ Gone Cleanup</h4>
-            <p>410/404 → delete subscription from KV</p>
-            <p>No retry — permanently invalid</p>
+            <h4 style="color:var(--red)">🗑️ Gone &amp; Dormant</h4>
+            <p>410/404 → delete device record immediately</p>
+            <p>5 consecutive failures → mark dormant, stop retrying</p>
+            <p>90-day TTL auto-expires inactive records</p>
           </div>
         </div>
       </div>
@@ -1386,7 +1394,7 @@
   </div>
 
   <!-- Full width: Notification Dispatch (tallest flow) -->
-  <div class="section-label" style="margin-top:40px">Push: Notification Dispatch</div>
+  <div class="section-label" style="margin-top:40px">Push: Notification Dispatch + Delivery Tracking</div>
   <div class="flow">
     <div class="flow-row">
       <div class="flow-step" style="border-left:3px solid var(--green)">
@@ -1398,12 +1406,12 @@
     <div class="flow-arrow-down">↓</div>
     <div class="flow-row">
       <div class="flow-step" style="border-left:3px solid var(--green)">
-        <h4 style="color:var(--green)">📋 List Subscribers</h4>
-        <p>KV list prefix <code>push:</code> (paginated, 1000/page)</p>
+        <h4 style="color:var(--green)">📋 List Devices</h4>
+        <p>KV list prefixes <code>device:</code> + <code>push:</code> (paginated)</p>
         <p>For each: check notifyPairings/notifyResults pref</p>
       </div>
     </div>
-    <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">for each subscriber</span></div>
+    <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">for each device</span></div>
     <div class="flow-row">
       <div class="flow-step" style="border-left:3px solid var(--orange)">
         <h4 style="color:var(--orange)">🔍 Find Player Pairing</h4>
@@ -1412,17 +1420,18 @@
       </div>
       <div class="flow-arrow">→</div>
       <div class="flow-step" style="border-left:3px solid var(--orange)">
-        <h4 style="color:var(--orange)">✉️ Compose Message</h4>
-        <p><code>composeMessage()</code> / <code>composeResultsMessage()</code></p>
-        <p>"You play White vs Smith on Board 5"</p>
+        <h4 style="color:var(--orange)">✉️ Compose + Send</h4>
+        <p>Payload includes <code>deviceId</code> + <code>expiresAt</code> TTL</p>
+        <p>VAPID JWT → ECDH → AES-128-GCM → push service</p>
       </div>
     </div>
     <div class="flow-arrow-down">↓</div>
     <div class="flow-row">
-      <div class="flow-step" style="border-left:3px solid var(--purple)">
-        <h4 style="color:var(--purple)">🔐 Encrypt &amp; Send</h4>
-        <p>VAPID JWT (ES256) → ECDH key exchange → AES-128-GCM payload</p>
-        <p>POST to push endpoint (FCM / Mozilla / Apple)</p>
+      <div class="flow-step" style="border-left:3px solid var(--green)">
+        <h4 style="color:var(--green)">📊 Track Result</h4>
+        <p>✅ Success: update <code>lastDeliveredAt</code>, reset <code>failCount</code></p>
+        <p>❌ 410/404: delete device record (gone)</p>
+        <p>⚠️ 429/5xx: set <code>retryAfter</code>, increment <code>failCount</code></p>
       </div>
     </div>
     <div class="flow-arrow-down">↓</div>
@@ -1438,15 +1447,23 @@
       <div class="flow-step" style="border-left:3px solid var(--teal)">
         <h4 style="color:var(--teal)">📳 Service Worker: push event</h4>
         <p>Parse payload → <code>showNotification()</code></p>
-        <p>Icon: ♔ | Tag: <code>tnmp-pairings-r3</code> (deduplicate)</p>
+        <p>Fire <code>/push-ack?deviceId=...</code> → updates <code>lastDisplayedAt</code></p>
       </div>
     </div>
     <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">user taps notification</span></div>
     <div class="flow-row">
       <div class="flow-step" style="border-left:3px solid var(--cyan)">
         <h4 style="color:var(--cyan)">👤 notificationclick</h4>
+        <p>Fire <code>/push-click?deviceId=...</code> → updates <code>lastClickedAt</code></p>
         <p>Focus existing TNMP tab, or open new window</p>
-        <p>Auto-check pairings on page load</p>
+      </div>
+    </div>
+    <div class="flow-arrow-down">↓ <span style="font-size:0.7rem">next cron cycle</span></div>
+    <div class="flow-row">
+      <div class="flow-step" style="border-left:3px solid var(--green)">
+        <h4 style="color:var(--green)">🔄 Retry Pending</h4>
+        <p>Scan for devices with <code>retryAfter</code> in the past</p>
+        <p>Skip if <code>expiresAt</code> passed or <code>failCount ≥ 5</code> (dormant)</p>
       </div>
     </div>
   </div>
@@ -1464,10 +1481,16 @@
     </thead>
     <tbody>
       <tr>
+        <td><code>device:{uuid}</code></td>
+        <td>JSON</td>
+        <td>Device record — endpoint, keys, player name, device label, prefs, delivery tracking (lastDeliveredAt, lastDisplayedAt, lastClickedAt), failCount, retry state</td>
+        <td>90 days</td>
+      </tr>
+      <tr>
         <td><code>push:{sha256}</code></td>
         <td>JSON</td>
-        <td>Push subscription record — endpoint, keys, player name, prefs, notification state</td>
-        <td>None</td>
+        <td>Legacy push subscription (pre-upgrade clients, auto-migrated to <code>device:</code> on next visit)</td>
+        <td>90 days</td>
       </tr>
       <tr>
         <td><code>cache:tournamentHtml</code></td>
@@ -1622,6 +1645,11 @@
         <td>eco.js</td>
       </tr>
       <tr>
+        <td><code>pushDeviceId</code></td>
+        <td>Stable device UUID (generated on first push enable, survives endpoint rotation)</td>
+        <td>push.js</td>
+      </tr>
+      <tr>
         <td><code>pushEndpoint</code></td>
         <td>Current push subscription endpoint (for rotation detection)</td>
         <td>push.js</td>
@@ -1746,25 +1774,25 @@
       <tr>
         <td><code>/push-subscribe</code></td>
         <td><span class="method method-post">POST</span></td>
-        <td>Store push subscription: <code>{ subscription, playerName, oldEndpoint }</code></td>
-        <td>push.js (enable)</td>
+        <td>Create/update device record: <code>{ subscription, playerName, deviceId, deviceLabel, oldEndpoint }</code></td>
+        <td>push.js (enable/sync)</td>
       </tr>
       <tr>
         <td><code>/push-unsubscribe</code></td>
         <td><span class="method method-post">POST</span></td>
-        <td>Delete push subscription: <code>{ endpoint }</code></td>
+        <td>Delete device record: <code>{ endpoint, deviceId }</code></td>
         <td>push.js (disable)</td>
       </tr>
       <tr>
         <td><code>/push-status</code></td>
         <td><span class="method method-get">GET</span></td>
-        <td>Check if subscription exists + prefs: <code>?endpoint=...</code></td>
+        <td>Check if device exists + prefs: <code>?deviceId=...&amp;endpoint=...</code></td>
         <td>push.js (page load)</td>
       </tr>
       <tr>
         <td><code>/push-preferences</code></td>
         <td><span class="method method-post">POST</span></td>
-        <td>Update prefs: <code>{ endpoint, notifyPairings, notifyResults }</code></td>
+        <td>Update prefs: <code>{ endpoint, deviceId, notifyPairings, notifyResults }</code></td>
         <td>Settings modal</td>
       </tr>
       <tr>
@@ -1772,6 +1800,18 @@
         <td><span class="method method-post">POST</span></td>
         <td>Admin: send test notification to all subscribers</td>
         <td>Admin/debug</td>
+      </tr>
+      <tr>
+        <td><code>/push-ack</code></td>
+        <td><span class="method method-get">GET</span></td>
+        <td>Delivery ack: update <code>lastDisplayedAt</code>, reset KV TTL. <code>?deviceId=...</code></td>
+        <td>Service worker (on push display)</td>
+      </tr>
+      <tr>
+        <td><code>/push-click</code></td>
+        <td><span class="method method-get">GET</span></td>
+        <td>Click tracking: update <code>lastClickedAt</code>, reset KV TTL. <code>?deviceId=...</code></td>
+        <td>Service worker (on notification tap)</td>
       </tr>
     </tbody>
   </table>
@@ -1781,9 +1821,9 @@
     <thead><tr><th>Cron Expression</th><th>Frequency</th><th>Pacific Time</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr>
-        <td><code>* 3-8 * * TUE</code></td>
+        <td><code>* 2-8 * * TUE</code></td>
         <td>Every 1 min</td>
-        <td>Mon 7PM – midnight (PDT) / 8PM (PST)</td>
+        <td>Mon 7PM – midnight (PDT) / 6PM (PST)</td>
         <td>Check pairings (TNM Monday night)</td>
       </tr>
       <tr>
