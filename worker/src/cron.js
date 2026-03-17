@@ -7,7 +7,7 @@
 
 import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
 import { resolveTournament, computeAppState } from './tournament.js';
-import { listPushSubscriptions, dispatchPushNotifications } from './push.js';
+import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings,
     parsePlayerInfo, parseGameResult, findPlayerPairingFromSections,
@@ -412,6 +412,9 @@ export async function handleScheduled(env, { force = false } = {}) {
 
     // --- Dispatch notifications (independent of data ingestion) ---
     await dispatchAllNotifications(parsed, env);
+
+    // --- Retry any failed notifications from previous runs ---
+    await retryPendingNotifications(env);
 }
 
 /**
@@ -450,6 +453,7 @@ async function dispatchAllNotifications(parsed, env) {
                         title: `Round ${round} Pairings Are Up!`,
                         body: composeMessage(pairing, round),
                         url: '/', type: 'pairings', round,
+                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
                     };
                 },
                 env, label: 'pairings',
@@ -489,6 +493,7 @@ async function dispatchAllNotifications(parsed, env) {
                             title: `Round ${round} Results Are In!`,
                             body: composeResultsMessage(pairing, playerResult, round),
                             url: '/', type: 'results', round,
+                            expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
                         };
                     },
                     env, label: 'results',
@@ -529,6 +534,7 @@ async function dispatchAllNotifications(parsed, env) {
                         title: `Round ${round} Games Are Up!`,
                         body: composeGamesMessage(round, roundGames.length),
                         url: '/', type: 'games', round,
+                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
                     }),
                     env, label: 'games',
                 });

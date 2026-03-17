@@ -15,6 +15,34 @@ function isPushSupported() {
     return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
 
+function getDeviceId() {
+    let id = localStorage.getItem('pushDeviceId');
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('pushDeviceId', id);
+    }
+    return id;
+}
+
+function getDeviceLabel() {
+    const ua = navigator.userAgent;
+    let browser = 'Browser';
+    if (ua.includes('Firefox/')) browser = 'Firefox';
+    else if (ua.includes('Edg/')) browser = 'Edge';
+    else if (ua.includes('Chrome/') && !ua.includes('Edg/')) browser = 'Chrome';
+    else if (ua.includes('Safari/') && !ua.includes('Chrome/')) browser = 'Safari';
+
+    let os = '';
+    if (ua.includes('iPhone')) os = 'iPhone';
+    else if (ua.includes('iPad')) os = 'iPad';
+    else if (ua.includes('Android')) os = 'Android';
+    else if (ua.includes('Mac OS')) os = 'Mac';
+    else if (ua.includes('Windows')) os = 'Windows';
+    else if (ua.includes('Linux')) os = 'Linux';
+
+    return os ? `${browser} on ${os}` : browser;
+}
+
 async function getSubscription() {
     const reg = await navigator.serviceWorker.ready;
     return reg.pushManager.getSubscription();
@@ -91,15 +119,17 @@ export async function disablePush() {
         const sub = await getSubscription();
         if (sub) {
             try {
+                const deviceId = localStorage.getItem('pushDeviceId');
                 await fetch(`${WORKER_URL}/push-unsubscribe`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ endpoint: sub.endpoint }),
+                    body: JSON.stringify({ endpoint: sub.endpoint, deviceId }),
                 });
             } catch { /* server unreachable — unsubscribe browser-side anyway */ }
             await sub.unsubscribe();
         }
         localStorage.removeItem('pushEndpoint');
+        localStorage.removeItem('pushDeviceId');
     } catch (err) {
         console.error('Push unsubscribe error:', err);
     }
@@ -116,10 +146,11 @@ export async function updatePushPrefs() {
     const sub = await getSubscription();
     if (!sub) return;
     try {
+        const deviceId = localStorage.getItem('pushDeviceId');
         await fetch(`${WORKER_URL}/push-preferences`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint: sub.endpoint, notifyPairings: pairings, notifyResults: results }),
+            body: JSON.stringify({ endpoint: sub.endpoint, deviceId, notifyPairings: pairings, notifyResults: results }),
         });
         showToast('Preferences saved', 'success');
     } catch {
@@ -149,6 +180,8 @@ async function registerWithServer(sub) {
         body: JSON.stringify({
             subscription: sub.toJSON(),
             playerName: CONFIG.playerName,
+            deviceId: getDeviceId(),
+            deviceLabel: getDeviceLabel(),
             oldEndpoint,
             ...prefs,
         }),

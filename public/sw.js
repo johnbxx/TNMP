@@ -70,6 +70,8 @@ self.addEventListener('fetch', (event) => {
 
 // --- Push Notification Handlers ---
 
+const API_URL = 'https://api.tnmpairings.com';
+
 self.addEventListener('push', (event) => {
     if (!event.data) return;
 
@@ -88,16 +90,27 @@ self.addEventListener('push', (event) => {
         badge: '/pieces/wK.webp',
         tag: `tnmp-${data.type || 'notification'}-r${data.round || 0}`,
         renotify: true,
-        data: { url: data.url || '/' },
+        data: { url: data.url || '/', deviceId: data.deviceId || null },
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(
+        self.registration.showNotification(title, options).then(() => {
+            if (data.deviceId) {
+                fetch(`${API_URL}/push-ack?deviceId=${data.deviceId}`).catch(() => {});
+            }
+        })
+    );
 });
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
 
     const url = event.notification.data?.url || '/';
+    const deviceId = event.notification.data?.deviceId;
+
+    if (deviceId) {
+        fetch(`${API_URL}/push-click?deviceId=${deviceId}`).catch(() => {});
+    }
 
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

@@ -12,7 +12,7 @@
 import { corsHeaders, corsResponse } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
-import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest } from './push.js';
+import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
 import { handleScheduled } from './cron.js';
 
 // Re-export for tests
@@ -56,6 +56,8 @@ export default {
             if (path === '/push-status' && request.method === 'GET') return await handlePushStatus(request, env);
             if (path === '/push-preferences' && request.method === 'POST') return await handlePushPreferences(request, env);
             if (path === '/push-test' && request.method === 'POST') return await handlePushTest(request, env);
+            if (path === '/push-ack' && request.method === 'GET') return await handlePushAck(request, env);
+            if (path === '/push-click' && request.method === 'GET') return await handlePushClick(request, env);
 
             // Manual cron trigger (bypasses time guard, requires VAPID key)
             if (path === '/cron' && request.method === 'POST') {
