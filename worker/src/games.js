@@ -258,7 +258,7 @@ export async function handleQuery(request, env) {
     // Look up USCF ID when filtering by player
     if (norm) {
         queries.push(
-            env.DB.prepare('SELECT uscf_id FROM players WHERE name_norm = ?').bind(norm).first()
+            env.DB.prepare('SELECT uscf_id, rating, rating_updated_at FROM players WHERE name_norm = ?').bind(norm).first()
         );
     }
 
@@ -267,7 +267,30 @@ export async function handleQuery(request, env) {
     const gamesResult = results[1];
     let idx = 2;
     const byeResult = fetchByes ? results[idx++] : null;
-    const playerRow = norm ? results[idx++] : null;
+    let playerRow = norm ? results[idx++] : null;
+
+    // Refresh rating if stale (older than 14 days) and player has a USCF ID
+    if (playerRow?.uscf_id) {
+        const updatedAt = playerRow.rating_updated_at ? new Date(playerRow.rating_updated_at) : null;
+        const stale = !updatedAt || (Date.now() - updatedAt.getTime() > 14 * 24 * 60 * 60 * 1000);
+        if (stale) {
+            try {
+                const res = await fetch(`https://ratings-api.uschess.org/api/v1/members/${playerRow.uscf_id}/`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const regular = data.ratings?.find(r => r.ratingSystem === 'R');
+                    const rating = regular?.rating || null;
+                    const now = new Date().toISOString();
+                    await env.DB.prepare(
+                        `UPDATE players SET rating = ?, rating_updated_at = ? WHERE name_norm = ?`
+                    ).bind(rating, now, norm).run();
+                    playerRow = { ...playerRow, rating };
+                }
+            } catch (err) {
+                console.error(`Failed to refresh rating for ${norm}:`, err.message);
+            }
+        }
+    }
 
     const games = gamesResult.results.map(row => {
         const game = {
@@ -296,6 +319,7 @@ export async function handleQuery(request, env) {
         response.byes = byeResult.results.map(r => ({ round: r.round, type: r.bye_type }));
     }
     if (playerRow?.uscf_id) response.uscfId = playerRow.uscf_id;
+    if (playerRow?.rating) response.playerRating = playerRow.rating;
     return corsResponse(response, 200, env, request);
 }
 

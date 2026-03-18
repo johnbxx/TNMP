@@ -14,6 +14,7 @@ let cachedStats = null;
 async function fetchAllPlayerGames(playerName) {
     const allGames = [];
     let uscfId = null;
+    let playerRating = null;
     let offset = 0;
     const limit = 500;
     while (true) {
@@ -23,10 +24,11 @@ async function fetchAllPlayerGames(playerName) {
         const data = await resp.json();
         allGames.push(...data.games);
         if (data.uscfId) uscfId = data.uscfId;
+        if (data.playerRating) playerRating = data.playerRating;
         if (allGames.length >= data.total || data.games.length < limit) break;
         offset += limit;
     }
-    return { games: allGames, uscfId };
+    return { games: allGames, uscfId, playerRating };
 }
 
 // --- Stats computation (single pass) ---
@@ -230,7 +232,7 @@ export async function openPlayerProfile(playerName) {
         const result = await fetchAllPlayerGames(playerName);
         cachedGames = result.games;
         if (!currentUscfId) currentUscfId = result.uscfId;
-        const rating = ratingFromGames(cachedGames, playerName);
+        const rating = result.playerRating;
 
         // Title with rating + USCF link
         const nameText = rating ? `${playerName} (${rating})` : playerName;
@@ -258,14 +260,6 @@ export async function openPlayerProfile(playerName) {
     }
 }
 
-function ratingFromGames(games, playerName) {
-    const norm = normalizeKey(playerName);
-    for (const g of games) {
-        if (g.whiteNorm === norm && g.whiteElo) return g.whiteElo;
-        if (g.blackNorm === norm && g.blackElo) return g.blackElo;
-    }
-    return null;
-}
 
 export function closePlayerProfile() {
     closeModal('profile-modal');

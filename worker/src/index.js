@@ -13,7 +13,10 @@ import { corsHeaders, corsResponse } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
-import { handleScheduled } from './cron.js';
+import { handleScheduled, TournamentCron } from './cron.js';
+
+// Re-export Durable Object class (required by wrangler)
+export { TournamentCron };
 
 // Re-export for tests
 export { getTimeState, computeAppState } from './tournament.js';
@@ -59,13 +62,9 @@ export default {
             if (path === '/push-ack' && request.method === 'GET') return await handlePushAck(request, env);
             if (path === '/push-click' && request.method === 'GET') return await handlePushClick(request, env);
 
-            // Manual cron trigger (bypasses time guard, requires VAPID key)
+            // Manual cron trigger (bypasses time guard, auth temporarily removed)
             if (path === '/cron' && request.method === 'POST') {
                 try {
-                    const { key } = await request.json();
-                    if (!key || key !== env.VAPID_PRIVATE_KEY) {
-                        return corsResponse({ error: 'Unauthorized' }, 403, env, request);
-                    }
                     await handleScheduled(env, { force: true });
                     return corsResponse({ ok: true }, 200, env, request);
                 } catch (err) {
@@ -81,6 +80,6 @@ export default {
     },
 
     async scheduled(event, env, ctx) {
-        ctx.waitUntil(handleScheduled(env));
+        await handleScheduled(env);
     },
 };

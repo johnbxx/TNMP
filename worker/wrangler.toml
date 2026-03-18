@@ -16,10 +16,12 @@ ALLOWED_ORIGIN = "https://tnmpairings.com"
 [[kv_namespaces]]
 binding = "SUBSCRIBERS"
 id = "69d27221bb904515958233a6c9481e75"
+preview_id = "6a5e8e3af1fb4230b857306fa8919325"
 
 [[kv_namespaces]]
 binding = "GAMES"
 id = "dd3adec3b60b4002b71eaa1d1bae129e"
+preview_id = "a33c31fc38e84569b0a9a83da55ad6f7"
 
 [[routes]]
 pattern = "api.tnmpairings.com"
@@ -30,3 +32,11 @@ binding = "DB"
 database_name = "tnmp-games"
 database_id = "571ae443-e8d3-4ffa-819b-51cbd9471d47"
 migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "TOURNAMENT_CRON"
+class_name = "TournamentCron"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TournamentCron"]

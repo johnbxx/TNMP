@@ -2,9 +2,11 @@
  * Cron handler — scheduled tournament HTML fetching, caching, D1 ingestion,
  * and push notification dispatch.
  *
- * Called by the worker's scheduled() entry point.
+ * Called by the worker's scheduled() entry point. Heavy work runs inside
+ * TournamentCron Durable Object to avoid the Worker 10ms CPU time limit.
  */
 
+import { DurableObject } from 'cloudflare:workers';
 import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
 import { resolveTournament, computeAppState } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
@@ -14,6 +16,13 @@ import {
     findPlayerResultFromSections, composeMessage, composeResultsMessage, composeGamesMessage,
 } from './parser.js';
 import { classifyOpening } from './eco.js';
+
+export class TournamentCron extends DurableObject {
+    async fetch() {
+        await runCronLogic(this.env);
+        return new Response('ok');
+    }
+}
 
 export async function handleScheduled(env, { force = false } = {}) {
     // DST-proof guard: cron windows are widened to cover both PST and PDT.
@@ -37,10 +46,26 @@ export async function handleScheduled(env, { force = false } = {}) {
         }
     }
 
+    // Delegate all heavy work to TournamentCron Durable Object to avoid
+    // the Worker 10ms CPU time limit. The DO has no such constraint.
+    const id = env.TOURNAMENT_CRON.idFromName('singleton');
+    const stub = env.TOURNAMENT_CRON.get(id);
+    const res = await stub.fetch('https://do/run');
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`TournamentCron DO failed (${res.status}): ${text}`);
+    }
+}
+
+async function runCronLogic(env) {
     console.log('Cron triggered: checking for pairings...');
+    const t = {};
+    let t0;
 
     // Resolve the current tournament dynamically
+    t0 = performance.now();
     const tournament = await resolveTournament(env);
+    t.resolveTournament = performance.now() - t0;
     if (!tournament) {
         console.error('Could not resolve tournament');
         return;
@@ -50,6 +75,7 @@ export async function handleScheduled(env, { force = false } = {}) {
 
     // Fetch tournament page
     let html;
+    t0 = performance.now();
     try {
         const response = await fetch(tournament.url, {
             headers: { 'User-Agent': 'TNMP-Notification-Worker/1.0' },
@@ -63,9 +89,25 @@ export async function handleScheduled(env, { force = false } = {}) {
         console.error('Fetch error:', err.message);
         return;
     }
+    t.fetchHtml = performance.now() - t0;
+
+    // Hash check — skip all processing if the page hasn't changed
+    t0 = performance.now();
+    const hashBuffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(html));
+    const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const storedHash = await env.SUBSCRIBERS.get('cache:htmlHash');
+    t.hashCheck = performance.now() - t0;
+    if (hash === storedHash) {
+        console.log('HTML unchanged, skipping processing.');
+        return;
+    }
+    await env.SUBSCRIBERS.put('cache:htmlHash', hash);
+    console.log('HTML changed, processing...');
 
     // Parse the full HTML in one pass
+    t0 = performance.now();
     const parsed = parseTournamentPage(html);
+    t.parseTournamentPage = performance.now() - t0;
 
     // --- Set up canonicalization infrastructure BEFORE any store operations ---
 
@@ -73,6 +115,7 @@ export async function handleScheduled(env, { force = false } = {}) {
     const aliasMap = new Map();
     const uscfIdMap = new Map(); // uscf_id → { name, norm, aliases }
     const ratingHistoryMap = new Map(); // canonical name → [{ date, rating }, ...] sorted oldest-first
+    t0 = performance.now();
     try {
         const allPlayers = await env.DB.prepare(
             "SELECT name, name_norm, uscf_id, aliases, rating_history FROM players"
@@ -92,6 +135,7 @@ export async function handleScheduled(env, { force = false } = {}) {
             }
         }
     } catch { /* players table may not exist yet */ }
+    t.loadPlayers = performance.now() - t0;
 
     /** Find the rating active on a given date from a player's rating history. */
     function ratingAtDate(playerName, gameDate) {
@@ -110,6 +154,7 @@ export async function handleScheduled(env, { force = false } = {}) {
     // Parse standings and build HTML name → USCF ID map (needed by canonicalize)
     const htmlNameToUscfId = new Map();
     let standings = [];
+    t0 = performance.now();
     try {
         standings = parseStandings(parsed.strippedHtml);
         for (const section of standings) {
@@ -120,6 +165,7 @@ export async function handleScheduled(env, { force = false } = {}) {
     } catch (err) {
         console.error('Failed to parse standings:', err.message);
     }
+    t.parseStandings = performance.now() - t0;
 
     // Discover new players: any USCF ID in standings not already in uscfIdMap
     const newPlayerIds = [];
@@ -212,18 +258,23 @@ export async function handleScheduled(env, { force = false } = {}) {
     // --- Now safe to store: all names go through canonicalize() ---
 
     // Cache the stripped HTML for the frontend (used by computeAppState for hasPairings/hasResults)
+    t0 = performance.now();
     await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
         html: parsed.strippedHtml,
         fetchedAt: new Date().toISOString(),
         round: parsed.roundNumber,
     }));
     console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}).`);
+    t.kvPutHtml = performance.now() - t0;
 
     // Pre-compute app state so /tournament-state is a single KV read
+    t0 = performance.now();
     const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
     const appState = computeAppState(cached, tournament);
+    t.computeAppState = performance.now() - t0;
     const slug = slugifyTournament(tournament.name);
 
+    t0 = performance.now();
     await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
         state: appState.state, round: appState.round,
         tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
@@ -231,8 +282,10 @@ export async function handleScheduled(env, { force = false } = {}) {
         fetchedAt: new Date().toISOString(),
     }));
     console.log(`Cached appState in KV.`);
+    t.kvPutAppState = performance.now() - t0;
 
     // Extract byes from standings and persist to D1
+    t0 = performance.now();
     try {
         const byeTypes = { H: 'half', B: 'full', U: 'zero' };
         const byeStmts = [];
@@ -247,7 +300,7 @@ export async function handleScheduled(env, { force = false } = {}) {
                         env.DB.prepare(
                             `INSERT INTO byes (tournament_slug, round, player_norm, bye_type)
                              VALUES (?, ?, ?, ?)
-                             ON CONFLICT(tournament_slug, round, player_norm) DO UPDATE SET bye_type = excluded.bye_type`
+                             ON CONFLICT(tournament_slug, round, player_norm) DO NOTHING`
                         ).bind(slug, i + 1, resolved.norm, byeTypes[rd.result])
                     );
                 }
@@ -262,30 +315,27 @@ export async function handleScheduled(env, { force = false } = {}) {
     } catch (err) {
         console.error('Failed to persist byes:', err.message);
     }
+    t.byes = performance.now() - t0;
 
     // Store games in D1 (only new or changed)
     let newCount = 0;
     let updatedCount = 0;
     const existingMap = new Map();
     try {
-        const roundDatesJson = JSON.stringify(tournament.roundDates || []);
-        await env.DB.prepare(
-            `INSERT INTO tournaments (slug, name, round_dates, url) VALUES (?, ?, ?, ?)
-             ON CONFLICT(slug) DO UPDATE SET name=excluded.name,
-             round_dates=excluded.round_dates, url=excluded.url`
-        ).bind(slug, tournament.name, roundDatesJson, tournament.url || null).run();
-
         // Fetch existing games for this tournament to diff against
+        t0 = performance.now();
         const existing = await env.DB.prepare(
             'SELECT round, board, result, pgn FROM games WHERE tournament_slug = ?'
         ).bind(slug).all();
         for (const row of existing.results) {
             existingMap.set(`${row.round}:${row.board}`, { result: row.result, hasPgn: !!row.pgn });
         }
+        t.loadExistingGames = performance.now() - t0;
 
         const stmts = [];
         const totalParsed = Object.values(parsed.fullGames).reduce((sum, g) => sum + g.length, 0);
         console.log(`fullGames: ${totalParsed} games across rounds ${Object.keys(parsed.fullGames).join(', ')}`);
+        t0 = performance.now();
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
             for (const g of games) {
                 if (g.board === null) continue;
@@ -330,17 +380,21 @@ export async function handleScheduled(env, { force = false } = {}) {
                 else newCount++;
             }
         }
+        t.fullGamesLoop = performance.now() - t0;
+        t0 = performance.now();
         if (stmts.length > 0) {
             for (let i = 0; i < stmts.length; i += 100) {
                 await env.DB.batch(stmts.slice(i, i + 100));
             }
             console.log(`D1: ${newCount} new, ${updatedCount} updated games across ${Object.keys(parsed.fullGames).length} rounds.`);
         }
+        t.fullGamesWrite = performance.now() - t0;
     } catch (err) {
         console.error('Failed to store games in D1:', err.message, err.stack);
     }
 
     // Insert shell records for games from pairings table (skip if already in D1)
+    t0 = performance.now();
     if (parsed.hasPairings) {
         try {
             const shellStmts = [];
@@ -390,6 +444,7 @@ export async function handleScheduled(env, { force = false } = {}) {
             console.error('Failed to upsert shell records:', err.message, err.stack);
         }
     }
+    t.shellRecords = performance.now() - t0;
 
     // Persist any newly discovered aliases
     if (newAliases.length > 0) {
@@ -411,10 +466,17 @@ export async function handleScheduled(env, { force = false } = {}) {
     }));
 
     // --- Dispatch notifications (independent of data ingestion) ---
+    t0 = performance.now();
     await dispatchAllNotifications(parsed, tournament, env);
+    t.notifications = performance.now() - t0;
 
     // --- Retry any failed notifications from previous runs ---
+    t0 = performance.now();
     await retryPendingNotifications(env);
+    t.retryNotifications = performance.now() - t0;
+
+    const total = Object.values(t).reduce((s, v) => s + v, 0);
+    console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
 }
 
 /**
