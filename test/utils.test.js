@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatName, resultClass, resultSymbol, getHeader, normalizeSection, fenToEpd, resultDisplay } from '../src/utils.js';
+import { formatName, resultClass, resultSymbol, getHeader, fenToEpd, resultDisplay } from '../src/utils.js';
 
 describe('formatName', () => {
     it('converts "Last, First" to "First Last"', () => {
@@ -91,36 +91,6 @@ describe('getHeader', () => {
     });
 });
 
-describe('normalizeSection', () => {
-    it('uppercases lowercase u prefix', () => {
-        expect(normalizeSection('u1800')).toBe('U1800');
-        expect(normalizeSection('U1800')).toBe('U1800');
-    });
-
-    it('returns empty string for falsy input', () => {
-        expect(normalizeSection('')).toBe('');
-        expect(normalizeSection(null)).toBe('');
-        expect(normalizeSection(undefined)).toBe('');
-    });
-
-    it('trims whitespace', () => {
-        expect(normalizeSection('  u1600  ')).toBe('U1600');
-    });
-
-    it('fixes truncated rating ranges', () => {
-        expect(normalizeSection('1600-199')).toBe('1600-1999');
-        expect(normalizeSection('2000-21')).toBe('2000-2999');
-    });
-
-    it('leaves valid 4-digit ranges alone', () => {
-        expect(normalizeSection('1600-1999')).toBe('1600-1999');
-    });
-
-    it('passes through non-numeric sections', () => {
-        expect(normalizeSection('Open')).toBe('Open');
-        expect(normalizeSection('Extra Rated')).toBe('Extra Rated');
-    });
-});
 
 describe('fenToEpd', () => {
     it('strips halfmove and fullmove clocks', () => {

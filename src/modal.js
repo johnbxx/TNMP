@@ -7,20 +7,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), texta
 const previousFocus = new Map();
 const closeHooks = {};
 
-/**
- * Register a cleanup hook called when a modal is closed.
- * @param {string} modalId
- * @param {Function} fn
- */
 export function onModalClose(modalId, fn) {
     closeHooks[modalId] = fn;
 }
 
-/**
- * Open a modal by ID with proper focus management.
- * @param {string} modalId
- * @param {HTMLElement} [focusTarget] - Element to focus (defaults to first focusable)
- */
 export function openModal(modalId, focusTarget) {
     const modal = document.getElementById(modalId);
     if (!modal) return;
@@ -38,15 +28,10 @@ export function openModal(modalId, focusTarget) {
     }
 }
 
-/**
- * Close a modal by ID, run its close hook, and restore focus.
- * @param {string} modalId
- */
 export function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal || modal.classList.contains('hidden')) return;
 
-    // Play closing animation, then hide
     modal.classList.add('closing');
     let done = false;
     const onDone = () => {
@@ -72,7 +57,6 @@ export function closeModal(modalId) {
         previousFocus.delete(modalId);
     };
 
-    // Listen for close animation end on content element
     const content = modal.querySelector('.modal-content, .modal-content-viewer');
     if (content) {
         content.addEventListener('animationend', () => onDone(), { once: true });
@@ -80,11 +64,6 @@ export function closeModal(modalId) {
     setTimeout(onDone, 200); // safety fallback
 }
 
-/**
- * Trap focus within a modal when Tab is pressed.
- * @param {KeyboardEvent} e
- * @param {string} modalId
- */
 export function trapFocus(e, modalId) {
     if (e.key !== 'Tab') return;
 
@@ -110,11 +89,6 @@ export function trapFocus(e, modalId) {
     }
 }
 
-// --- Generic click delegation ---
-
-// Backdrop click → close the parent modal
-// data-close-modal button → close the parent modal
-// data-open-modal="id" button → open that modal
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-backdrop')) {
         const modal = e.target.closest('.modal');
@@ -144,7 +118,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Escape key → close the topmost visible modal
 document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const modals = document.querySelectorAll('.modal:not(.hidden)');

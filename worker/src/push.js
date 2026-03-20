@@ -1,17 +1,7 @@
-/**
- * Push notification subscription management and dispatch.
- *
- * Device registry: KV key = `device:{uuid}` (stable across endpoint rotations).
- * Legacy: `push:{sha256(endpoint)}` still supported for pre-upgrade clients.
- * All KV puts include 90-day expirationTtl, reset on any proof-of-life.
- */
-
 import { corsResponse, corsHeaders } from './helpers.js';
 import { sendPushNotification } from './webpush.js';
 
 const KV_TTL = 7776000; // 90 days in seconds
-
-// --- Helpers ---
 
 async function sha256Hex(input) {
     const encoded = new TextEncoder().encode(input);
@@ -27,12 +17,9 @@ function deviceKey(deviceId) {
     return `device:${deviceId}`;
 }
 
-/** Put a record to KV with 90-day TTL. */
 async function putRecord(env, key, record) {
     await env.SUBSCRIBERS.put(key, JSON.stringify(record), { expirationTtl: KV_TTL });
 }
-
-// --- HTTP Endpoints ---
 
 export async function handlePushSubscribe(request, env) {
     const { subscription, playerName, deviceId, deviceLabel, oldEndpoint, notifyPairings, notifyResults } = await request.json();
@@ -41,12 +28,9 @@ export async function handlePushSubscribe(request, env) {
         return corsResponse({ success: false, error: 'Invalid push subscription' }, 400, env, request);
     }
 
-    // Determine the KV key — device:{uuid} if available, else legacy push:{hash}
     const key = deviceId ? deviceKey(deviceId) : await legacyKey(subscription.endpoint);
     const existing = await env.SUBSCRIBERS.get(key, 'json');
 
-    // If device-based and endpoint changed, no orphan — same key, updated in place.
-    // If legacy client sent oldEndpoint, clean up the old key.
     if (!deviceId && oldEndpoint && oldEndpoint !== subscription.endpoint) {
         const oldKey = await legacyKey(oldEndpoint);
         if (await env.SUBSCRIBERS.get(oldKey)) {
@@ -55,12 +39,9 @@ export async function handlePushSubscribe(request, env) {
         }
     }
 
-    // Migrate: if device-based client, delete any lingering legacy keys
     if (deviceId) {
-        // Clean up legacy key for current endpoint
         const legacyK = await legacyKey(subscription.endpoint);
         try { await env.SUBSCRIBERS.delete(legacyK); } catch { /* ignore */ }
-        // Clean up legacy key for old endpoint too
         if (oldEndpoint && oldEndpoint !== subscription.endpoint) {
             const oldLegacyK = await legacyKey(oldEndpoint);
             try { await env.SUBSCRIBERS.delete(oldLegacyK); } catch { /* ignore */ }
@@ -96,9 +77,7 @@ export async function handlePushUnsubscribe(request, env) {
         return corsResponse({ success: false, error: 'Endpoint or deviceId is required' }, 400, env, request);
     }
 
-    // Delete device key if provided
     if (deviceId) await env.SUBSCRIBERS.delete(deviceKey(deviceId));
-    // Always try to clean up the legacy key too
     if (endpoint) await env.SUBSCRIBERS.delete(await legacyKey(endpoint));
 
     return corsResponse({ success: true }, 200, env, request);
@@ -132,7 +111,6 @@ export async function handlePushPreferences(request, env) {
         return corsResponse({ success: false, error: 'Endpoint or deviceId is required' }, 400, env, request);
     }
 
-    // Find record by deviceId first, then legacy key
     let key = null, record = null;
     if (deviceId) {
         key = deviceKey(deviceId);
@@ -154,8 +132,6 @@ export async function handlePushPreferences(request, env) {
     return corsResponse({ success: true }, 200, env, request);
 }
 
-// --- Delivery Tracking (fire-and-forget from service worker) ---
-
 export async function handlePushAck(request, env) {
     const url = new URL(request.url);
     const deviceId = url.searchParams.get('deviceId');
@@ -165,7 +141,7 @@ export async function handlePushAck(request, env) {
     const record = await env.SUBSCRIBERS.get(key, 'json');
     if (record) {
         record.lastDisplayedAt = new Date().toISOString();
-        await putRecord(env, key, record); // resets TTL
+        await putRecord(env, key, record);
     }
     return new Response('', { status: 204, headers: corsHeaders(env, request) });
 }
@@ -179,12 +155,10 @@ export async function handlePushClick(request, env) {
     const record = await env.SUBSCRIBERS.get(key, 'json');
     if (record) {
         record.lastClickedAt = new Date().toISOString();
-        await putRecord(env, key, record); // resets TTL
+        await putRecord(env, key, record);
     }
     return new Response('', { status: 204, headers: corsHeaders(env, request) });
 }
-
-// --- Test ---
 
 export async function handlePushTest(request, env) {
     const { type, key: authKey } = await request.json();
@@ -229,7 +203,6 @@ export async function handlePushTest(request, env) {
     for (const { key, record } of pushSubs) {
         if (!record) continue;
 
-        // Include deviceId in test payloads for ack tracking
         const fullPayload = { ...payload, deviceId: record.deviceId || null };
         const result = await sendPushNotification(
             { endpoint: record.endpoint, keys: record.keys },
@@ -248,12 +221,6 @@ export async function handlePushTest(request, env) {
     return corsResponse({ success: true, type: type || 'pairings', payload, results }, 200, env, request);
 }
 
-// --- Subscription Listing ---
-
-/**
- * List all push subscriptions from KV, handling pagination.
- * Reads both device: and push: (legacy) prefixes.
- */
 export async function listPushSubscriptions(env) {
     const subs = [];
 
@@ -272,12 +239,6 @@ export async function listPushSubscriptions(env) {
     return subs;
 }
 
-// --- Notification Dispatch ---
-
-/**
- * Send push notifications to all eligible subscribers.
- * Tracks delivery success/failure, supports retry on transient errors.
- */
 export async function dispatchPushNotifications({ subscribers, prefKey, trackKey, round, buildPayload, shouldNotify, env, label }) {
     let count = 0, skipped = 0, retried = 0;
 
@@ -287,7 +248,6 @@ export async function dispatchPushNotifications({ subscribers, prefKey, trackKey
         if (shouldNotify && !shouldNotify(record)) { skipped++; continue; }
 
         const payloadObj = await buildPayload(record);
-        // Include deviceId so the SW can send ack/click pings
         payloadObj.deviceId = record.deviceId || null;
         const payload = JSON.stringify(payloadObj);
 
@@ -309,7 +269,6 @@ export async function dispatchPushNotifications({ subscribers, prefKey, trackKey
             console.log(`Push subscription gone, removing: ${key}`);
             await env.SUBSCRIBERS.delete(key);
         } else {
-            // Transient failure — schedule retry
             record.failCount = (record.failCount || 0) + 1;
             if (record.failCount < 5) {
                 record.retryAfter = new Date(Date.now() + 5 * 60 * 1000).toISOString();
@@ -326,10 +285,6 @@ export async function dispatchPushNotifications({ subscribers, prefKey, trackKey
     return count;
 }
 
-/**
- * Retry any pending push notifications whose retryAfter has passed.
- * Called from handleScheduled after normal dispatch.
- */
 export async function retryPendingNotifications(env) {
     const subs = await listPushSubscriptions(env);
     const now = new Date();
@@ -339,8 +294,7 @@ export async function retryPendingNotifications(env) {
         if (!record?.retryAfter || !record.retryPayload) continue;
         if (new Date(record.retryAfter) > now) continue;
 
-        // Check if notification has expired
-        try {
+            try {
             const payload = JSON.parse(record.retryPayload);
             if (payload.expiresAt && new Date(payload.expiresAt) < now) {
                 console.log(`Retry expired for ${key}, clearing`);
@@ -374,7 +328,7 @@ export async function retryPendingNotifications(env) {
                 record.retryAfter = null;
                 record.retryPayload = null;
             } else {
-                record.retryAfter = new Date(Date.now() + 20 * 60 * 1000).toISOString(); // next cron cycle
+                record.retryAfter = new Date(Date.now() + 20 * 60 * 1000).toISOString();
             }
             await putRecord(env, key, record);
         }

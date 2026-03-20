@@ -1,6 +1,5 @@
 import { STATE, getAppState } from './config.js';
 
-// Countdown timer internals
 let countdownSeconds = 60;
 let countdownInterval = null;
 let offSeasonInterval = null;
@@ -23,17 +22,12 @@ export function updateCountdownDisplay() {
 }
 
 export function stopCountdown() {
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-    }
+    clearInterval(countdownInterval);
+    countdownInterval = null;
 }
 
 export function startOffSeasonCountdown(targetDate) {
-    if (offSeasonInterval) {
-        clearInterval(offSeasonInterval);
-        offSeasonInterval = null;
-    }
+    stopOffSeasonCountdown();
 
     function render() {
         const el = document.getElementById('off-season-countdown');
@@ -44,10 +38,7 @@ export function startOffSeasonCountdown(targetDate) {
 
         if (diff <= 0) {
             el.innerHTML = '<div class="off-season-countdown-label">Starting soon!</div>';
-            if (offSeasonInterval) {
-                clearInterval(offSeasonInterval);
-                offSeasonInterval = null;
-            }
+            stopOffSeasonCountdown();
             return;
         }
 
@@ -72,16 +63,12 @@ export function startOffSeasonCountdown(targetDate) {
 }
 
 export function stopOffSeasonCountdown() {
-    if (offSeasonInterval) {
-        clearInterval(offSeasonInterval);
-        offSeasonInterval = null;
-    }
+    clearInterval(offSeasonInterval);
+    offSeasonInterval = null;
 }
 
 export function startCountdown(checkPairings) {
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-    }
+    stopCountdown();
     resetCountdown();
     countdownInterval = setInterval(() => {
         if (getAppState().state !== STATE.NO) {

@@ -1,13 +1,5 @@
-/**
- * Shared utilities, constants, and helpers used across worker modules.
- */
-
-// --- Constants ---
-
 export const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 export const MI_BASE_URL = 'https://www.milibrary.org';
-
-// --- HTTP Response Helpers ---
 
 export function corsHeaders(env, request) {
     const allowed = env.ALLOWED_ORIGIN || '*';
@@ -35,12 +27,6 @@ export function corsResponse(data, status, env, request) {
     });
 }
 
-// --- Player Name Utilities ---
-
-/**
- * Title-case a name: "JOHN BOYER" → "John Boyer", "O'BRIEN" → "O'Brien".
- * Handles comma-separated "LAST, FIRST" format.
- */
 export function titleCaseName(name) {
     return name.replace(/\w\S*/g, w =>
         w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
@@ -66,16 +52,10 @@ export function formatPlayerName(name) {
     return name;
 }
 
-/**
- * Normalize a section name from the tournament page.
- * Fixes common issues: "u" prefix → "U", truncated ranges like "1600-199" → "1600-1999".
- */
+// Fix truncated rating ranges ("1600-199" → "1600-1999") and normalize "u" → "U"
 export function normalizeSection(section) {
     if (!section) return section;
     let s = section.trim().replace(/^u(?=\d)/i, 'U');
-    // Fix truncated rating ranges: "1600-199" → "1600-1999"
-    // Rating band upper bounds are always X99 (e.g., 1999, 2199). If upper bound has
-    // fewer than 4 digits, reconstruct it from the lower bound's thousands digit + "999".
     s = s.replace(/^(\d{4})-(\d{1,3})$/, (_, lo, hi) => {
         const loThousands = Math.floor(parseInt(lo) / 1000);
         const candidate = loThousands * 1000 + 999;
@@ -84,16 +64,7 @@ export function normalizeSection(section) {
     return s;
 }
 
-// --- Pacific Timezone Offset ---
-
-/**
- * Return the UTC offset for US Pacific time on a given calendar date.
- * US DST rules (since 2007): spring forward 2nd Sunday of March, fall back 1st Sunday of November.
- * @param {number} year
- * @param {number} month - 1-indexed (1=Jan, 12=Dec)
- * @param {number} day
- * @returns {string} '-08:00' (PST) or '-07:00' (PDT)
- */
+// US Pacific UTC offset: DST (2nd Sun Mar → 1st Sun Nov) = -07:00, else -08:00
 export function pacificOffset(year, month, day) {
     if (month >= 4 && month <= 10) return '-07:00';
     if (month <= 2 || month === 12) return '-08:00';
@@ -110,19 +81,9 @@ export function pacificOffset(year, month, day) {
 
 const pad2 = n => String(n).padStart(2, '0');
 
-/**
- * Build an ISO 8601 datetime string with the correct Pacific UTC offset.
- * @param {number} year
- * @param {number} month - 1-indexed (1=Jan, 12=Dec)
- * @param {number} day
- * @param {string} [time='00:00:00'] - HH:MM:SS
- * @returns {string} e.g. '2026-03-09T18:30:00-07:00'
- */
 export function pacificDatetime(year, month, day, time = '00:00:00') {
     return `${year}-${pad2(month)}-${pad2(day)}T${time}${pacificOffset(year, month, day)}`;
 }
-
-// --- Tournament Slug ---
 
 export function slugifyTournament(name) {
     return name
@@ -132,12 +93,6 @@ export function slugifyTournament(name) {
         .replace(/^-+|-+$/g, '');
 }
 
-// --- Tournament Slug Resolution ---
-
-/**
- * Resolve current tournament slug from D1.
- * Returns { slug } or a 503 error Response.
- */
 export async function resolveCurrentSlug(env, request) {
     const today = new Date().toISOString().split('T')[0];
     const row = await env.DB.prepare(
@@ -147,8 +102,6 @@ export async function resolveCurrentSlug(env, request) {
     if (!row) return corsResponse({ error: 'Tournament not resolved' }, 503, env, request);
     return { slug: row.slug };
 }
-
-// --- Parameter Validation ---
 
 export function validateGameId(url, env, request) {
     const gameId = url.searchParams.get('id');

@@ -44,7 +44,7 @@ Two deployments on Cloudflare:
 | `tournament.js` | Tournament resolution, `getTimeState()`, `computeAppState()`. Handles `/tournament-html`, `/tournament-state`, `/og-state`, `/health`. |
 | `games.js` | D1 game query endpoints, OG image generation, player list. Handles `/query`, `/players`, `/tournaments`, `/og-game`, `/og-game-image`, `/eco-classify`, `/eco-data`, `/backfill-eco`. |
 | `push.js` | Push subscription CRUD and notification dispatch. Handles `/push-subscribe`, `/push-unsubscribe`, `/push-status`, `/push-preferences`, `/push-test`. |
-| `cron.js` | Scheduled handler: HTML fetching, caching, D1 game ingestion, ECO classification, push dispatch. |
+| `cron.js` | Scheduled handler: thin time-guard + Durable Object delegator. All processing runs inside `TournamentCron` DO. HTML hash check skips D1 ops when page unchanged. |
 | `parser.js` | Regex-based tournament HTML parser. `parseTournamentPage()`, `hasPairings()`, `hasResults()`, `findPlayerPairing()`, `parseStandings()`, `composeMessage()`, `composeResultsMessage()`, `parseTournamentList()`, `parseRoundDates()`, `extractTournamentName()`. |
 | `helpers.js` | Response builders, CORS, name normalization, slug helpers, constants. |
 | `eco.js` | ECO opening classification via position-based (EPD) matching using chess.js. |
@@ -123,7 +123,7 @@ Round result codes: `W`=win, `L`=loss, `D`=draw, `H`=half-point bye, `B`=full-po
 ### Games & Queries (D1-backed)
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/query` | GET | Composable game queries. Filters: `player`, `tournament`, `round`, `board`, `gameId`, `hasPgn`, `include=submissions`. Response includes `whiteNorm`/`blackNorm` canonical keys. |
+| `/query` | GET | Composable game queries. Filters: `player`, `tournament`, `round`, `board`, `gameId`, `hasPgn`, `include=submissions`. Response includes `whiteNorm`/`blackNorm` canonical keys. When filtering by player with `tournament=all`, also returns `uscfId` and `playerRating` (lazily refreshed from USCF API if older than 14 days). |
 | `/players` | GET | List all players (name, dbName, uscfId, rating). |
 | `/tournaments` | GET | List all tournaments from D1. |
 | `/og-game` | GET | OG metadata for a specific game (by `game_id`). |
@@ -162,14 +162,15 @@ Primary game storage. Binding: `DB`. Migrations in `worker/migrations/`.
 
 | Pattern | Purpose |
 |---------|---------|
-| `push:<sha256_hash>` | Push subscription record (endpoint, keys, player name, prefs, notification state). |
-| `cache:tournamentHtml` | Stripped SwissSys HTML + round number + pairings colors. |
-| `cache:tournamentMeta` | Tournament name, URL, round dates, next tournament (6h TTL). |
-| `state:pairingsUp` | Last pairings detection (round + timestamp). |
-| `state:resultsPosted` | Last results detection. |
-| `state:previousTournament` | Previous tournament fallback when MI listing page delists finished tournaments. |
+| `device:<uuid>` | Device record — endpoint, keys, player name, device label, prefs, delivery tracking, retry state (90-day TTL). |
+| `push:<sha256_hash>` | Legacy push subscription (pre-upgrade clients, auto-migrated to `device:` on next visit). |
+| `cache:tournamentHtml` | Stripped SwissSys HTML + round number. |
+| `cache:htmlHash` | SHA-1 hash of last fetched HTML — used by TournamentCron DO to skip processing when page unchanged. |
 | `cache:appState` | Pre-computed `/tournament-state` response (written by cron). |
-| `state:lastCheck` | Last cron check. |
+| `state:pairingsUp` | Last notified pairings round + timestamp (prevents re-notification). |
+| `state:resultsPosted` | Last notified results round + timestamp. |
+| `state:gamesPosted` | Last notified games-posted round + timestamp. |
+| `state:lastCheck` | Timestamp + pairingsFound from last cron run (used by `/health`). |
 
 **GAMES** (`dd3adec3b60b4002b71eaa1d1bae129e`):
 

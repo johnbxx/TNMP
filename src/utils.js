@@ -47,21 +47,6 @@ export function getHeader(pgn, tag) {
 }
 
 /**
- * Normalize section names: lowercase "u" prefix → uppercase "U" (e.g., "u1800" → "U1800").
- */
-export function normalizeSection(s) {
-    if (!s) return '';
-    let out = s.trim().replace(/^u(?=\d)/i, 'U');
-    // Fix truncated rating ranges: "1600-199" → "1600-1999"
-    out = out.replace(/^(\d{4})-(\d{1,3})$/, (_, lo, hi) => {
-        const loThousands = Math.floor(parseInt(lo) / 1000);
-        const candidate = loThousands * 1000 + 999;
-        return candidate > parseInt(lo) ? `${lo}-${candidate}` : `${lo}-${hi}`;
-    });
-    return out;
-}
-
-/**
  * Convert FEN to EPD (strip halfmove and fullmove clocks).
  */
 export function fenToEpd(fen) {

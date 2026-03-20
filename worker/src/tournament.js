@@ -1,18 +1,7 @@
-/**
- * Tournament resolution, app state computation, and tournament-facing endpoints.
- *
- * Handles: /tournament-html, /tournament-state, /og-state, /health
- */
-
 import { corsResponse, slugifyTournament, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL } from './helpers.js';
 import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
 
-// --- Tournament Resolution ---
-
-/**
- * Resolve the current tournament from D1. Falls back to MI listing page
- * discovery when no tournament covers today (~7x/year during transitions).
- */
+// Falls back to MI listing page discovery during ~7-day gaps between tournaments
 export async function resolveTournament(env) {
     const today = new Date().toISOString().split('T')[0];
 
@@ -32,7 +21,6 @@ export async function resolveTournament(env) {
         try { roundDates = JSON.parse(current.round_dates || '[]'); } catch { roundDates = []; }
         let url = current.url;
 
-        // If URL is missing, discover it from MI listing page and persist
         if (!url) {
             url = await discoverTournamentUrl(env, current.name);
             if (url) {
@@ -55,14 +43,9 @@ export async function resolveTournament(env) {
         };
     }
 
-    // No tournament covers today — discover from MI listing page
     return await discoverTournament(env, today);
 }
 
-/**
- * Find the URL for a tournament by name from the MI listing page.
- * Used when a tournament exists in D1 but has no URL yet.
- */
 async function discoverTournamentUrl(env, tournamentName) {
     try {
         const res = await fetch(TOURNAMENTS_LIST_URL, { headers: { 'User-Agent': 'TNMP-Notification-Worker/1.0' } });
@@ -81,10 +64,6 @@ async function discoverTournamentUrl(env, tournamentName) {
     return null;
 }
 
-/**
- * Fetch MI listing page to discover tournaments not yet in D1.
- * Only runs during tournament transitions (~7x/year).
- */
 async function discoverTournament(env, today) {
     const UA = { 'User-Agent': 'TNMP-Notification-Worker/1.0' };
 
@@ -103,7 +82,6 @@ async function discoverTournament(env, today) {
 
     const year = new Date().getFullYear();
 
-    // Find the first upcoming tournament
     for (const t of tournaments) {
         const tournamentUrl = MI_BASE_URL + t.url;
         let pageHtml;
@@ -117,7 +95,6 @@ async function discoverTournament(env, today) {
         const name = extractTournamentName(pageHtml) || t.name;
         if (roundDates.length === 0) continue;
 
-        // Write to D1 so we don't need to discover again
         const slug = slugifyTournament(name);
         const roundDatesJson = JSON.stringify(roundDates);
         await env.DB.prepare(
@@ -139,11 +116,6 @@ async function discoverTournament(env, today) {
     return null;
 }
 
-// --- App State ---
-
-/**
- * Server-side time state logic, mirroring src/time.js getTimeState().
- */
 export function getTimeState(roundDates, nextTournament) {
     const now = new Date();
     const pacificTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
@@ -168,7 +140,6 @@ export function getTimeState(roundDates, nextTournament) {
             if (nowMs < r1DayStart.getTime()) return 'off_season';
             if (nowMs < r1Date.getTime()) return 'off_season_r1';
 
-            // Past all rounds? Check if we're still on the last round's day
             const lastRound = rounds[rounds.length - 1];
             if (nowMs >= lastRound.getTime()) {
                 const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
@@ -195,16 +166,12 @@ const OG_STATE_CONFIG = {
     off_season:  { title: 'REST — Off Season', color: '#5D8047', image: 'og-off-season.png' },
 };
 
-/**
- * Compute the combined app state from time window + HTML content analysis.
- */
 export function computeAppState(cached, meta) {
     const rawRound = cached?.round || null;
     const tournamentName = meta?.name || 'Tuesday Night Marathon';
     const roundDates = meta?.roundDates || [];
     const nextTournament = meta?.nextTournament || null;
     const totalRounds = meta?.totalRounds || 0;
-    // Derive round from dates when HTML hasn't been parsed yet
     let roundNumber = rawRound || null;
     if (!roundNumber && roundDates.length > 0) {
         const nowMs = Date.now();
@@ -260,7 +227,6 @@ export function computeAppState(cached, meta) {
                 ? `Round ${roundNumber} is complete. Check back Monday for next week's pairings!`
                 : 'The round is complete. Check back Monday for next week\'s pairings!';
     } else {
-        // check_pairings window
         const pairingsUp = cached?.html ? hasPairings(cached.html) : false;
         if (!pairingsUp) {
             state = 'no'; info = 'Waiting for pairings to be posted...';
@@ -273,8 +239,6 @@ export function computeAppState(cached, meta) {
 
     return { state, round: roundNumber, info, tournamentName, totalRounds, offSeason };
 }
-
-// --- HTTP Handlers ---
 
 export async function handleTournamentHtml(request, env) {
     const [cached, meta] = await Promise.all([
@@ -291,13 +255,9 @@ export async function handleTournamentHtml(request, env) {
 }
 
 export async function handleTournamentState(request, env) {
-    // Fast path: serve pre-computed state from cron (single KV read)
     const cachedAppState = await env.SUBSCRIBERS.get('cache:appState', 'json');
-    if (cachedAppState) {
-        return corsResponse(cachedAppState, 200, env, request);
-    }
+    if (cachedAppState) return corsResponse(cachedAppState, 200, env, request);
 
-    // Fallback: compute on the fly (first deploy or KV cleared)
     const [cached, meta] = await Promise.all([
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
         resolveTournament(env),

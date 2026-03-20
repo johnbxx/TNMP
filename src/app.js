@@ -1,22 +1,21 @@
-import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState, DEBUG_PGN } from './config.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState } from './config.js';
 import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker } from './ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './countdown.js';
 import { shareStatus } from './share.js';
 import { openSettings, saveSettings, initSettings } from './settings.js';
 import { openStyle, initStyle } from './style.js';
-import { previewState, initDebugPanel } from './debug.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
     openGamePanel as openGameViewer, openGameWithPlayerNav, closeGamePanel, handlePanelKeydown,
     explorerBackToBrowser,
-    dirtyDialogCopyLeave, dirtyDialogDiscard, dirtyDialogCancel,
+    resolveDirtyDialog,
     explorerGoToStart, explorerGoBack, explorerGoForward,
     goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode,
     getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
-    toggleNag, showImportDialog, showSubmitDialog, hideImportDialog, doImport, submitGame,
-    showHeaderEditor, hideHeaderEditor, saveHeaderEditor,
-    launchExplorer, debugInjectSkeletons, initGamePanel,
+    toggleNag, showImportDialog, hideImportDialog, doImport, submitGame,
+    showHeaderEditor, saveHeaderEditor,
+    launchExplorer, initGamePanel,
 } from './game-panel.js';
 import { showToast } from './toast.js';
 import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './games.js';
@@ -363,9 +362,9 @@ const ACTIONS = {
     'browser-explore': launchExplorer,
     // Editor
     'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
-    'browser-import': showImportDialog, 'submit-add-moves': showSubmitDialog, 'viewer-submit': submitGame,
-    'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': hideHeaderEditor,
-    'dirty-copy-leave': dirtyDialogCopyLeave, 'dirty-discard': dirtyDialogDiscard, 'dirty-cancel': dirtyDialogCancel,
+    'browser-import': showImportDialog, 'submit-add-moves': () => showImportDialog(true), 'viewer-submit': submitGame,
+    'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': () => document.getElementById('editor-header-popup')?.classList.add('hidden'),
+    'dirty-copy-leave': () => resolveDirtyDialog('copy-leave'), 'dirty-discard': () => resolveDirtyDialog('discard'), 'dirty-cancel': () => resolveDirtyDialog('cancel'),
     // Share popover
     'share-copy-pgn': () => handleShareAction('copy-pgn'),
     'share-copy-link': () => handleShareAction('copy-link'),
@@ -408,12 +407,6 @@ document.addEventListener('click', (e) => {
     const nagBtn = e.target.closest('.nag-btn');
     if (nagBtn) { toggleNag(parseInt(nagBtn.dataset.nag, 10)); return; }
 
-    // Debug panel
-    const debugBtn = e.target.closest('[data-debug]');
-    if (debugBtn) { previewState(debugBtn.dataset.debug, debugBtn.dataset.variant); return; }
-
-    if (e.target.closest('#debug-game-viewer')) { openGameViewer({ pgn: DEBUG_PGN, orientation: 'Black' }); return; }
-    if (e.target.closest('#debug-pgn-editor')) { openGameViewer({ pgn: '*' }); return; }
 });
 
 // Delegated hold-to-repeat for [data-hold] buttons (survives innerHTML rebuilds)
@@ -509,9 +502,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => openModal('about-modal'), 500);
     }
 
-    // Debug helpers (console access)
-    window.debugInjectSkeletons = debugInjectSkeletons;
-
     // App bootstrap
     wrappedCheckPairings();
     startCountdown(wrappedCheckPairings);
@@ -520,10 +510,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // URL params
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('debug') === 'true') {
-        initDebugPanel(document.getElementById('debug-mount'));
-        document.getElementById('debug-panel').style.display = 'block';
-    }
     const gameId = urlParams.get('game');
     if (gameId && /^\d{10,20}$/.test(gameId)) {
         fetchGames({ gameId, include: 'pgn' }).then(() => {

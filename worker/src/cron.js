@@ -1,11 +1,3 @@
-/**
- * Cron handler — scheduled tournament HTML fetching, caching, D1 ingestion,
- * and push notification dispatch.
- *
- * Called by the worker's scheduled() entry point. Heavy work runs inside
- * TournamentCron Durable Object to avoid the Worker 10ms CPU time limit.
- */
-
 import { DurableObject } from 'cloudflare:workers';
 import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
 import { resolveTournament, computeAppState } from './tournament.js';
@@ -25,29 +17,21 @@ export class TournamentCron extends DurableObject {
 }
 
 export async function handleScheduled(env, { force = false } = {}) {
-    // DST-proof guard: cron windows are widened to cover both PST and PDT.
-    // Early-return if Pacific time is outside the intended hours.
     const pacific = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
     const pDay = pacific.getDay();
     const pHour = pacific.getHours();
     const pMinute = pacific.getMinutes();
 
-    // Mon 7PM-11:59PM: pairings check (every minute)
     const isPairingsWindow = pDay === 1 && pHour >= 19;
-    // Tue 7PM-11:59PM: results check (every 5 min)
     const isResultsWindow = pDay === 2 && pHour >= 19;
 
     if (!force && !isPairingsWindow && !isResultsWindow) {
-        // Outside pairings/results windows — only run every-20-min cache refresh
-        // Allow ±2 min tolerance for Cloudflare cron drift
         if (pMinute % 20 > 2 && pMinute % 20 < 18) {
             console.log(`Cron skipped: Pacific ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][pDay]} ${pHour}:${String(pMinute).padStart(2, '0')} outside active window`);
             return;
         }
     }
 
-    // Delegate all heavy work to TournamentCron Durable Object to avoid
-    // the Worker 10ms CPU time limit. The DO has no such constraint.
     const id = env.TOURNAMENT_CRON.idFromName('singleton');
     const stub = env.TOURNAMENT_CRON.get(id);
     const res = await stub.fetch('https://do/run');
@@ -62,7 +46,6 @@ async function runCronLogic(env) {
     const t = {};
     let t0;
 
-    // Resolve the current tournament dynamically
     t0 = performance.now();
     const tournament = await resolveTournament(env);
     t.resolveTournament = performance.now() - t0;
@@ -73,7 +56,6 @@ async function runCronLogic(env) {
 
     console.log(`Using tournament: ${tournament.name} (${tournament.url})`);
 
-    // Fetch tournament page
     let html;
     t0 = performance.now();
     try {
@@ -91,7 +73,6 @@ async function runCronLogic(env) {
     }
     t.fetchHtml = performance.now() - t0;
 
-    // Hash check — skip all processing if the page hasn't changed
     t0 = performance.now();
     const hashBuffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(html));
     const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -104,17 +85,13 @@ async function runCronLogic(env) {
     await env.SUBSCRIBERS.put('cache:htmlHash', hash);
     console.log('HTML changed, processing...');
 
-    // Parse the full HTML in one pass
     t0 = performance.now();
     const parsed = parseTournamentPage(html);
     t.parseTournamentPage = performance.now() - t0;
 
-    // --- Set up canonicalization infrastructure BEFORE any store operations ---
-
-    // Load alias map, USCF ID→canonical name map, and rating history for name canonicalization + ELO fallback
     const aliasMap = new Map();
-    const uscfIdMap = new Map(); // uscf_id → { name, norm, aliases }
-    const ratingHistoryMap = new Map(); // canonical name → [{ date, rating }, ...] sorted oldest-first
+    const uscfIdMap = new Map();
+    const ratingHistoryMap = new Map();
     t0 = performance.now();
     try {
         const allPlayers = await env.DB.prepare(
@@ -137,7 +114,6 @@ async function runCronLogic(env) {
     } catch { /* players table may not exist yet */ }
     t.loadPlayers = performance.now() - t0;
 
-    /** Find the rating active on a given date from a player's rating history. */
     function ratingAtDate(playerName, gameDate) {
         if (!gameDate) return null;
         const history = ratingHistoryMap.get(playerName);
@@ -151,7 +127,6 @@ async function runCronLogic(env) {
         return best;
     }
 
-    // Parse standings and build HTML name → USCF ID map (needed by canonicalize)
     const htmlNameToUscfId = new Map();
     let standings = [];
     t0 = performance.now();
@@ -167,7 +142,6 @@ async function runCronLogic(env) {
     }
     t.parseStandings = performance.now() - t0;
 
-    // Discover new players: any USCF ID in standings not already in uscfIdMap
     const newPlayerIds = [];
     for (const section of standings) {
         for (const p of section.players) {
@@ -189,7 +163,6 @@ async function runCronLogic(env) {
                 const regular = data.ratings?.find(r => r.ratingSystem === 'R');
                 const rating = regular?.rating || null;
 
-                // Add to in-memory maps so canonicalize() works for this cron run
                 uscfIdMap.set(uscfId, { name, norm, aliases: [norm] });
                 aliasMap.set(norm, { name, norm });
 
@@ -212,31 +185,24 @@ async function runCronLogic(env) {
         }
     }
 
-    // Resolve a player name: check alias map, then fall back to USCF ID from standings.
-    // If a new alias is discovered, persist it to D1 and update the alias map.
     const newAliases = [];
     function canonicalize(name) {
         const norm = normalizePlayerName(name);
-        // 1. Known alias?
         const alias = aliasMap.get(norm);
         if (alias) return { name: alias.name, norm: alias.norm };
-        // 2. USCF ID match from standings?
         const uscfId = htmlNameToUscfId.get(norm);
         if (uscfId) {
             const canonical = uscfIdMap.get(uscfId);
             if (canonical && canonical.norm !== norm) {
-                // New alias discovered — add to maps and queue DB update
                 aliasMap.set(norm, { name: canonical.name, norm: canonical.norm });
                 canonical.aliases.push(norm);
                 newAliases.push({ uscfId, norm, canonicalName: canonical.name, aliases: canonical.aliases });
                 return { name: canonical.name, norm: canonical.norm };
             }
         }
-        // Fallback: title-case the raw name and ensure "Last, First" format
         const tc = titleCaseName(name);
         const parts = tc.split(/,\s*/);
         if (parts.length >= 2) return { name: tc, norm };
-        // "First Last" → "Last, First"
         const words = tc.split(/\s+/);
         if (words.length >= 2) {
             const last = words[words.length - 1];
@@ -246,7 +212,6 @@ async function runCronLogic(env) {
         return { name: tc, norm };
     }
 
-    /** Resolve a player by USCF ID first, falling back to name-based canonicalize. */
     function canonicalizeByIdOrName(uscfId, name) {
         if (uscfId) {
             const canonical = uscfIdMap.get(uscfId);
@@ -255,9 +220,6 @@ async function runCronLogic(env) {
         return canonicalize(name);
     }
 
-    // --- Now safe to store: all names go through canonicalize() ---
-
-    // Cache the stripped HTML for the frontend (used by computeAppState for hasPairings/hasResults)
     t0 = performance.now();
     await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
         html: parsed.strippedHtml,
@@ -267,7 +229,6 @@ async function runCronLogic(env) {
     console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}).`);
     t.kvPutHtml = performance.now() - t0;
 
-    // Pre-compute app state so /tournament-state is a single KV read
     t0 = performance.now();
     const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
     const appState = computeAppState(cached, tournament);
@@ -284,7 +245,6 @@ async function runCronLogic(env) {
     console.log(`Cached appState in KV.`);
     t.kvPutAppState = performance.now() - t0;
 
-    // Extract byes from standings and persist to D1
     t0 = performance.now();
     try {
         const byeTypes = { H: 'half', B: 'full', U: 'zero' };
@@ -317,12 +277,10 @@ async function runCronLogic(env) {
     }
     t.byes = performance.now() - t0;
 
-    // Store games in D1 (only new or changed)
     let newCount = 0;
     let updatedCount = 0;
     const existingMap = new Map();
     try {
-        // Fetch existing games for this tournament to diff against
         t0 = performance.now();
         const existing = await env.DB.prepare(
             'SELECT round, board, result, pgn FROM games WHERE tournament_slug = ?'
@@ -342,10 +300,8 @@ async function runCronLogic(env) {
                 const key = `${roundNum}:${g.board}`;
                 const ex = existingMap.get(key);
 
-                // Skip if row exists with same result and already has a PGN
                 if (ex && ex.hasPgn && ex.result === g.result) continue;
 
-                // Canonicalize names via alias map + USCF ID lookup
                 const w = canonicalize(g.white);
                 const b = canonicalize(g.black);
                 const whiteName = w.name, whiteNorm = w.norm;
@@ -393,7 +349,6 @@ async function runCronLogic(env) {
         console.error('Failed to store games in D1:', err.message, err.stack);
     }
 
-    // Insert shell records for games from pairings table (skip if already in D1)
     t0 = performance.now();
     if (parsed.hasPairings) {
         try {
@@ -409,7 +364,6 @@ async function runCronLogic(env) {
                     const ex = existingMap.get(key);
                     const result = parseGameResult(row.whiteResult, row.blackResult);
 
-                    // Skip if game already exists (unless we have a new result for a pending game)
                     if (ex && (ex.result !== '*' || result === '*')) continue;
 
                     const wInfo = parsePlayerInfo(row.whiteName);
@@ -446,7 +400,6 @@ async function runCronLogic(env) {
     }
     t.shellRecords = performance.now() - t0;
 
-    // Persist any newly discovered aliases
     if (newAliases.length > 0) {
         try {
             const stmts = newAliases.map(a =>
@@ -465,12 +418,10 @@ async function runCronLogic(env) {
         pairingsFound: parsed.hasPairings,
     }));
 
-    // --- Dispatch notifications (independent of data ingestion) ---
     t0 = performance.now();
     await dispatchAllNotifications(parsed, tournament, env);
     t.notifications = performance.now() - t0;
 
-    // --- Retry any failed notifications from previous runs ---
     t0 = performance.now();
     await retryPendingNotifications(env);
     t.retryNotifications = performance.now() - t0;
@@ -479,22 +430,9 @@ async function runCronLogic(env) {
     console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
 }
 
-/**
- * Dispatch all notification types independently. Each checks its own
- * conditions and state — no early returns between types.
- */
-/**
- * Compute pairings expiry: round start (6:30 PM Pacific on the round date), or 24h fallback.
- * Round dates are YYYY-MM-DD. We construct the UTC equivalent of 6:30 PM Pacific
- * by adding the current Pacific→UTC offset (7h PDT, 8h PST).
- */
 function pairingsExpiresAt(roundDates, round) {
     const dateStr = roundDates?.[round - 1];
     if (!dateStr) return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    // Try both PDT (-7) and PST (-8), pick whichever lands on the round date in Pacific
-    // Simpler: just use -7 (PDT) in spring/summer, -8 (PST) in fall/winter.
-    // But really, the difference is 1 hour — close enough for a notification TTL.
-    // Use -8 as the safe choice (expires slightly later = more generous).
     return new Date(`${dateStr}T18:30:00-08:00`).toISOString();
 }
 
@@ -509,7 +447,6 @@ async function dispatchAllNotifications(parsed, tournament, env) {
     const isInTournament = (record) =>
         !record.playerName || findPlayerPairingFromSections(parsed.pairingsSections, record.playerName) !== null;
 
-    // --- Pairings ---
     const pairingsState = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
     if (pairingsState && pairingsState.round === round) {
         console.log(`Already notified pairings for round ${round}.`);
@@ -543,7 +480,6 @@ async function dispatchAllNotifications(parsed, tournament, env) {
         console.log(`Notified ${count} push subscriber(s) for round ${round} pairings.`);
     }
 
-    // --- Results ---
     if (!parsed.hasResults) {
         console.log('No results found yet for current round.');
     } else {
@@ -584,8 +520,6 @@ async function dispatchAllNotifications(parsed, tournament, env) {
         }
     }
 
-    // --- Games (PGNs available) ---
-    // Count boards from pairings for this round, notify when >50% have PGNs
     const roundGames = parsed.fullGames[String(round)] || [];
     const roundSections = parsed.pairingsSections.filter(s => s.round === round);
     const totalBoards = roundSections.reduce((sum, s) => sum + s.rows.length, 0);
@@ -609,7 +543,7 @@ async function dispatchAllNotifications(parsed, tournament, env) {
                     shouldNotify: isInTournament,
                     buildPayload: () => ({
                         title: `Round ${round} Games Are Up!`,
-                        body: composeGamesMessage(round, roundGames.length),
+                        body: composeGamesMessage(round),
                         url: '/', type: 'games', round,
                         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
                     }),

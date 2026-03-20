@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    parsePlayerInfo, hasPairings, hasResults, findPlayerPairing,
+    parsePlayerInfo, hasPairings, hasResults,
     composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
     parseStandings,
@@ -71,28 +71,6 @@ describe('hasResults', () => {
     });
 });
 
-// --- findPlayerPairing ---
-
-describe('findPlayerPairing', () => {
-    it('finds player as Black', () => {
-        const pairing = findPlayerPairing(html, 'John Boyer');
-        expect(pairing).toBeTruthy();
-        expect(pairing.color).toBe('Black');
-        expect(pairing.board).toBe('18');
-        expect(pairing.opponent).toBe('Phil Ploquin');
-        expect(pairing.opponentRating).toBe(1660);
-    });
-
-    it('finds player as White', () => {
-        const pairing = findPlayerPairing(html, 'Elliott Winslow');
-        expect(pairing).toBeTruthy();
-        expect(pairing.color).toBe('White');
-    });
-
-    it('returns null for player not found', () => {
-        expect(findPlayerPairing(html, 'Magnus Carlsen')).toBeNull();
-    });
-});
 
 // --- composeMessage ---
 
@@ -338,16 +316,6 @@ describe('findPlayerPairingFromSections', () => {
         expect(pairing.board).toBe('18');
         expect(pairing.opponent).toBe('Phil Ploquin');
         expect(pairing.opponentRating).toBe(1660);
-    });
-
-    it('matches findPlayerPairing on stripped HTML', () => {
-        const parsed = parseTournamentPage(fullHtml);
-        const fromSections = findPlayerPairingFromSections(parsed.pairingsSections, 'John Boyer');
-        const fromHtml = findPlayerPairing(html, 'John Boyer');
-        expect(fromSections.board).toBe(fromHtml.board);
-        expect(fromSections.color).toBe(fromHtml.color);
-        expect(fromSections.opponent).toBe(fromHtml.opponent);
-        expect(fromSections.opponentRating).toBe(fromHtml.opponentRating);
     });
 
     it('returns null for unknown player', () => {

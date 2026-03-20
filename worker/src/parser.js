@@ -1,18 +1,6 @@
-/**
- * Tournament page parser — unified sync parser for all worker HTML parsing.
- *
- * Four sections:
- *   1. parseTournamentPage() — single-pass full HTML parser for cron
- *   2. Query functions on pre-parsed sections (no re-parsing)
- *   3. Lightweight regex functions for stripped/cached HTML (web requests)
- *   4. Pure utilities (message composition, tournament list, round dates, PGN extraction)
- */
-
 import { pacificDatetime, normalizeSection } from './helpers.js';
 
 const SITE_URL = 'https://tnmpairings.com';
-
-// --- Internal helpers ---
 
 function decodeEntities(str) {
     return str
@@ -32,26 +20,17 @@ function escapeRegex(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Convert white/black result strings from a pairings table into a PGN result.
- * Returns '1-0', '0-1', '1/2-1/2', or '*'.
- */
 export function parseGameResult(whiteResult, blackResult) {
     const wr = whiteResult.trim();
     const br = blackResult.trim();
     if (wr === '1' && br === '0') return '1-0';
     if (wr === '0' && br === '1') return '0-1';
     if ((wr === '\u00BD' || wr === '½') && (br === '\u00BD' || br === '½')) return '1/2-1/2';
-    // Forfeits: "1 X" = forfeit win, "0 F" = forfeit loss
     if (/^1\s*X?$/i.test(wr) && /^0\s*F?$/i.test(br)) return '1-0';
     if (/^0\s*F?$/i.test(wr) && /^1\s*X?$/i.test(br)) return '0-1';
     return '*';
 }
 
-/**
- * Parse pairings table rows from a table HTML string.
- * Returns array of { board, whiteResult, whiteName, whiteUrl, blackResult, blackName, blackUrl }.
- */
 function parseNameCell(cellHtml) {
     const linkMatch = cellHtml.match(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
     const url = linkMatch ? linkMatch[1] : null;
@@ -82,25 +61,7 @@ function parsePairingsTable(tableHtml) {
     return rows;
 }
 
-// ============================================================
-// Section 1: FULL HTML SINGLE-PASS PARSER
-// ============================================================
-
-/**
- * Parse the full tournament HTML in one pass, extracting all data needed by the cron handler.
- *
- * Returns {
- *   roundNumber,      // highest round number (or null)
- *   strippedHtml,     // standings + pairings HTML only (for KV cache)
- *   pgnColors,        // { round: [{ white, black, result, board }] }
- *   fullGames,        // { round: [{ white, black, result, board, whiteElo, blackElo, eco, gameId, date, section, pgn }] }
- *   pairingsSections, // [{ round, section, rows: [{ board, whiteResult, whiteName, whiteUrl, blackResult, blackName, blackUrl }] }]
- *   hasPairings,      // boolean
- *   hasResults,       // boolean
- * }
- */
 export function parseTournamentPage(html) {
-    // --- Pass 1: PGN textareas ---
     const pgnColors = {};
     const gameMap = new Map();
     const textareaRegex = /<textarea\s+id="pgn-textarea-(\d+)"[^>]*>([\s\S]*?)<\/textarea>/gi;
@@ -120,7 +81,6 @@ export function parseTournamentPage(html) {
             const roundNum = parseInt(roundMatch[1], 10);
             const board = roundMatch[2] ? parseInt(roundMatch[2], 10) : null;
 
-            // pgnColors (lightweight)
             if (!pgnColors[roundNum]) pgnColors[roundNum] = [];
             pgnColors[roundNum].push({
                 white: whiteMatch[1],
@@ -129,7 +89,6 @@ export function parseTournamentPage(html) {
                 board,
             });
 
-            // fullGames (deduplicated by round:board)
             const whiteEloMatch = game.match(/\[WhiteElo\s+"([^"]+)"\]/);
             const blackEloMatch = game.match(/\[BlackElo\s+"([^"]+)"\]/);
             const ecoMatch = game.match(/\[ECO\s+"([^"]+)"\]/);
@@ -162,7 +121,6 @@ export function parseTournamentPage(html) {
         }
     }
 
-    // Group deduplicated games by round
     const fullGames = {};
     for (const game of gameMap.values()) {
         const { roundNum, ...gameData } = game;
@@ -170,7 +128,6 @@ export function parseTournamentPage(html) {
         fullGames[roundNum].push(gameData);
     }
 
-    // --- Pass 2: H3 + table sections ---
     const sectionRegex = /<h3>([^<]*(?:Pairings for Round|Standings)[^<]*)<\/h3>([\s\S]*?)(<table[^>]*>[\s\S]*?<\/table>)/gi;
     const standingsParts = [];
     const pairingsParts = [];
@@ -196,13 +153,11 @@ export function parseTournamentPage(html) {
         }
     }
 
-    // Build stripped HTML
     let strippedHtml = '';
     if (standingsParts.length > 0) strippedHtml += '<h2>Standings</h2>\n' + standingsParts.join('\n');
     if (pairingsParts.length > 0) strippedHtml += '\n<h2>Pairings</h2>\n' + pairingsParts.join('\n');
     if (!strippedHtml) strippedHtml = html;
 
-    // Derive booleans
     const hasPairingsResult = pairingsSections.length > 0;
     const hasResultsResult = checkResults(pairingsSections);
 
@@ -217,20 +172,12 @@ export function parseTournamentPage(html) {
     };
 }
 
-// ============================================================
-// Section 2: QUERY FUNCTIONS ON PARSED SECTIONS
-// ============================================================
-
 function findMaxRound(sections) {
     let max = 0;
     for (const s of sections) { if (s.round > max) max = s.round; }
     return max;
 }
 
-/**
- * Check whether the highest-round pairings sections have results filled in.
- * Takes pre-parsed sections array from parseTournamentPage().
- */
 function checkResults(sections) {
     if (sections.length === 0) return false;
     const maxRound = findMaxRound(sections);
@@ -245,14 +192,9 @@ function checkResults(sections) {
             if (row.whiteResult.trim() !== '' || row.blackResult.trim() !== '') gamesWithResults++;
         }
     }
-    // Require at least half of non-bye games to have results
     return totalGames > 0 && gamesWithResults >= totalGames / 2;
 }
 
-/**
- * Find a player's pairing from pre-parsed pairings sections.
- * Returns pairing info or null.
- */
 export function findPlayerPairingFromSections(sections, playerName) {
     const playerRegex = new RegExp(escapeRegex(playerName), 'i');
     const maxRound = findMaxRound(sections);
@@ -287,10 +229,6 @@ export function findPlayerPairingFromSections(sections, playerName) {
     return null;
 }
 
-/**
- * Find a player's result from pre-parsed pairings sections.
- * Returns the player's result string (e.g., "1", "0", "½") or null.
- */
 export function findPlayerResultFromSections(sections, playerName) {
     const playerRegex = new RegExp(escapeRegex(playerName), 'i');
     const maxRound = findMaxRound(sections);
@@ -305,20 +243,10 @@ export function findPlayerResultFromSections(sections, playerName) {
     return null;
 }
 
-// ============================================================
-// Section 3: LIGHTWEIGHT FUNCTIONS FOR STRIPPED/CACHED HTML
-// ============================================================
-
-/**
- * Check whether the HTML contains pairings.
- */
 export function hasPairings(html) {
     return /<h3>Pairings for Round \d+\./i.test(html);
 }
 
-/**
- * Check whether the highest-round pairings table has results filled in.
- */
 export function hasResults(html) {
     const pairingsRegex = /<h3>(Pairings for Round (\d+)\.[^<]*)<\/h3>[\s\S]*?<table[^>]*>([\s\S]*?)<\/table>/gi;
     let match;
@@ -362,62 +290,10 @@ export function hasResults(html) {
         return false;
     }
 
-    // No pairings tables (e.g. round 1) — check standings for filled result cells
     return /<td class="result">[A-Z]\d/i.test(html);
 }
 
-/**
- * Find a player's pairing from the tournament HTML.
- * Returns { board, color, opponent, opponentRating, opponentUrl, section } or { isBye, byeType, section } or null.
- */
-export function findPlayerPairing(html, playerName) {
-    const pairingsRegex = /<h3>Pairings for Round \d+\.[^<]*:\s*([^<]+)<\/h3>[\s\S]*?<table[^>]*>[\s\S]*?<\/table>/gi;
-    let match;
-    const playerRegex = new RegExp(escapeRegex(playerName), 'i');
 
-    while ((match = pairingsRegex.exec(html)) !== null) {
-        const section = match[1].trim();
-        const tableHtml = match[0];
-        if (!playerRegex.test(tableHtml)) continue;
-
-        const rows = parsePairingsTable(tableHtml);
-        for (const row of rows) {
-            const whiteName = row.whiteName;
-            const blackName = row.blackName;
-
-            if (playerRegex.test(whiteName)) {
-                if (/^(bye|full point bye)$/i.test(blackName)) {
-                    return { isBye: true, byeType: row.whiteResult === '1' ? 'full' : 'half', section };
-                }
-                const opponentInfo = parsePlayerInfo(blackName);
-                return {
-                    board: row.board || 'TBD', color: 'White',
-                    opponent: opponentInfo.name, opponentRating: opponentInfo.rating,
-                    opponentUrl: row.blackUrl, section,
-                };
-            }
-
-            if (playerRegex.test(blackName)) {
-                if (/^(bye|full point bye)$/i.test(whiteName)) {
-                    return { isBye: true, byeType: row.blackResult === '1' ? 'full' : 'half', section };
-                }
-                const opponentInfo = parsePlayerInfo(whiteName);
-                return {
-                    board: row.board || 'TBD', color: 'Black',
-                    opponent: opponentInfo.name, opponentRating: opponentInfo.rating,
-                    opponentUrl: row.whiteUrl, section,
-                };
-            }
-        }
-    }
-
-    return null;
-}
-
-/**
- * Parse all standings sections from the tournament HTML.
- * Returns [{ section, players: [{ rank, name, url, id, rating, rounds: [{result, opponentRank}|null], total }] }]
- */
 export function parseStandings(html) {
     const sections = [];
     const sectionRegex = /<h3>([^<]*Standings[^<]*)<\/h3>[\s\S]*?(<table[^>]*>[\s\S]*?<\/table>)/gi;
@@ -499,15 +375,6 @@ export function parseStandings(html) {
     return sections;
 }
 
-// ============================================================
-// Section 4: PURE UTILITIES
-// ============================================================
-
-/**
- * Parse player info string like "Phil Ploquin (1660 w 1.5 D)" or "Paul Blum ( 983 w 1.5 d)"
- * Handles leading spaces before rating and "unr." for unrated players.
- * Returns { name, rating }.
- */
 export function parsePlayerInfo(infoString) {
     const match = infoString.match(/^(.+?)\s*\(\s*(\d+|unr\.)/);
     if (match) {
@@ -520,9 +387,6 @@ export function parsePlayerInfo(infoString) {
     };
 }
 
-/**
- * Compose a personalized pairings notification message.
- */
 export function composeMessage(pairing, round) {
     const link = SITE_URL;
 
@@ -539,9 +403,6 @@ export function composeMessage(pairing, round) {
     return `TNM Round ${round} pairings are up! Board ${pairing.board}, ${pairing.color} vs. ${pairing.opponent}${ratingStr}. Good luck!`;
 }
 
-/**
- * Compose a personalized results notification message.
- */
 export function composeResultsMessage(pairing, result, round) {
     const link = SITE_URL;
 
@@ -562,16 +423,10 @@ export function composeResultsMessage(pairing, result, round) {
     return `TNM Round ${round} results are posted! ${outcomeStr} with ${pairing.color} vs. ${pairing.opponent}${ratingStr}. See standings at ${link}`;
 }
 
-/**
- * Compose a games-posted notification message.
- */
-export function composeGamesMessage(round, gameCount) {
+export function composeGamesMessage(round) {
     return `TNM Round ${round} games are ready to replay at ${SITE_URL}`;
 }
 
-/**
- * Parse the MI tournaments listing page to find TNM entries.
- */
 export function parseTournamentList(html) {
     const tnmSectionRegex = /<h2>Tuesday Night Marathon<\/h2>([\s\S]*?)(?:<h2>|$)/i;
     const sectionMatch = html.match(tnmSectionRegex);
@@ -594,9 +449,6 @@ export function parseTournamentList(html) {
     return tournaments;
 }
 
-/**
- * Parse "Round Times" from a tournament page into an array of ISO date strings.
- */
 export function parseRoundDates(html, year) {
     if (!year) year = new Date().getFullYear();
 
@@ -628,9 +480,6 @@ export function parseRoundDates(html, year) {
     return dates;
 }
 
-/**
- * Extract the tournament name/title from a tournament page.
- */
 export function extractTournamentName(html) {
     const match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
     return match ? decodeEntities(match[1]) : null;

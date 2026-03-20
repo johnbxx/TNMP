@@ -11,22 +11,13 @@ import { fenToEpd } from './utils.js';
 
 const STORAGE_KEY = 'eco-epd-data-v2';
 
-/** @type {Record<string, {eco: string, name: string}> | null} */
 let _ecoData = null;
 
-/**
- * Load ECO data into memory. Tries localStorage first, then fetches from worker.
- * Safe to call multiple times — returns immediately if already loaded.
- *
- * @returns {Promise<void>}
- */
 export async function loadEcoData() {
     if (_ecoData) return;
 
-    // Clean up old cache key
     try { localStorage.removeItem('eco-epd-data'); } catch { /* */ }
 
-    // Try localStorage
     try {
         const cached = localStorage.getItem(STORAGE_KEY);
         if (cached) {
@@ -35,36 +26,22 @@ export async function loadEcoData() {
         }
     } catch { /* localStorage unavailable or corrupt */ }
 
-    // Fetch from worker
     try {
         const response = await fetch(`${WORKER_URL}/eco-data`);
         if (!response.ok) return;
         _ecoData = await response.json();
-        // Persist to localStorage
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(_ecoData));
         } catch { /* quota exceeded — fine, memory cache still works */ }
     } catch { /* network error — ECO will be unavailable */ }
 }
 
-/**
- * Classify a FEN position synchronously.
- * Returns null if ECO data hasn't loaded yet or position isn't in the database.
- *
- * @param {string} fen - Full FEN string
- * @returns {{ eco: string, name: string } | null}
- */
 export function classifyFen(fen) {
     if (!_ecoData) return null;
     const epd = fenToEpd(fen);
     return _ecoData[epd] || null;
 }
 
-/**
- * Find an opening by exact name match. Returns the first match found.
- * @param {string} name - Opening name (e.g., "Sicilian Defense")
- * @returns {{ eco: string, name: string, pgn: string, uci: string } | null}
- */
 export function findOpeningByName(name) {
     if (!_ecoData) return null;
     for (const entry of Object.values(_ecoData)) {

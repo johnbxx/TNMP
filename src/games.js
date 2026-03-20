@@ -10,7 +10,7 @@
 
 import { WORKER_URL } from './config.js';
 import { Chess } from 'chess.js';
-import { normalizeSection, fenToEpd } from './utils.js';
+import { fenToEpd } from './utils.js';
 import { extractMoveText } from './pgn-parser.js';
 import { START_FEN } from './pgn.js';
 
@@ -554,14 +554,14 @@ function getVisibleGames(opts = {}) {
         games = games.filter(g => {
             if (event && g.tournament !== event) return false;
             if (round != null && g.round !== round) return false;
-            if (_sectionList.length > 1 && g.section && !_visibleSections.has(normalizeSection(g.section))) return false;
+            if (_sectionList.length > 1 && g.section && !_visibleSections.has(g.section)) return false;
             if (explorerGameIds && (!g.pgn ? _explorer.moveHistory.length > 0 : !(g.gameId && explorerGameIds.has(g.gameId)))) return false;
             return true;
         });
         const sectionOrder = new Map(_sectionList.map((s, i) => [s, i]));
         games = [...games].sort((a, b) => {
-            const sa = sectionOrder.get(normalizeSection(a.section)) ?? 999;
-            const sb = sectionOrder.get(normalizeSection(b.section)) ?? 999;
+            const sa = sectionOrder.get(a.section) ?? 999;
+            const sb = sectionOrder.get(b.section) ?? 999;
             if (sa !== sb) return sa - sb;
             return (a.board || 999) - (b.board || 999);
         });
@@ -584,7 +584,7 @@ function groupGames(games) {
         };
         headerFn = keyFn;
     } else {
-        keyFn = g => normalizeSection(g.section);
+        keyFn = g => g.section;
         headerFn = keyFn;
     }
 
@@ -608,7 +608,7 @@ function buildFilteredSectionList() {
     const games = getEventFilteredGames();
     const sections = new Set();
     for (const g of games) {
-        if (g.section) sections.add(normalizeSection(g.section));
+        if (g.section) sections.add(g.section);
     }
     const order = (s) => {
         if (/extra/i.test(s)) return 9999;
@@ -667,15 +667,13 @@ function rebuildExplorerTree() {
 
 // ─── Explorer Trie ─────────────────────────────────────────────────
 
-function parseResult(result) {
-    if (result === '1-0') return { w: 1, d: 0, b: 0 };
-    if (result === '0-1') return { w: 0, d: 0, b: 1 };
-    if (result === '1/2-1/2') return { w: 0, d: 1, b: 0 };
-    if (result === '*') return { w: 0, d: 0, b: 0 };
-    return null;
-}
+const RESULT_INCREMENTS = {
+    '1-0': { w: 1, d: 0, b: 0 },
+    '0-1': { w: 0, d: 0, b: 1 },
+    '1/2-1/2': { w: 0, d: 1, b: 0 },
+    '*': { w: 0, d: 0, b: 0 },
+};
 
-/** Extract main-line move tokens from PGN text, stripping variations/comments/NAGs. */
 function extractMoveTokens(pgn) {
     const moveText = extractMoveText(pgn);
     let depth = 0, stripped = '';
@@ -698,7 +696,6 @@ function extractMoveTokens(pgn) {
 const START_EPD = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
 const DEFAULT_MAX_PLY = 21;
 
-/** EPD after each legal first move from the starting position (precomputed). */
 const FIRST_MOVE_EPD = (() => {
     const chess = new Chess();
     const map = {};
@@ -710,15 +707,16 @@ const FIRST_MOVE_EPD = (() => {
     return map;
 })();
 
-/** Ultra-fast ply-1 tree builder. No chess.js per game — regex + static lookup. */
+function createNode() { return { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; }
+
 function buildExplorerTree1(games) {
     const tree = new Map();
-    const startNode = { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] };
+    const startNode = createNode();
     tree.set(START_EPD, startNode);
 
     for (const game of games) {
         if (!game.pgn || !game.result) continue;
-        const r = parseResult(game.result);
+        const r = RESULT_INCREMENTS[game.result];
         if (!r) continue;
         const firstMoveMatch = extractMoveText(game.pgn).match(/1\.\s*(\S+)/);
         let san = firstMoveMatch ? firstMoveMatch[1] : null;
@@ -739,19 +737,18 @@ function buildExplorerTree1(games) {
         moveStats.total++; moveStats.whiteWins += r.w; moveStats.draws += r.d; moveStats.blackWins += r.b;
 
         let nextNode = tree.get(nextEpd);
-        if (!nextNode) { nextNode = { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; tree.set(nextEpd, nextNode); }
+        if (!nextNode) { nextNode = createNode(); tree.set(nextEpd, nextNode); }
         nextNode.total++; nextNode.whiteWins += r.w; nextNode.draws += r.d; nextNode.blackWins += r.b;
         if (game.gameId) nextNode.gameIds.push(game.gameId);
     }
     return tree;
 }
 
-/** Full-depth trie builder. Reuses a single Chess instance across all games. */
 function buildExplorerTree(games, { maxPly = DEFAULT_MAX_PLY } = {}) {
     const tree = new Map();
     function getOrCreate(epd) {
         let node = tree.get(epd);
-        if (!node) { node = { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; tree.set(epd, node); }
+        if (!node) { node = createNode(); tree.set(epd, node); }
         return node;
     }
 
@@ -760,7 +757,7 @@ function buildExplorerTree(games, { maxPly = DEFAULT_MAX_PLY } = {}) {
 
     for (const game of games) {
         if (!game.pgn || !game.result) continue;
-        const r = parseResult(game.result);
+        const r = RESULT_INCREMENTS[game.result];
         if (!r) continue;
         if (!game._moves) game._moves = extractMoveTokens(game.pgn);
         const moves = game._moves;
