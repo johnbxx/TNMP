@@ -20,6 +20,7 @@ import { START_FEN } from './pgn.js';
 const GAMES_CACHE_KEY = 'gamesData';
 let _tournamentData = null;     // { games, query }
 let _playerData = null;         // { games, query }
+let _localData = null;          // { games, query: { local: true } }
 let _tournamentList = null;     // [{ slug, name }]
 let _activeTournamentSlug = null;
 let _fetchGeneration = 0;
@@ -94,8 +95,8 @@ export function getState() {
 
         // Games
         title: computeTitle(),
-        totalGames: (_tournamentData?.games || []).length,
-        localEvents: isLocalMode() ? [...new Set((_tournamentData?.games || []).map(g => g.tournament).filter(Boolean))] : null,
+        totalGames: (activeData()?.games || []).length,
+        localEvents: isLocalMode() ? [...new Set((_localData?.games || []).map(g => g.tournament).filter(Boolean))] : null,
         visibleGames: games,
         groupedGames: groups,
         gameIdList: games.filter(g => g.gameId).map(g => g.gameId),
@@ -115,13 +116,13 @@ export function getState() {
 }
 
 function computeTitle() {
-    if (_tournamentData?.query?.local) {
-        const games = _tournamentData.games || [];
+    if (isLocalMode()) {
+        const games = _localData.games || [];
         const events = new Set(games.map(g => g.tournament).filter(Boolean));
         if (events.size === 1) return [...events][0];
         return `Imported Games (${games.length})`;
     }
-    return _tournamentData?.games?.[0]?.tournament || 'Tournament Games';
+    return activeData()?.games?.[0]?.tournament || 'Tournament Games';
 }
 
 function computePlayerSources(games) {
@@ -148,7 +149,8 @@ function computeActiveFilter() {
 
 export function getCachedGame(gameId) {
     if (!gameId) return null;
-    return _playerData?.games?.find(g => g.gameId === gameId)
+    return _localData?.games?.find(g => g.gameId === gameId)
+        || _playerData?.games?.find(g => g.gameId === gameId)
         || _tournamentData?.games?.find(g => g.gameId === gameId)
         || null;
 }
@@ -355,8 +357,7 @@ export function closeBrowser() {
     _explorer = null;
     _playerData = null;
 
-    // Clear local/imported data; tournament data persists for next open
-    if (isLocalMode()) _tournamentData = null;
+    _localData = null;
 }
 
 // ─── Explorer ──────────────────────────────────────────────────────
@@ -471,9 +472,7 @@ export function prefetchGames() {
 /** Inject data directly (e.g., PGN import). Discards in-flight fetches. */
 export function setGamesData(data) {
     _fetchGeneration++;
-    _tournamentData = data;
-    // Don't notify or rebuild explorer here — caller (doImport/openBrowser)
-    // will reset filters and trigger a clean render.
+    _localData = data;
 }
 
 async function fetchPlayerList() {
@@ -496,7 +495,8 @@ async function fetchTournamentList() {
 
 // ─── Internals ─────────────────────────────────────────────────────
 
-function isLocalMode() { return !!_tournamentData?.query?.local; }
+function isLocalMode() { return !!_localData; }
+function activeData() { return _localData || _tournamentData; }
 
 function setPlayer(name) {
     _filters.player = name;
@@ -534,7 +534,7 @@ function isPlayerDataLoaded() {
 }
 
 function getVisibleGames(opts = {}) {
-    let games = (_filters.player ? _playerData : _tournamentData)?.games || [];
+    let games = (_filters.player ? _playerData : activeData())?.games || [];
     const { playerNorm, tournament, color, eco, opponentNorm, event, round } = _filters;
     const explorerGameIds = opts.skipExplorer ? null : _explorer?.gameIds;
 
@@ -599,7 +599,7 @@ function groupGames(games) {
 }
 
 function getEventFilteredGames() {
-    let games = _tournamentData?.games || [];
+    let games = activeData()?.games || [];
     if (_filters.event) games = games.filter(g => g.tournament === _filters.event);
     return games;
 }
@@ -624,7 +624,7 @@ function getFilteredRoundNumbers() {
 }
 
 function buildPlayerListFromGames() {
-    const games = _tournamentData?.games;
+    const games = activeData()?.games;
     if (!games) return [];
     const names = new Set();
     for (const g of games) {
