@@ -362,7 +362,7 @@ const ACTIONS = {
     'browser-explore': launchExplorer,
     // Editor
     'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
-    'browser-import': showImportDialog, 'submit-add-moves': () => showImportDialog(true), 'viewer-submit': submitGame,
+    'browser-import': () => showImportDialog(), 'submit-add-moves': () => showImportDialog(true), 'viewer-submit': submitGame,
     'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': () => document.getElementById('editor-header-popup')?.classList.add('hidden'),
     'dirty-copy-leave': () => resolveDirtyDialog('copy-leave'), 'dirty-discard': () => resolveDirtyDialog('discard'), 'dirty-cancel': () => resolveDirtyDialog('cancel'),
     // Share popover
