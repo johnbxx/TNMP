@@ -49,13 +49,13 @@ export async function handlePushSubscribe(request, env) {
     }
 
     await putRecord(env, key, {
-        deviceId: deviceId || null,
-        deviceLabel: deviceLabel || existing?.deviceLabel || null,
-        endpoint: subscription.endpoint,
-        keys: subscription.keys,
         playerName: (playerName || '').trim(),
+        deviceLabel: deviceLabel || existing?.deviceLabel || null,
         notifyPairings: notifyPairings !== undefined ? notifyPairings !== false : existing?.notifyPairings !== false,
         notifyResults: notifyResults !== undefined ? notifyResults !== false : existing?.notifyResults !== false,
+        deviceId: deviceId || null,
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
         lastNotifiedRound: existing?.lastNotifiedRound || null,
         lastNotifiedResultsRound: existing?.lastNotifiedResultsRound || null,
         createdAt: existing?.createdAt || new Date().toISOString(),

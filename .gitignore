@@ -6,3 +6,4 @@ dist/
 *.pgn
 *.png
 local/
+CLAUDE.md
