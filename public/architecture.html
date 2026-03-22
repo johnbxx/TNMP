@@ -793,6 +793,7 @@
           <ul>
             <li><code>config.js</code> — constants, state getters/setters</li>
             <li><code>games.js</code> — /query fetch/cache, filters, explorer trie</li>
+            <li><code>tree.js</code> — 0x88 replay engine, Zobrist hashing (65× faster than chess.js)</li>
             <li><code>eco.js</code> — frontend ECO classification (localStorage cache)</li>
           </ul>
         </div>
@@ -933,7 +934,7 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">games.js</h4>
       <div class="path">src/games.js</div>
-      <p>Pure data layer. Fetches <code>/query</code>, caches games, builds indexes by round/player/section, opening explorer trie, player search, tournament switching. Zero DOM. Pushes complete state via <code>onChange(callback)</code>.</p>
+      <p>Pure data layer. Fetches <code>/query</code>, caches games, builds indexes by round/player/section, opening explorer trie (via <code>tree.js</code> replay engine), player search, tournament switching. Zero DOM. Pushes complete state via <code>onChange(callback)</code>.</p>
       <div class="exports">
         <span>onChange()</span>
         <span>getState()</span>
@@ -946,6 +947,17 @@
         <span>switchDataSource()</span>
         <span>launchExplorer()</span>
         <span>explorerPlayMove()</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="border-left:3px solid var(--pink)">
+      <h4 style="color:var(--pink)">tree.js</h4>
+      <div class="path">src/tree.js</div>
+      <p>0x88 replay engine with Zobrist hashing for explorer tree building. Replays trusted SAN moves without legality checks — 65× faster than chess.js. Used only by <code>games.js</code> for tree construction and position lookups.</p>
+      <div class="exports">
+        <span>ReplayEngine</span>
+        <span>hashFen()</span>
+        <span>START_HASH</span>
       </div>
     </div>
 
