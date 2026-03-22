@@ -464,9 +464,18 @@ function handleBrowserExport() {
     const filter = state.activeFilter;
     const prefix = slug || 'games';
     let filename;
-    if (filter?.type === 'player') filename = `${prefix}-${filter.label.replace(/\s+/g, '-')}.pgn`;
-    else if (filter?.type === 'section') filename = `${prefix}-${filter.sections.map(sectionForFilename).join('-')}-R${games[0].round}.pgn`;
-    else filename = `${prefix}-R${games[0].round}.pgn`;
+    if (filter?.type === 'player') {
+        const parts = [filter.label.replace(/\s+/g, '-')];
+        if (filter.tournament) parts.push(filter.tournament);
+        if (filter.color) parts.push(filter.color.charAt(0).toUpperCase() + filter.color.slice(1));
+        if (filter.eco) parts.push(filter.eco.join('-'));
+        if (filter.opponent) parts.push('vs-' + filter.opponent.replace(/\s+/g, '-'));
+        filename = parts.join('-') + '.pgn';
+    } else if (filter?.type === 'section') {
+        filename = `${prefix}-${filter.sections.map(sectionForFilename).join('-')}-R${games[0].round}.pgn`;
+    } else {
+        filename = `${prefix}-R${games[0].round}.pgn`;
+    }
     downloadPgn(games.map(g => g.pgn).join('\n\n'), filename);
     showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`, 'success');
 }

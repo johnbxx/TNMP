@@ -136,10 +136,16 @@ function computePlayerSources(games) {
 
 function computeActiveFilter() {
     if (_filters.player) {
-        return { type: 'player', label: _filters.player };
+        return {
+            type: 'player', label: _filters.player,
+            tournament: _filters.tournament, color: _filters.color,
+            eco: _filters.eco ? [..._filters.eco] : null,
+            opponent: _filters.opponent,
+        };
     }
     if (_sectionList.length > 1 && _visibleSections.size < _sectionList.length) {
-        return { type: 'section', label: [..._visibleSections].join(', ') };
+        const sections = [..._visibleSections];
+        return { type: 'section', label: sections.join(', '), sections };
     }
     return null;
 }
