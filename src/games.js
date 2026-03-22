@@ -10,9 +10,8 @@
 
 import { WORKER_URL } from './config.js';
 import { Chess } from 'chess.js';
-import { fenToEpd } from './utils.js';
 import { extractMoveText } from './pgn-parser.js';
-import { START_FEN } from './pgn.js';
+import { ReplayEngine, hashFen, START_HASH } from './tree.js';
 
 // ─── Private State ─────────────────────────────────────────────────
 
@@ -103,7 +102,7 @@ export function getState() {
 
         // Explorer
         explorerActive: _explorer !== null,
-        explorerFen: _explorer?.chess.fen() ?? START_FEN,
+        explorerFen: _explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         explorerStats: _explorer ? getExplorerStats() : null,
         explorerMoveHistory: _explorer?.moveHistory.slice() ?? [],
 
@@ -648,21 +647,10 @@ function updateExplorerGameIds() {
     _explorer.gameIds = stats?.gameIds ? new Set(stats.gameIds) : new Set();
 }
 
-// Progressive multi-pass: ply-1 instant, full depth after a paint.
 function rebuildExplorerTree() {
     const gamesWithPgn = getVisibleGames({ skipExplorer: true }).filter(g => g.pgn);
-
-    // Pass 1: ply-1 (instant, no chess.js per game)
-    _explorer.tree = buildExplorerTree1(gamesWithPgn);
+    _explorer.tree = buildExplorerTree(gamesWithPgn);
     updateExplorerGameIds();
-
-    // Pass 2: full depth (deferred to allow paint)
-    requestAnimationFrame(() => setTimeout(() => {
-        if (!_explorer) return;
-        _explorer.tree = buildExplorerTree(gamesWithPgn);
-        updateExplorerGameIds();
-        notifyChange();
-    }, 0));
 }
 
 // ─── Explorer Trie ─────────────────────────────────────────────────
@@ -693,67 +681,17 @@ function extractMoveTokens(pgn) {
         .filter(t => t && !['1-0', '0-1', '1/2-1/2', '*'].includes(t));
 }
 
-const START_EPD = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
-const DEFAULT_MAX_PLY = 21;
-
-const FIRST_MOVE_EPD = (() => {
-    const chess = new Chess();
-    const map = {};
-    for (const move of chess.moves()) {
-        chess.move(move);
-        map[move] = fenToEpd(chess.fen());
-        chess.undo();
-    }
-    return map;
-})();
-
 function createNode() { return { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; }
 
-function buildExplorerTree1(games) {
+function buildExplorerTree(games) {
     const tree = new Map();
-    const startNode = createNode();
-    tree.set(START_EPD, startNode);
-
-    for (const game of games) {
-        if (!game.pgn || !game.result) continue;
-        const r = RESULT_INCREMENTS[game.result];
-        if (!r) continue;
-        const firstMoveMatch = extractMoveText(game.pgn).match(/1\.\s*(\S+)/);
-        let san = firstMoveMatch ? firstMoveMatch[1] : null;
-        if (!san) {
-            // Fallback: full tokenizer for games where regex fails
-            if (!game._moves) game._moves = extractMoveTokens(game.pgn);
-            san = game._moves[0];
-        }
-        if (!san) continue;
-        const nextEpd = FIRST_MOVE_EPD[san];
-        if (!nextEpd) continue;
-
-        startNode.total++; startNode.whiteWins += r.w; startNode.draws += r.d; startNode.blackWins += r.b;
-        if (game.gameId) startNode.gameIds.push(game.gameId);
-
-        let moveStats = startNode.moves.get(san);
-        if (!moveStats) { moveStats = { epd: nextEpd, san, total: 0, whiteWins: 0, draws: 0, blackWins: 0 }; startNode.moves.set(san, moveStats); }
-        moveStats.total++; moveStats.whiteWins += r.w; moveStats.draws += r.d; moveStats.blackWins += r.b;
-
-        let nextNode = tree.get(nextEpd);
-        if (!nextNode) { nextNode = createNode(); tree.set(nextEpd, nextNode); }
-        nextNode.total++; nextNode.whiteWins += r.w; nextNode.draws += r.d; nextNode.blackWins += r.b;
-        if (game.gameId) nextNode.gameIds.push(game.gameId);
-    }
-    return tree;
-}
-
-function buildExplorerTree(games, { maxPly = DEFAULT_MAX_PLY } = {}) {
-    const tree = new Map();
-    function getOrCreate(epd) {
-        let node = tree.get(epd);
-        if (!node) { node = createNode(); tree.set(epd, node); }
+    function getOrCreate(hash) {
+        let node = tree.get(hash);
+        if (!node) { node = createNode(); tree.set(hash, node); }
         return node;
     }
 
-    const chess = new Chess();
-    const startEpd = fenToEpd(chess.fen());
+    const engine = new ReplayEngine();
 
     for (const game of games) {
         if (!game.pgn || !game.result) continue;
@@ -763,41 +701,41 @@ function buildExplorerTree(games, { maxPly = DEFAULT_MAX_PLY } = {}) {
         const moves = game._moves;
         if (moves.length === 0) continue;
 
-        chess.reset();
-        let epd = startEpd;
+        engine.reset();
+        let hash = START_HASH;
         let countedAtRoot = false;
 
-        const limit = Math.min(moves.length, maxPly);
-        for (let i = 0; i < limit; i++) {
+        for (let i = 0; i < moves.length; i++) {
             const san = moves[i];
-            try { chess.move(san); } catch { break; }
+            const prevHash = engine.hash;
+            engine.move(san);
+            if (engine.hash === prevHash) break; // move failed (hash unchanged = no-op)
 
-            // Count at root only after first move succeeds (matches ply-1 builder)
             if (!countedAtRoot) {
-                const startNode = getOrCreate(epd);
+                const startNode = getOrCreate(hash);
                 startNode.total++; startNode.whiteWins += r.w; startNode.draws += r.d; startNode.blackWins += r.b;
                 if (game.gameId) startNode.gameIds.push(game.gameId);
                 countedAtRoot = true;
             }
-            const nextEpd = fenToEpd(chess.fen());
+            const nextHash = engine.hash;
 
-            const node = tree.get(epd);
+            const node = tree.get(hash);
             let moveStats = node.moves.get(san);
-            if (!moveStats) { moveStats = { epd: nextEpd, san, total: 0, whiteWins: 0, draws: 0, blackWins: 0 }; node.moves.set(san, moveStats); }
+            if (!moveStats) { moveStats = { san, total: 0, whiteWins: 0, draws: 0, blackWins: 0 }; node.moves.set(san, moveStats); }
             moveStats.total++; moveStats.whiteWins += r.w; moveStats.draws += r.d; moveStats.blackWins += r.b;
 
-            const nextNode = getOrCreate(nextEpd);
+            const nextNode = getOrCreate(nextHash);
             nextNode.total++; nextNode.whiteWins += r.w; nextNode.draws += r.d; nextNode.blackWins += r.b;
             if (game.gameId) nextNode.gameIds.push(game.gameId);
-            epd = nextEpd;
+            hash = nextHash;
         }
     }
     return tree;
 }
 
 function getPositionStats(tree, fen) {
-    const epd = fenToEpd(fen);
-    const node = tree.get(epd);
+    const hash = hashFen(fen);
+    const node = tree.get(hash);
     if (!node) return null;
     const moves = [...node.moves.values()].sort((a, b) => b.total - a.total);
     return { total: node.total, whiteWins: node.whiteWins, draws: node.draws, blackWins: node.blackWins, moves, gameIds: node.gameIds };

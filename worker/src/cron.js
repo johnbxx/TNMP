@@ -79,7 +79,8 @@ async function runCronLogic(env) {
     const storedHash = await env.SUBSCRIBERS.get('cache:htmlHash');
     t.hashCheck = performance.now() - t0;
     if (hash === storedHash) {
-        console.log('HTML unchanged, skipping processing.');
+        console.log('HTML unchanged, skipping HTML processing.');
+        await checkPendingGamesNotification(tournament, env);
         return;
     }
     await env.SUBSCRIBERS.put('cache:htmlHash', hash);
@@ -520,41 +521,58 @@ async function dispatchAllNotifications(parsed, tournament, env) {
         }
     }
 
-    const roundGames = parsed.fullGames[String(round)] || [];
-    const roundSections = parsed.pairingsSections.filter(s => s.round === round);
-    const totalBoards = roundSections.reduce((sum, s) => sum + s.rows.length, 0);
+    await checkPendingGamesNotification(tournament, env);
+}
 
-    if (roundGames.length === 0) {
-        console.log('No PGN games found for current round.');
-    } else if (totalBoards > 0 && roundGames.length <= totalBoards / 2) {
-        console.log(`Only ${roundGames.length}/${totalBoards} PGN games — waiting for majority before notifying.`);
-    } else {
-        const gamesState = await env.SUBSCRIBERS.get('state:gamesPosted', 'json');
-        if (gamesState && gamesState.round === round) {
-            console.log(`Already notified games for round ${round}.`);
-        } else {
-            let count = 0;
-            try {
-                count = await dispatchPushNotifications({
-                    subscribers: pushSubs,
-                    prefKey: 'notifyResults',
-                    trackKey: 'lastNotifiedGamesRound',
-                    round,
-                    shouldNotify: isInTournament,
-                    buildPayload: () => ({
-                        title: `Round ${round} Games Are Up!`,
-                        body: composeGamesMessage(round),
-                        url: '/', type: 'games', round,
-                        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                    }),
-                    env, label: 'games',
-                });
-            } catch (err) { console.error('Push games dispatch error:', err.message); }
+async function checkPendingGamesNotification(tournament, env) {
+    const appState = await env.SUBSCRIBERS.get('cache:appState', 'json');
+    if (!appState) return;
+    const round = appState.round;
+    const slug = appState.tournamentSlug;
 
-            await env.SUBSCRIBERS.put('state:gamesPosted', JSON.stringify({
-                round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
-            }));
-            console.log(`Notified ${count} push subscriber(s) of games for round ${round}.`);
-        }
+    const gamesState = await env.SUBSCRIBERS.get('state:gamesPosted', 'json');
+    if (gamesState && gamesState.round === round) return;
+
+    const { totalGames, gamesWithPgn } = (await env.DB.prepare(
+        `SELECT COUNT(*) as totalGames, SUM(CASE WHEN pgn IS NOT NULL AND pgn != '' THEN 1 ELSE 0 END) as gamesWithPgn
+         FROM games WHERE tournament_slug = ? AND round = ?`
+    ).bind(slug, round).first()) || { totalGames: 0, gamesWithPgn: 0 };
+
+    if (gamesWithPgn === 0 || (totalGames > 0 && gamesWithPgn <= totalGames / 2)) {
+        console.log(`Games check: ${gamesWithPgn}/${totalGames} PGN games for round ${round} — not ready.`);
+        return;
     }
+
+    const pushSubs = await listPushSubscriptions(env);
+    let count = 0;
+    try {
+        count = await dispatchPushNotifications({
+            subscribers: pushSubs,
+            prefKey: 'notifyResults',
+            trackKey: 'lastNotifiedGamesRound',
+            round,
+            shouldNotify: () => true,
+            buildPayload: () => ({
+                title: `Round ${round} Games Are Up!`,
+                body: composeGamesMessage(round),
+                url: '/', type: 'games', round,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            }),
+            env, label: 'games',
+        });
+    } catch (err) { console.error('Push games dispatch error:', err.message); }
+
+    await env.SUBSCRIBERS.put('state:gamesPosted', JSON.stringify({
+        round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
+    }));
+    console.log(`Notified ${count} push subscriber(s) of games for round ${round}.`);
+
+    try {
+        const deleted = await env.DB.prepare(
+            `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND game_id IS NULL AND (pgn IS NULL OR pgn = '')`
+        ).bind(slug, round).run();
+        if (deleted.meta.changes > 0) {
+            console.log(`Cleaned up ${deleted.meta.changes} stale shell record(s) for round ${round}.`);
+        }
+    } catch (err) { console.error('Failed to clean stale shells:', err.message); }
 }
