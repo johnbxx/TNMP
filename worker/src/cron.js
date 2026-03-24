@@ -80,7 +80,13 @@ async function runCronLogic(env) {
     t.hashCheck = performance.now() - t0;
     if (hash === storedHash) {
         console.log('HTML unchanged, skipping HTML processing.');
+        const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
+        if (cached?.html) {
+            const parsed = parseTournamentPage(cached.html);
+            await dispatchAllNotifications(parsed, tournament, env);
+        }
         await checkPendingGamesNotification(tournament, env);
+        await retryPendingNotifications(env);
         return;
     }
     await env.SUBSCRIBERS.put('cache:htmlHash', hash);
