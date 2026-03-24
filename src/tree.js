@@ -234,7 +234,6 @@ export class ReplayEngine {
                 this.hash ^= EP_KEYS[file(this.epSquare)];
                 this.epSquare = -1;
             }
-
             this.hash ^= SIDE_KEY;
             this.turn = them;
             return;
@@ -317,8 +316,18 @@ export class ReplayEngine {
         }
 
         if (pt === P && Math.abs(rank(fromSq) - rank(toSq)) === 2) {
-            this.epSquare = (fromSq + toSq) / 2;
-            this.hash ^= EP_KEYS[file(this.epSquare)];
+            const epSq = (fromSq + toSq) / 2;
+            // Only set EP if an enemy pawn can actually capture (matches chess.js / FIDE)
+            const enemyPawn = (them === 'w' ? W : B) | P;
+            const left = toSq - 1;
+            const right = toSq + 1;
+            if ((!(left & 0x88) && this.board[left] === enemyPawn) ||
+                (!(right & 0x88) && this.board[right] === enemyPawn)) {
+                this.epSquare = epSq;
+                this.hash ^= EP_KEYS[file(epSq)];
+            } else {
+                this.epSquare = -1;
+            }
         } else {
             this.epSquare = -1;
         }

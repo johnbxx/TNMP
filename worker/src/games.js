@@ -485,3 +485,80 @@ export async function handleBackfillEco(request, env) {
     }, 200, env, request);
 }
 
+// --- Batch Import (temporary — for historical game upload) ---
+
+export async function handleBatchImport(request, env) {
+    const auth = request.headers.get('Authorization');
+    if (!auth || auth !== `Bearer ${env.VAPID_PRIVATE_KEY}`) {
+        return corsResponse({ error: 'Unauthorized' }, 401, env, request);
+    }
+
+    const { type, rows } = await request.json();
+    if (!type || !Array.isArray(rows) || rows.length === 0) {
+        return corsResponse({ error: 'Missing type or rows' }, 400, env, request);
+    }
+
+    const stmts = [];
+
+    if (type === 'tournaments') {
+        for (const r of rows) {
+            stmts.push(
+                env.DB.prepare(
+                    `INSERT INTO tournaments (slug, name, short_code, uscf_event_id, round_dates, url)
+                     VALUES (?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(slug) DO UPDATE SET
+                        uscf_event_id = COALESCE(excluded.uscf_event_id, tournaments.uscf_event_id),
+                        round_dates = CASE WHEN tournaments.round_dates IS NULL OR tournaments.round_dates = '[]'
+                            THEN excluded.round_dates ELSE tournaments.round_dates END`
+                ).bind(r.slug, r.name, r.short_code, r.uscf_event_id, r.round_dates, r.url)
+            );
+        }
+    } else if (type === 'players') {
+        for (const r of rows) {
+            stmts.push(
+                env.DB.prepare(
+                    `INSERT INTO players (name, name_norm, uscf_id, aliases)
+                     VALUES (?, ?, ?, ?)
+                     ON CONFLICT(name_norm) DO UPDATE SET
+                        uscf_id = COALESCE(excluded.uscf_id, players.uscf_id),
+                        aliases = excluded.aliases`
+                ).bind(r.name, r.name_norm, r.uscf_id, r.aliases)
+            );
+        }
+    } else if (type === 'games') {
+        for (const r of rows) {
+            stmts.push(
+                env.DB.prepare(
+                    `INSERT INTO games (tournament_slug, round, board, white, black,
+                            white_norm, black_norm, white_elo, black_elo, result,
+                            eco, opening_name, section, date, game_id, pgn)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
+                        pgn = CASE WHEN LENGTH(excluded.pgn) > LENGTH(COALESCE(games.pgn, ''))
+                            THEN excluded.pgn ELSE games.pgn END,
+                        eco = COALESCE(games.eco, excluded.eco),
+                        opening_name = COALESCE(games.opening_name, excluded.opening_name),
+                        game_id = COALESCE(games.game_id, excluded.game_id)`
+                ).bind(
+                    r.tournament_slug, r.round, r.board, r.white, r.black,
+                    r.white_norm, r.black_norm, r.white_elo, r.black_elo, r.result,
+                    r.eco, r.opening_name, r.section, r.date, r.game_id, r.pgn
+                )
+            );
+        }
+    } else {
+        return corsResponse({ error: `Unknown type: ${type}` }, 400, env, request);
+    }
+
+    // D1 batch() supports up to 100 statements per call
+    const BATCH_SIZE = 100;
+    let executed = 0;
+    for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
+        const batch = stmts.slice(i, i + BATCH_SIZE);
+        await env.DB.batch(batch);
+        executed += batch.length;
+    }
+
+    return corsResponse({ success: true, type, executed }, 200, env, request);
+}
+
