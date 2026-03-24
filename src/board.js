@@ -103,7 +103,7 @@ export function createBoard(containerId, { onMove, orientation = 'white', fen } 
             color: turn,
             dests,
             showDests: true,
-            events: { after: makeMove },
+            events: { after: (from, to) => makeMove(from, to) },
             rookCastle: true,
         },
         draggable: { enabled: true, showGhost: true },
