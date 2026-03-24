@@ -523,24 +523,46 @@ export async function handleBatchImport(request, env) {
         }
     } else if (type === 'games') {
         for (const r of rows) {
-            stmts.push(
-                env.DB.prepare(
-                    `INSERT INTO games (tournament_slug, round, board, white, black,
-                            white_norm, black_norm, white_elo, black_elo, result,
-                            eco, opening_name, section, date, game_id, pgn)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
-                        pgn = CASE WHEN LENGTH(excluded.pgn) > LENGTH(COALESCE(games.pgn, ''))
-                            THEN excluded.pgn ELSE games.pgn END,
-                        eco = COALESCE(games.eco, excluded.eco),
-                        opening_name = COALESCE(games.opening_name, excluded.opening_name),
-                        game_id = COALESCE(games.game_id, excluded.game_id)`
-                ).bind(
-                    r.tournament_slug, r.round, r.board, r.white, r.black,
-                    r.white_norm, r.black_norm, r.white_elo, r.black_elo, r.result,
-                    r.eco, r.opening_name, r.section, r.date, r.game_id, r.pgn
-                )
-            );
+            if (r.board != null) {
+                stmts.push(
+                    env.DB.prepare(
+                        `INSERT INTO games (tournament_slug, round, board, white, black,
+                                white_norm, black_norm, white_elo, black_elo, result,
+                                eco, opening_name, section, date, game_id, pgn)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
+                            pgn = CASE WHEN LENGTH(excluded.pgn) > LENGTH(COALESCE(games.pgn, ''))
+                                THEN excluded.pgn ELSE games.pgn END,
+                            eco = COALESCE(games.eco, excluded.eco),
+                            opening_name = COALESCE(games.opening_name, excluded.opening_name),
+                            game_id = COALESCE(games.game_id, excluded.game_id)`
+                    ).bind(
+                        r.tournament_slug, r.round, r.board, r.white, r.black,
+                        r.white_norm, r.black_norm, r.white_elo, r.black_elo, r.result,
+                        r.eco, r.opening_name, r.section, r.date, r.game_id, r.pgn
+                    )
+                );
+            } else {
+                // Null board: can't use ON CONFLICT (NULL is unique in SQLite).
+                // Use INSERT ... WHERE NOT EXISTS to avoid duplicates.
+                stmts.push(
+                    env.DB.prepare(
+                        `INSERT INTO games (tournament_slug, round, board, white, black,
+                                white_norm, black_norm, white_elo, black_elo, result,
+                                eco, opening_name, section, date, game_id, pgn)
+                         SELECT ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                         WHERE NOT EXISTS (
+                            SELECT 1 FROM games WHERE tournament_slug = ? AND round = ?
+                            AND white_norm = ? AND black_norm = ?
+                         )`
+                    ).bind(
+                        r.tournament_slug, r.round, r.white, r.black,
+                        r.white_norm, r.black_norm, r.white_elo, r.black_elo, r.result,
+                        r.eco, r.opening_name, r.section, r.date, r.game_id, r.pgn,
+                        r.tournament_slug, r.round, r.white_norm, r.black_norm
+                    )
+                );
+            }
         }
     } else {
         return corsResponse({ error: `Unknown type: ${type}` }, 400, env, request);
