@@ -18,7 +18,7 @@ Every Monday evening, players in one of the longest-running chess tournaments in
 
 ## The Archive
 
-The D1 database contains **23,000+ games with full notation** spanning 90 tournaments from 2008 to the present — the most complete digital record of the Tuesday Night Marathon ever assembled. Every game is matched to its official US Chess tournament record, with verified player identities, corrected dates, ECO classification, and canonical names.
+The D1 database contains **23,000+ games with full notation** spanning 90 tournaments from 2008 to the present. Every game is matched to its official US Chess tournament record, with verified player identities, corrected dates, ECO classification, and canonical names.
 
 The archive is freely queryable through the public API (see below).
 
