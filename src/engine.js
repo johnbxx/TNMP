@@ -85,7 +85,7 @@ export async function initEngine(variant, options = {}) {
         };
 
         // Load NNUE weights (not embedded in the lichess-org WASM build)
-        await _loadNnue();
+        await _loadNnue(_variant);
 
         // Start UCI handshake — wait for readyok
         return new Promise((resolve, reject) => {
@@ -117,10 +117,10 @@ let _initResolve = null;
  */
 const NNUE_CACHE = 'tnmp-nnue-v1';
 
-async function _loadNnue() {
+async function _loadNnue(variant) {
     if (!_sf) return;
-    // SF18 requires both nets: big (index 0) for complex positions, small (index 1) for endgames.
-    const indices = [0, 1];
+    // 'full' loads big net (index 0, ~104MB), 'lite' loads small net (index 1, ~3.4MB)
+    const indices = variant === 'lite' ? [1] : [0];
     const cache = await caches.open(NNUE_CACHE);
 
     for (const index of indices) {
