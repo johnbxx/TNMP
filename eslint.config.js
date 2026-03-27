@@ -40,6 +40,9 @@ export default [
                 CSS: 'readonly',
                 structuredClone: 'readonly',
                 btoa: 'readonly',
+                Worker: 'readonly',
+                SharedArrayBuffer: 'readonly',
+                caches: 'readonly',
             },
         },
         rules: {

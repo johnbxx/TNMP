@@ -53,6 +53,7 @@ let _visibleSections = new Set();
 
 // Explorer: null when inactive, object when active
 let _explorer = null;           // { chess, tree, moveHistory, gameIds }
+let _explorerActive = false;
 let _loading = false;
 
 // ─── Observer ──────────────────────────────────────────────────────
@@ -98,10 +99,10 @@ export function getState() {
         localEvents: isLocalMode() ? [...new Set((_localData?.games || []).map(g => g.tournament).filter(Boolean))] : null,
         visibleGames: games,
         groupedGames: groups,
-        gameIdList: games.filter(g => g.gameId).map(g => g.gameId),
+        gameIdList: groups.flatMap(g => g.games).filter(g => g.gameId).map(g => g.gameId),
 
         // Explorer
-        explorerActive: _explorer !== null,
+        explorerActive: _explorerActive,
         explorerFen: _explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         explorerStats: _explorer ? getExplorerStats() : null,
         explorerMoveHistory: _explorer?.moveHistory.slice() ?? [],
@@ -360,14 +361,22 @@ export function clearFilter() {
 export function closeBrowser() {
     resetBrowserState();
     _explorer = null;
+    _explorerActive = false;
     _playerData = null;
-
     _localData = null;
 }
 
 // ─── Explorer ──────────────────────────────────────────────────────
 
 export function launchExplorer({ restoreMoves } = {}) {
+    _explorerActive = true;
+
+    // Reuse existing tree if available (e.g. returning from game view)
+    if (_explorer?.tree) {
+        notifyChange();
+        return;
+    }
+
     _explorer = { chess: new Chess(), tree: null, moveHistory: [], gameIds: null };
 
     rebuildExplorerTree();
@@ -384,7 +393,7 @@ export function launchExplorer({ restoreMoves } = {}) {
 }
 
 export function closeExplorer() {
-    _explorer = null;
+    _explorerActive = false;
     notifyChange();
 }
 
@@ -670,21 +679,33 @@ const RESULT_INCREMENTS = {
 
 function extractMoveTokens(pgn) {
     const moveText = extractMoveText(pgn);
-    let depth = 0, stripped = '';
-    for (const ch of moveText) {
-        if (ch === '(') { depth++; continue; }
-        if (ch === ')') { depth--; continue; }
-        if (depth === 0) stripped += ch;
+    const moves = [];
+    let i = 0, depth = 0;
+    const len = moveText.length;
+    while (i < len) {
+        const ch = moveText.charCodeAt(i);
+        if (ch === 40) { depth++; i++; continue; } // (
+        if (ch === 41) { depth--; i++; continue; } // )
+        if (depth > 0) { i++; continue; }
+        if (ch <= 32) { i++; continue; } // whitespace
+        if (ch === 123) { const end = moveText.indexOf('}', i + 1); i = end === -1 ? len : end + 1; continue; } // { comment }
+        if (ch === 59) { const end = moveText.indexOf('\n', i + 1); i = end === -1 ? len : end + 1; continue; } // ; line comment
+        if (ch === 36) { i++; while (i < len && moveText.charCodeAt(i) >= 48 && moveText.charCodeAt(i) <= 57) i++; continue; } // $NAG
+        // Collect token
+        const start = i;
+        while (i < len) { const c = moveText.charCodeAt(i); if (c <= 32 || c === 123 || c === 40 || c === 41 || c === 59) break; i++; }
+        const tok = moveText.slice(start, i);
+        // Skip move numbers, results, NAG symbols
+        const first = tok.charCodeAt(0);
+        if (first >= 48 && first <= 57) { // starts with digit
+            if (tok === '1-0' || tok === '0-1' || tok === '1/2-1/2' || tok === '*') continue;
+            if (tok.includes('.')) continue;
+        }
+        if (first === 42) continue; // *
+        if (first === 33 || first === 63) continue; // ! ?
+        if (tok.length > 0) moves.push(tok);
     }
-    return stripped
-        .replace(/\{[^}]*\}/g, '')
-        .replace(/\$\d+/g, '')
-        .replace(/\d+\.{3}/g, '')
-        .replace(/\d+\./g, '')
-        .replace(/[?!]+/g, '')
-        .trim()
-        .split(/\s+/)
-        .filter(t => t && !['1-0', '0-1', '1/2-1/2', '*'].includes(t));
+    return moves;
 }
 
 function createNode() { return { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; }

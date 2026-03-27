@@ -19,6 +19,12 @@ function swVersionPlugin() {
 
 export default defineConfig({
     plugins: [swVersionPlugin()],
+    server: {
+        headers: {
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Embedder-Policy': 'require-corp',
+        },
+    },
     build: {
         // Output hashed filenames for cache-busting
         rollupOptions: {

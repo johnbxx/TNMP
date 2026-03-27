@@ -20,6 +20,7 @@ import { scorePercent } from './games.js';
 import * as games from './games.js';
 import * as board from './board.js';
 import * as pgn from './pgn.js';
+import * as engine from './engine.js';
 
 loadEcoData();
 
@@ -80,7 +81,38 @@ export function initGamePanel(mount) {
                         <div id="editor-eco" class="editor-eco hidden"></div>
                         <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
                     </div>
-                    <div id="viewer-moves" class="viewer-moves"></div>
+                    <div id="eval-bar" class="eval-bar hidden">
+                        <div class="eval-bar-fill"></div>
+                        <span class="eval-bar-label eval-bar-label-bottom"></span>
+                    </div>
+                    <div class="viewer-side-col">
+                        <div id="viewer-moves" class="viewer-moves"></div>
+                        <div id="engine-panel" class="engine-panel hidden">
+                            <div class="engine-panel-header">
+                                <div class="engine-panel-title">
+                                    <button data-action="engine-pause" id="engine-pause-btn" class="engine-pause-btn" aria-label="Pause/resume analysis"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg></button>
+                                    <span class="engine-name">Stockfish 18</span>
+                                    <span class="engine-variant-badge" id="engine-variant-badge"></span>
+                                    <span class="engine-nps" id="engine-nps"></span>
+                                </div>
+                                <div class="engine-panel-controls">
+                                    <span class="engine-depth" id="engine-depth"></span>
+                                    <label class="engine-lines-label">
+                                        Lines
+                                        <select id="engine-lines-select" class="engine-lines-select">
+                                            <option value="1">1</option>
+                                            <option value="2">2</option>
+                                            <option value="3">3</option>
+                                            <option value="4">4</option>
+                                            <option value="5">5</option>
+                                        </select>
+                                    </label>
+                                    <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
+                                </div>
+                            </div>
+                            <div class="engine-pv-lines" id="engine-pv-lines"></div>
+                        </div>
+                    </div>
                 </div>
                 <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
                 <div class="viewer-tool-group">
@@ -98,13 +130,14 @@ export function initGamePanel(mount) {
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-tool-group viewer-tool-group-end">
-                    <button data-action="viewer-analysis" class="viewer-tool-btn" aria-label="Analyze on Lichess" data-tooltip="Analyze on Lichess"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Engine (A)"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="-0.5 -0.5 24 24" height="24" width="24"><path stroke="currentColor" d="M4.791666666666667 4.791666666666667h13.416666666666668v13.416666666666668H4.791666666666667z" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M15.333333333333334 14.375h-3.8333333333333335" stroke-width="1.5"></path></svg></button>
                     <div class="share-btn-wrapper">
                         <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
                         <div id="share-popover" class="share-popover hidden">
                             <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
                             <button class="share-option" data-action="share-copy-link">Copy Link</button>
                             <button class="share-option" data-action="share-download">Download PGN</button>
+                            <button class="share-option" data-action="viewer-analysis">Analyze on Lichess</button>
                             <button class="share-option" data-action="share-native">Share...</button>
                         </div>
                     </div>
@@ -115,6 +148,7 @@ export function initGamePanel(mount) {
                     <div id="overflow-menu" class="overflow-menu hidden">
                         <button class="overflow-item" data-action="overflow-comments"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>Comments</button>
                         <button class="overflow-item" data-action="overflow-branch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg>Variations</button>
+                        <button class="overflow-item" data-action="overflow-engine"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="-0.5 -0.5 24 24" height="24" width="24"><path stroke="currentColor" d="M4.791666666666667 4.791666666666667h13.416666666666668v13.416666666666668H4.791666666666667z" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M15.333333333333334 14.375h-3.8333333333333335" stroke-width="1.5"></path></svg>Engine</button>
                         <button class="overflow-item" data-action="overflow-analysis"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>Analyze on Lichess</button>
                         <button class="overflow-item" data-action="overflow-headers"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg>Game Info</button>
                         <div class="overflow-sep"></div>
@@ -139,6 +173,7 @@ export function initGamePanel(mount) {
                     <textarea id="editor-import-text" class="editor-import-text" placeholder="Paste PGN text here, or drag .pgn files..." rows="10"></textarea>
                     <div class="editor-import-actions">
                         <label class="editor-h-btn editor-h-btn-secondary editor-file-btn">Choose files<input type="file" id="editor-import-file" accept=".pgn,.txt" multiple hidden></label>
+                        <label class="editor-h-btn editor-h-btn-secondary editor-file-btn">Choose folder<input type="file" id="editor-import-folder" webkitdirectory hidden></label>
                         <span class="editor-import-spacer"></span>
                         <button data-action="editor-import-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
                         <button data-action="editor-import-ok" class="editor-h-btn">Import</button>
@@ -185,6 +220,67 @@ export function initGamePanel(mount) {
                         <button data-action="dirty-copy-leave" class="editor-h-btn">Copy PGN & Leave</button>
                         <button data-action="dirty-discard" class="editor-h-btn editor-h-btn-secondary">Discard</button>
                         <button data-action="dirty-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            <div id="engine-choice-dialog" class="editor-import-dialog hidden">
+                <div class="editor-import-content">
+                    <h3>Choose Engine</h3>
+                    <div class="engine-choices">
+                        <label class="engine-choice">
+                            <input type="radio" name="engine-variant" value="lite" checked>
+                            <span class="engine-choice-label">Lite Engine<small>~7 MB download, good for casual analysis</small></span>
+                        </label>
+                        <label class="engine-choice">
+                            <input type="radio" name="engine-variant" value="full">
+                            <span class="engine-choice-label">Full Engine<small>~100 MB download, maximum strength</small></span>
+                        </label>
+                    </div>
+                    <div class="editor-import-actions">
+                        <button data-action="engine-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                        <button data-action="engine-confirm" class="editor-h-btn">Download & Enable</button>
+                    </div>
+                </div>
+            </div>
+            <div id="engine-settings-dialog" class="editor-import-dialog hidden">
+                <div class="editor-import-content">
+                    <h3>Engine Settings</h3>
+                    <div class="engine-settings-grid">
+                        <label class="engine-setting">
+                            <span class="engine-setting-name">Engine</span>
+                            <select id="engine-setting-variant" class="engine-setting-select">
+                                <option value="lite">Lite (~7 MB)</option>
+                                <option value="full">Full (~100 MB)</option>
+                            </select>
+                        </label>
+                        <label class="engine-setting">
+                            <span class="engine-setting-name">Depth</span>
+                            <div class="engine-setting-depth-row">
+                                <input id="engine-setting-depth" type="range" min="1" max="40" value="20" class="engine-setting-range">
+                                <span id="engine-setting-depth-val" class="engine-setting-val">20</span>
+                                <label class="engine-setting-inf-label"><input id="engine-setting-infinite" type="checkbox"> <span>&infin;</span></label>
+                            </div>
+                        </label>
+                        <label class="engine-setting">
+                            <span class="engine-setting-name">Hash (MB)</span>
+                            <select id="engine-setting-hash" class="engine-setting-select">
+                                <option value="16">16</option>
+                                <option value="32">32</option>
+                                <option value="64">64</option>
+                                <option value="128">128</option>
+                                <option value="256">256</option>
+                                <option value="512">512</option>
+                                <option value="1024">1024</option>
+                            </select>
+                        </label>
+                        <label class="engine-setting" id="engine-setting-threads-row">
+                            <span class="engine-setting-name">Threads</span>
+                            <select id="engine-setting-threads" class="engine-setting-select"></select>
+                        </label>
+                    </div>
+                    <div class="editor-import-actions">
+                        <button data-action="engine-settings-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
+                        <button data-action="engine-settings-save" class="editor-h-btn">Apply</button>
                     </div>
                 </div>
             </div>
@@ -285,6 +381,7 @@ combinedWidthQuery.addEventListener('change', () => {
     if (!modal || modal.closest('.modal.hidden')) return;
     updateLayout();
     board.resize();
+    positionEnginePanel();
 });
 
 // Mobile view toggle: browser-panel vs viewer-main
@@ -322,6 +419,9 @@ let _ctxAnchorEl = null;
 let _longPressTimer = null;
 let _browserListenerAC = null; // AbortController for browser panel listeners
 let _pendingSubmission = null; // { gameId, round, board } when previewing before submit
+let _engineActive = false;      // user has toggled engine on
+let _enginePaused = false;      // engine loaded but analysis paused
+let _analysisGen = 0;           // incremented on each position change to discard stale results
 
 // ─── 2. onChange Handlers ──────────────────────────────────────────
 
@@ -394,6 +494,341 @@ function onPositionChange(fen, from, to, annotations) {
     board.setPosition(fen, true);
     board.highlightSquares(from, to);
     board.setAutoShapes(annotationsToShapes(annotations));
+    if (_engineActive) analyzeCurrentPosition(fen);
+}
+
+// ─── Engine integration ──────────────────────────────────────────
+
+let _engineNumLines = parseInt(localStorage.getItem('engine-lines')) || 3;
+let _pvInfos = [];  // latest info per PV index
+let _engineDepth = parseInt(localStorage.getItem('engine-depth')) || 20;
+let _engineInfinite = localStorage.getItem('engine-infinite') === 'true';
+let _engineHash = parseInt(localStorage.getItem('engine-hash')) || 16;
+let _engineThreads = parseInt(localStorage.getItem('engine-threads')) || 0; // 0 = auto
+
+export function toggleEngine() {
+    if (_engineActive) {
+        _engineActive = false;
+        engine.stopAnalysis();
+        document.getElementById('engine-panel')?.classList.add('hidden');
+        document.getElementById('eval-bar')?.classList.add('hidden');
+        document.getElementById('viewer-engine')?.classList.remove('active');
+        positionEnginePanel();
+        return;
+    }
+
+    if (engine.isReady()) { activateEngine(); return; }
+    if (engine.isLoading()) return;
+
+    const saved = engine.getSavedVariant();
+    if (saved) startEngine(saved);
+    else document.getElementById('engine-choice-dialog')?.classList.remove('hidden');
+}
+
+export function confirmEngineChoice(variant) {
+    document.getElementById('engine-choice-dialog')?.classList.add('hidden');
+    startEngine(variant);
+}
+
+function startEngine(variant) {
+    document.getElementById('viewer-engine')?.classList.add('active');
+    engine.initEngine(variant, { hash: _engineHash, threads: _engineThreads }).then(() => {
+        activateEngine();
+    }).catch((err) => {
+        console.error('Engine failed to load:', err);
+        document.getElementById('viewer-engine')?.classList.remove('active');
+        showToast('Engine failed to load', 'error');
+    });
+}
+
+/** Move the engine panel to the browser column on tablet, or back to side-col. */
+function positionEnginePanel() {
+    const panel = document.getElementById('engine-panel');
+    if (!panel) return;
+    const browserPanel = document.getElementById('viewer-browser-panel');
+    const sideCol = document.querySelector('.viewer-side-col');
+    const hasBrowser = browserPanel && !browserPanel.classList.contains('hidden');
+    const isTablet = window.matchMedia('(min-width: 1000px) and (max-width: 1599px)').matches;
+
+    if (_engineActive && hasBrowser && isTablet) {
+        // Move under browser panel
+        if (panel.parentElement !== browserPanel) browserPanel.appendChild(panel);
+    } else {
+        // Default: inside side-col
+        if (sideCol && panel.parentElement !== sideCol) sideCol.appendChild(panel);
+    }
+}
+
+function activateEngine() {
+    _engineActive = true;
+    const panel = document.getElementById('engine-panel');
+    panel?.classList.remove('hidden');
+    document.getElementById('eval-bar')?.classList.remove('hidden');
+    document.getElementById('viewer-engine')?.classList.add('active');
+    positionEnginePanel();
+
+    // Set variant badge
+    _enginePaused = false;
+    const badge = document.getElementById('engine-variant-badge');
+    if (badge) badge.textContent = engine.getVariant() === 'full' ? 'Full' : 'Lite';
+    const pauseBtn = document.getElementById('engine-pause-btn');
+    if (pauseBtn) pauseBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+
+
+    // Wire lines selector
+    const linesSelect = document.getElementById('engine-lines-select');
+    if (linesSelect) {
+        linesSelect.value = String(_engineNumLines);
+        linesSelect.onchange = () => {
+            _engineNumLines = parseInt(linesSelect.value);
+            localStorage.setItem('engine-lines', _engineNumLines);
+            const fen = pgn.getCurrentFen();
+            if (fen) analyzeCurrentPosition(fen);
+        };
+    }
+
+    // Wire PV click-to-insert
+    const pvContainer = document.getElementById('engine-pv-lines');
+    if (pvContainer) pvContainer.onclick = handlePvClick;
+
+    const fen = pgn.getCurrentFen();
+    if (fen) analyzeCurrentPosition(fen);
+}
+
+export function toggleEnginePause() {
+    if (!_engineActive || !engine.isReady()) return;
+    _enginePaused = !_enginePaused;
+    const btn = document.getElementById('engine-pause-btn');
+    if (btn) {
+        btn.innerHTML = _enginePaused
+            ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>'
+            : '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+    }
+    if (_enginePaused) {
+        engine.stopAnalysis();
+    } else {
+        const fen = pgn.getCurrentFen();
+        if (fen) analyzeCurrentPosition(fen);
+    }
+}
+
+function analyzeCurrentPosition(fen) {
+    if (!engine.isReady() || _enginePaused) return;
+    const gen = ++_analysisGen;
+    _pvInfos = [];
+
+    engine.evaluatePosition(fen, {
+        depth: _engineInfinite ? 99 : _engineDepth,
+        multiPv: _engineNumLines,
+        onInfo: (info) => {
+            if (gen !== _analysisGen) return;
+            _pvInfos[info.multiPvIndex - 1] = info;
+            renderEnginePanel(fen);
+        },
+    });
+}
+
+function renderEnginePanel(fen) {
+    // Depth + speed display
+    const depthEl = document.getElementById('engine-depth');
+    const npsEl = document.getElementById('engine-nps');
+    const best = _pvInfos[0];
+    if (depthEl && best) {
+        const target = _engineInfinite ? '\u221E' : _engineDepth;
+        depthEl.textContent = `depth ${best.depth}/${target}`;
+    }
+    if (npsEl && best?.nps) {
+        const kn = best.nps >= 1000000 ? `${(best.nps / 1000000).toFixed(1)}MN/s`
+            : best.nps >= 1000 ? `${Math.round(best.nps / 1000)}kN/s`
+            : `${best.nps}N/s`;
+        npsEl.textContent = kn;
+    }
+
+    // Eval bar (use line 1's score)
+    renderEvalBar(best, fen);
+
+    // PV lines
+    const container = document.getElementById('engine-pv-lines');
+    if (!container) return;
+
+    const whiteToMove = !fen || fen.split(' ')[1] !== 'b';
+    const startMoveNum = parseInt(fen?.split(' ')[5]) || 1;
+
+    const rows = [];
+    for (let i = 0; i < _engineNumLines; i++) {
+        const info = _pvInfos[i];
+        if (!info?.pv?.length) {
+            rows.push('<div class="engine-pv-row engine-pv-empty"></div>');
+            continue;
+        }
+
+        // Score from white's perspective
+        const cp = whiteToMove ? info.score : -info.score;
+        const mate = info.mate !== null ? (whiteToMove ? info.mate : -info.mate) : null;
+        const scoreText = engine.formatScore(cp, mate);
+        const whiteWinning = mate !== null ? mate > 0 : cp > 30;
+        const blackWinning = mate !== null ? mate < 0 : cp < -30;
+        const scoreClass = whiteWinning ? 'engine-score-white' : blackWinning ? 'engine-score-black' : 'engine-score-even';
+
+        // Build SAN line with clickable moves
+        const sanMoves = engine.pvToSan(fen, info.pv.slice(0, 12));
+        let moveText = '';
+        for (let j = 0; j < sanMoves.length; j++) {
+            const plyOffset = whiteToMove ? j : j + 1;
+            const moveNum = startMoveNum + Math.floor(plyOffset / 2);
+            const isWhitePly = plyOffset % 2 === 0;
+            let prefix = '';
+            if (j === 0 && !whiteToMove) prefix = `<span class="engine-pv-movenum">${moveNum}...</span>`;
+            else if (isWhitePly) prefix = `<span class="engine-pv-movenum">${moveNum}.</span>`;
+            moveText += `${prefix}<span class="engine-pv-move" data-pv-line="${i}" data-pv-idx="${j}">${sanMoves[j]}</span> `;
+        }
+
+        rows.push(
+            `<div class="engine-pv-row">` +
+            `<span class="engine-pv-score ${scoreClass}">${scoreText}</span>` +
+            `<span class="engine-pv-moves">${moveText.trim()}</span>` +
+            `</div>`
+        );
+    }
+    container.innerHTML = rows.join('');
+}
+
+function renderEvalBar(info, fen) {
+    const bar = document.getElementById('eval-bar');
+    if (!bar) return;
+    const fill = bar.querySelector('.eval-bar-fill');
+    const label = bar.querySelector('.eval-bar-label');
+    const flipped = board.getOrientation() === 'black';
+
+    if (!info) {
+        fill.style.height = '50%';
+        if (label) label.textContent = '';
+        return;
+    }
+
+    const whiteToMove = !fen || fen.split(' ')[1] !== 'b';
+    const cp = whiteToMove ? info.score : -info.score;
+    const mate = info.mate !== null ? (whiteToMove ? info.mate : -info.mate) : null;
+    const pct = engine.scoreToPercent(cp, mate);
+
+    // Fill = white's share, grows from bottom (or top when flipped)
+    bar.classList.toggle('eval-bar-flipped', flipped);
+    fill.style.height = `${pct}%`;
+
+    if (label) {
+        const absScore = mate !== null
+            ? `M${Math.abs(mate)}`
+            : (Math.abs(cp) / 100).toFixed(1);
+        label.textContent = absScore;
+        const whiteWinning = pct >= 50;
+        const whiteOnBottom = !flipped;
+        const winnerOnBottom = whiteWinning === whiteOnBottom;
+        label.className = 'eval-bar-label '
+            + (winnerOnBottom ? 'eval-bar-label-bottom' : 'eval-bar-label-top') + ' '
+            + (whiteWinning ? 'eval-bar-label-dark' : 'eval-bar-label-light');
+    }
+}
+
+function handlePvClick(e) {
+    const moveEl = e.target.closest('.engine-pv-move');
+    if (!moveEl) return;
+    const lineIdx = parseInt(moveEl.dataset.pvLine);
+    const moveIdx = parseInt(moveEl.dataset.pvIdx);
+    const info = _pvInfos[lineIdx];
+    if (!info?.pv?.length) return;
+    const fen = pgn.getCurrentFen();
+    const sanMoves = engine.pvToSan(fen, info.pv.slice(0, moveIdx + 1));
+    for (const san of sanMoves) pgn.playMove(san);
+}
+
+// ─── Engine settings ─────────────────────────────────────────────
+
+export function openEngineSettings() {
+    const dialog = document.getElementById('engine-settings-dialog');
+    if (!dialog) return;
+
+    // Populate current values
+    const variantSel = document.getElementById('engine-setting-variant');
+    if (variantSel) variantSel.value = engine.getVariant() || engine.getSavedVariant() || 'lite';
+
+    const depthSlider = document.getElementById('engine-setting-depth');
+    const depthVal = document.getElementById('engine-setting-depth-val');
+    const infCheck = document.getElementById('engine-setting-infinite');
+    if (depthSlider) {
+        depthSlider.value = _engineDepth;
+        depthSlider.disabled = _engineInfinite;
+        depthSlider.oninput = () => { depthVal.textContent = depthSlider.value; };
+    }
+    if (depthVal) depthVal.textContent = _engineDepth;
+    if (infCheck) {
+        infCheck.checked = _engineInfinite;
+        infCheck.onchange = () => {
+            depthSlider.disabled = infCheck.checked;
+            depthVal.textContent = infCheck.checked ? '\u221E' : depthSlider.value;
+        };
+        if (_engineInfinite && depthVal) depthVal.textContent = '\u221E';
+    }
+
+    const hashSel = document.getElementById('engine-setting-hash');
+    if (hashSel) hashSel.value = _engineHash;
+
+    // Populate threads dropdown
+    const threadsSel = document.getElementById('engine-setting-threads');
+    const maxThreads = navigator.hardwareConcurrency || 1;
+    const threadsRow = document.getElementById('engine-setting-threads-row');
+    if (maxThreads <= 1 || typeof SharedArrayBuffer === 'undefined') {
+        threadsRow?.classList.add('hidden');
+    } else {
+        threadsRow?.classList.remove('hidden');
+        threadsSel.innerHTML = '<option value="0">Auto</option>';
+        for (let i = 1; i <= Math.min(maxThreads, 8); i++) {
+            threadsSel.innerHTML += `<option value="${i}">${i}</option>`;
+        }
+        threadsSel.value = _engineThreads;
+    }
+
+    dialog.classList.remove('hidden');
+}
+
+export function applyEngineSettings() {
+    const dialog = document.getElementById('engine-settings-dialog');
+    const variantSel = document.getElementById('engine-setting-variant');
+    const depthSlider = document.getElementById('engine-setting-depth');
+    const infCheck = document.getElementById('engine-setting-infinite');
+    const hashSel = document.getElementById('engine-setting-hash');
+    const threadsSel = document.getElementById('engine-setting-threads');
+
+    const newVariant = variantSel?.value || 'lite';
+    const newDepth = parseInt(depthSlider?.value) || 20;
+    const newInfinite = infCheck?.checked || false;
+    const newHash = parseInt(hashSel?.value) || 16;
+    const newThreads = parseInt(threadsSel?.value) || 0;
+
+    // Persist
+    _engineDepth = newDepth;
+    _engineInfinite = newInfinite;
+    _engineHash = newHash;
+    _engineThreads = newThreads;
+    localStorage.setItem('engine-depth', newDepth);
+    localStorage.setItem('engine-infinite', newInfinite);
+    localStorage.setItem('engine-hash', newHash);
+    localStorage.setItem('engine-threads', newThreads);
+
+    dialog?.classList.add('hidden');
+
+    // Variant change requires re-downloading with new options
+    const currentVariant = engine.getVariant();
+    if (newVariant !== currentVariant && engine.isReady()) {
+        engine.destroyEngine();
+        _engineActive = false;
+        startEngine(newVariant);
+    } else if (engine.isReady()) {
+        // Safe mid-session option change: stop → bestmove → setoption → isready → readyok
+        engine.setOptions({ hash: newHash, threads: newThreads }).then(() => {
+            const fen = pgn.getCurrentFen();
+            if (fen && _engineActive) analyzeCurrentPosition(fen);
+        });
+    }
 }
 
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
@@ -464,9 +899,7 @@ export async function openGamePanel(opts = {}) {
     if (!playerColor) playerColor = 'White';
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
-    // On desktop, close explorer (sidebar shows browser list alongside the game).
-    // On mobile, keep explorer alive so its game ID filter persists for back-navigation.
-    if (_gamesState?.explorerActive && isCombinedWidth()) {
+    if (_gamesState?.explorerActive) {
         games.closeExplorer();
     }
 
@@ -486,6 +919,14 @@ function forceCloseGamePanel() {
     const onCloseCallback = _panel.onClose;
     _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
     _pendingAction = null;
+    // Stop engine analysis (but keep worker alive for re-use)
+    if (_engineActive) {
+        _engineActive = false;
+        engine.stopAnalysis();
+        document.getElementById('engine-panel')?.classList.add('hidden');
+        document.getElementById('eval-bar')?.classList.add('hidden');
+        document.getElementById('viewer-engine')?.classList.remove('active');
+    }
     pgn.destroyGame();
     closeModal('viewer-modal');
     onCloseCallback?.();
@@ -795,8 +1236,8 @@ export function handlePanelKeydown(e) {
         return;
     }
 
-    // Explorer mode keyboard
-    if (_gamesState?.explorerActive) {
+    // Explorer mode keyboard (only when explorer view is active, not while viewing a game)
+    if (_viewMode === 'explorer' && _gamesState?.explorerActive) {
         const moves = _gamesState.explorerStats?.moves;
         if (e.key === 'ArrowDown' && moves?.length) {
             _explorerSelectedIdx = Math.min(_explorerSelectedIdx + 1, moves.length - 1);
@@ -838,6 +1279,7 @@ export function handlePanelKeydown(e) {
         const active = pgn.toggleBranchMode();
         document.getElementById('viewer-branch')?.classList.toggle('active', active);
     }
+    else if (e.key === 'a' || e.key === 'A') { toggleEngine(); }
 
     else if (e.key === 'Delete' || e.key === 'Backspace') {
         pgn.deleteFromHere();
@@ -1276,9 +1718,24 @@ function updatePlayButton(isPlaying) {
 }
 
 function highlightActiveGame(gameId) {
-    const panelEl = document.getElementById('viewer-browser-panel');
-    if (!panelEl || !gameId) return;
-    panelEl.querySelectorAll('.browser-game-row').forEach(row => {
+    if (!gameId) return;
+
+    // If virtual list is active, scroll to the target game first
+    if (_vlist.items && _vlist.scrollEl) {
+        const { items, rowH, scrollEl } = _vlist;
+        const idx = items.findIndex(i => i.type === 'game' && i.data.gameId === gameId);
+        if (idx !== -1) {
+            const target = idx * rowH - (scrollEl.clientHeight / 2) + (rowH / 2);
+            scrollEl.scrollTop = Math.max(0, target);
+            _vlist.rendered = { start: -1, end: -1 };
+            renderVisibleRows();
+        }
+    }
+
+    const viewport = document.getElementById('browser-games-viewport');
+    const container = viewport || document.getElementById('browser-games');
+    if (!container) return;
+    container.querySelectorAll('.browser-game-row').forEach(row => {
         row.classList.toggle('active', row.dataset.gameId === gameId);
     });
 }
@@ -1400,11 +1857,27 @@ function renderBrowserFilters(panelEl, state) {
     container.innerHTML = html;
 }
 
+// ─── Virtual Game List ─────────────────────────────────────────────
+// Renders only the ~20 visible rows + buffer. Uses uniform row height
+// (measured from a game row) for O(1) scroll positioning.
+
+const _vlist = {
+    items: null,        // flat array: { type: 'game'|'header'|'profile', data }
+    rowH: 0,            // measured row height (px), used for all row types
+    scrollEl: null,      // the scrollable #browser-games element
+    wired: false,       // scroll listener attached
+    rendered: { start: -1, end: -1 },
+};
+
+const VLIST_BUFFER = 10;
+
 function renderBrowserGameList(panelEl, state) {
     const gamesEl = panelEl.querySelector('#browser-games');
+    _vlist.scrollEl = gamesEl;
 
     const gamesList = state.visibleGames;
     if (!gamesList || gamesList.length === 0) {
+        _vlist.items = null;
         if (state.loading) {
             gamesEl.innerHTML = '<div class="browser-empty"><p>Loading games\u2026</p></div>';
         } else {
@@ -1414,20 +1887,77 @@ function renderBrowserGameList(panelEl, state) {
         return;
     }
 
-    let html = '';
+    // Build flat item list
+    const items = [];
+    const isPlayerMode = state.isPlayerMode;
+    if (isPlayerMode && !state.tournament && !state.isLocal) {
+        items.push({ type: 'profile', data: state.player });
+    }
+    for (const { header, games: groupItems } of state.groupedGames) {
+        if (header) items.push({ type: 'header', data: header });
+        for (const game of groupItems) {
+            items.push({ type: 'game', data: game, label: isPlayerMode ? `${game.round}.${game.board || '?'}` : null });
+        }
+    }
+    _vlist.items = items;
 
-    if (state.isPlayerMode && !state.tournament && !state.isLocal) {
-        html += `<button type="button" class="browser-profile-link" data-profile-player="${state.player}">View all-time profile</button>`;
+    // Measure row height once (game row + gap)
+    if (!_vlist.rowH) {
+        const gameItem = items.find(i => i.type === 'game');
+        if (gameItem) {
+            gamesEl.innerHTML = renderGameRow(gameItem.data, gameItem.label);
+            const style = getComputedStyle(gamesEl.children[0]);
+            _vlist.rowH = gamesEl.children[0].offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+            _vlist.rowH += parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.2; // inter-row gap
+            gamesEl.innerHTML = '';
+        }
+        if (!_vlist.rowH) _vlist.rowH = 32;
     }
 
-    for (const { header, games: groupItems } of state.groupedGames) {
-        if (header) html += `<div class="browser-section-header">${header}</div>`;
-        for (const game of groupItems) {
-            html += renderGameRow(game, state.isPlayerMode ? `${game.round}.${game.board || '?'}` : null);
+    const totalH = items.length * _vlist.rowH;
+    gamesEl.style.position = 'relative';
+    gamesEl.innerHTML = `<div id="browser-games-spacer" style="height:${totalH}px;pointer-events:none"></div><div id="browser-games-viewport" style="position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:0.2rem"></div>`;
+
+    if (!_vlist.wired) {
+        _vlist.wired = true;
+        gamesEl.addEventListener('scroll', onVirtualScroll, { passive: true });
+    }
+
+    _vlist.rendered = { start: -1, end: -1 };
+    renderVisibleRows();
+}
+
+function onVirtualScroll() {
+    renderVisibleRows();
+}
+
+function renderVisibleRows() {
+    const { items, rowH, scrollEl } = _vlist;
+    if (!items || !scrollEl) return;
+
+    const startIdx = Math.max(0, Math.floor(scrollEl.scrollTop / rowH) - VLIST_BUFFER);
+    const endIdx = Math.min(items.length, Math.ceil((scrollEl.scrollTop + scrollEl.clientHeight) / rowH) + VLIST_BUFFER);
+
+    if (startIdx === _vlist.rendered.start && endIdx === _vlist.rendered.end) return;
+    _vlist.rendered = { start: startIdx, end: endIdx };
+
+    let html = '';
+    for (let i = startIdx; i < endIdx; i++) {
+        const item = items[i];
+        if (item.type === 'header') {
+            html += `<div class="browser-section-header">${item.data}</div>`;
+        } else if (item.type === 'profile') {
+            html += `<button type="button" class="browser-profile-link" data-profile-player="${item.data}">View all-time profile</button>`;
+        } else {
+            html += renderGameRow(item.data, item.label);
         }
     }
 
-    gamesEl.innerHTML = html;
+    const viewport = scrollEl.querySelector('#browser-games-viewport');
+    if (viewport) {
+        viewport.style.top = (startIdx * rowH) + 'px';
+        viewport.innerHTML = html;
+    }
 }
 
 // ─── 7. Event Wiring ──────────────────────────────────────────────
@@ -1667,7 +2197,11 @@ export const goToStart = () => pgn.goToStart();
 export const goToPrev = () => pgn.goToPrev();
 export const goToNext = () => { const c = pgn.goToNext(); if (c) showBranchPopover(c); };
 export const goToEnd = () => pgn.goToEnd();
-export const flipBoard = () => board.flip();
+export const flipBoard = () => {
+    board.flip();
+    // Re-render eval bar to match new orientation
+    if (_engineActive && _pvInfos[0]) renderEvalBar(_pvInfos[0], pgn.getCurrentFen());
+};
 export const setBoardOrientation = (color) => board.setOrientation(color);
 export const toggleAutoPlay = () => pgn.toggleAutoPlay();
 export const toggleComments = () => pgn.toggleComments();
@@ -1688,11 +2222,19 @@ function wireImportDialog() {
     const textarea = document.getElementById('editor-import-text');
     const fileInput = document.getElementById('editor-import-file');
     fileInput?.addEventListener('change', async () => {
-        const files = [...fileInput.files];
+        const files = [...fileInput.files].filter(f => f.name.endsWith('.pgn') || f.name.endsWith('.txt'));
         if (!files.length) return;
         const texts = await Promise.all(files.map(f => f.text()));
-        textarea.value = texts.join('\n\n');
+        importFromTexts(texts);
         fileInput.value = '';
+    });
+    const folderInput = document.getElementById('editor-import-folder');
+    folderInput?.addEventListener('change', async () => {
+        const pgnFiles = [...folderInput.files].filter(f => f.name.endsWith('.pgn'));
+        if (!pgnFiles.length) return;
+        const texts = await Promise.all(pgnFiles.map(f => f.text()));
+        importFromTexts(texts);
+        folderInput.value = '';
     });
     textarea?.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -1704,10 +2246,10 @@ function wireImportDialog() {
     textarea?.addEventListener('drop', async (e) => {
         e.preventDefault();
         textarea.classList.remove('drag-over');
-        const files = [...e.dataTransfer.files];
+        const files = [...e.dataTransfer.files].filter(f => f.name.endsWith('.pgn') || f.name.endsWith('.txt'));
         if (!files.length) return;
         const texts = await Promise.all(files.map(f => f.text()));
-        textarea.value = texts.join('\n\n');
+        importFromTexts(texts);
     });
 }
 
@@ -1742,24 +2284,8 @@ export function hideImportDialog() {
     _submitMode = false;
 }
 
-export function doImport() {
-    if (_submitMode) return doPreview();
-
-    const textarea = document.getElementById('editor-import-text');
-    let text = textarea?.value?.trim();
-    if (!text) return;
-
-    // Wrap bare movetext (no headers) with minimal PGN headers.
-    // Multiple games separated by blank lines each get their own headers.
-    if (!text.startsWith('[')) {
-        text = text.split(/\n\s*\n/).filter(s => s.trim()).map(fragment => {
-            const t = fragment.trim();
-            const resultMatch = t.match(/(1-0|0-1|1\/2-1\/2)\s*$/);
-            const result = resultMatch ? resultMatch[1] : '*';
-            return `[White "?"]\n[Black "?"]\n[Result "${result}"]\n\n${t}`;
-        }).join('\n\n');
-    }
-
+function importFromTexts(texts) {
+    const text = texts.join('\n\n');
     const pgnStrings = splitPgn(text);
     if (pgnStrings.length === 0) return;
 
@@ -1769,6 +2295,26 @@ export function doImport() {
     games.setGamesData({ games: importedGames, query: { local: true } });
     openImportedGames(importedGames);
     showToast(`${importedGames.length} game${importedGames.length !== 1 ? 's' : ''} imported`, 'success');
+}
+
+export function doImport() {
+    if (_submitMode) return doPreview();
+
+    const textarea = document.getElementById('editor-import-text');
+    let text = textarea?.value?.trim();
+    if (!text) return;
+
+    // Wrap bare movetext (no headers) with minimal PGN headers
+    if (!text.startsWith('[')) {
+        text = text.split(/\n\s*\n/).filter(s => s.trim()).map(fragment => {
+            const t = fragment.trim();
+            const resultMatch = t.match(/(1-0|0-1|1\/2-1\/2)\s*$/);
+            const result = resultMatch ? resultMatch[1] : '*';
+            return `[White "?"]\n[Black "?"]\n[Result "${result}"]\n\n${t}`;
+        }).join('\n\n');
+    }
+
+    importFromTexts([text]);
 }
 
 function doPreview() {

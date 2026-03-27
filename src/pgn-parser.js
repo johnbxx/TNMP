@@ -87,12 +87,15 @@ export function parseMoveText(moveText) {
 function tokenizeMoveText(text) {
     const tokens = [];
     let i = 0;
-    while (i < text.length) {
-        const ch = text[i];
-        // Whitespace
-        if (/\s/.test(ch)) { i++; continue; }
+    const len = text.length;
+    const sanRe = /([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|(?:O-O-O|0-0-0)[+#]?|(?:O-O|0-0)[+#]?)/y;
+
+    while (i < len) {
+        const ch = text.charCodeAt(i);
+        // Whitespace (space, \t, \n, \r)
+        if (ch <= 32) { i++; continue; }
         // Brace comment (extracts structured annotations like [%clk], [%eval], [%cal], [%csl])
-        if (ch === '{') {
+        if (ch === 123) { // {
             const end = text.indexOf('}', i + 1);
             const raw = end === -1 ? text.substring(i + 1) : text.substring(i + 1, end);
             const tok = parseComment(raw);
@@ -102,55 +105,89 @@ function tokenizeMoveText(text) {
             continue;
         }
         // Line comment
-        if (ch === ';') {
+        if (ch === 59) { // ;
             const end = text.indexOf('\n', i + 1);
-            if (end === -1) { i = text.length; continue; }
-            i = end + 1;
+            i = end === -1 ? len : end + 1;
             continue;
         }
         // Variation start/end
-        if (ch === '(') { tokens.push({ type: 'var_start' }); i++; continue; }
-        if (ch === ')') { tokens.push({ type: 'var_end' }); i++; continue; }
+        if (ch === 40) { tokens.push({ type: 'var_start' }); i++; continue; } // (
+        if (ch === 41) { tokens.push({ type: 'var_end' }); i++; continue; } // )
         // NAG ($14) or inline NAG symbols (! ? !! ?? !? ?!)
-        if (ch === '$') {
-            const m = text.substring(i).match(/^\$(\d+)/);
-            if (m) { tokens.push({ type: 'nag', value: parseInt(m[1], 10) }); i += m[0].length; continue; }
-        }
-        if (ch === '!' || ch === '?') {
-            const pair = text[i + 1];
-            if (ch === '!' && pair === '!') { tokens.push({ type: 'nag', value: 3 }); i += 2; continue; }
-            if (ch === '?' && pair === '?') { tokens.push({ type: 'nag', value: 4 }); i += 2; continue; }
-            if (ch === '!' && pair === '?') { tokens.push({ type: 'nag', value: 5 }); i += 2; continue; }
-            if (ch === '?' && pair === '!') { tokens.push({ type: 'nag', value: 6 }); i += 2; continue; }
-            tokens.push({ type: 'nag', value: ch === '!' ? 1 : 2 }); i++; continue;
-        }
-        // Result (including unicode en-dash variants)
-        const resultMatch = text.substring(i).match(/^(1[-\u2013]0|0[-\u2013]1|1\/2[-\u2013]1\/2|\*)/);
-        if (resultMatch && (i === 0 || /[\s)]/.test(text[i - 1]))) {
-            tokens.push({ type: 'result', value: resultMatch[1].replace(/\u2013/g, '-') });
-            i += resultMatch[0].length;
+        if (ch === 36) { // $
+            i++;
+            let nag = 0;
+            while (i < len && text.charCodeAt(i) >= 48 && text.charCodeAt(i) <= 57) {
+                nag = nag * 10 + text.charCodeAt(i) - 48;
+                i++;
+            }
+            tokens.push({ type: 'nag', value: nag });
             continue;
         }
-        // Move number (e.g., "1." or "1..." or "15...")
-        const numMatch = text.substring(i).match(/^(\d+)(\.{1,3})/);
-        if (numMatch) {
-            tokens.push({ type: 'move_number', value: parseInt(numMatch[1], 10) });
-            i += numMatch[0].length;
-            continue;
+        if (ch === 33 || ch === 63) { // ! ?
+            const next = i + 1 < len ? text.charCodeAt(i + 1) : 0;
+            if (ch === 33 && next === 33) { tokens.push({ type: 'nag', value: 3 }); i += 2; continue; }
+            if (ch === 63 && next === 63) { tokens.push({ type: 'nag', value: 4 }); i += 2; continue; }
+            if (ch === 33 && next === 63) { tokens.push({ type: 'nag', value: 5 }); i += 2; continue; }
+            if (ch === 63 && next === 33) { tokens.push({ type: 'nag', value: 6 }); i += 2; continue; }
+            tokens.push({ type: 'nag', value: ch === 33 ? 1 : 2 }); i++; continue;
+        }
+        // Result * (standalone)
+        if (ch === 42) { // *
+            tokens.push({ type: 'result', value: '*' }); i++; continue;
+        }
+        // Digit: result (1-0, 0-1, 1/2-1/2) or move number
+        if (ch >= 48 && ch <= 57) {
+            // Check for results: 1-0, 0-1, 1/2-1/2 (including en-dash variants)
+            if (ch === 49 && i + 2 < len) { // 1
+                const c1 = text.charCodeAt(i + 1);
+                if ((c1 === 45 || c1 === 8211) && text.charCodeAt(i + 2) === 48) { // 1-0 or 1–0
+                    tokens.push({ type: 'result', value: '1-0' }); i += 3; continue;
+                }
+                if (c1 === 47 && i + 6 < len && text.charCodeAt(i + 2) === 50 && // 1/2-1/2
+                    (text.charCodeAt(i + 3) === 45 || text.charCodeAt(i + 3) === 8211) &&
+                    text.charCodeAt(i + 4) === 49 && text.charCodeAt(i + 5) === 47 && text.charCodeAt(i + 6) === 50) {
+                    tokens.push({ type: 'result', value: '1/2-1/2' }); i += 7; continue;
+                }
+            }
+            if (ch === 48 && i + 2 < len) { // 0
+                const c1 = text.charCodeAt(i + 1);
+                if ((c1 === 45 || c1 === 8211) && text.charCodeAt(i + 2) === 49) { // 0-1 or 0–1
+                    tokens.push({ type: 'result', value: '0-1' }); i += 3; continue;
+                }
+            }
+            // Move number: digits followed by dots
+            let num = ch - 48;
+            let j = i + 1;
+            while (j < len && text.charCodeAt(j) >= 48 && text.charCodeAt(j) <= 57) {
+                num = num * 10 + text.charCodeAt(j) - 48;
+                j++;
+            }
+            if (j < len && text.charCodeAt(j) === 46) { // has dot(s)
+                while (j < len && text.charCodeAt(j) === 46) j++;
+                tokens.push({ type: 'move_number', value: num });
+                i = j;
+                continue;
+            }
+            // Bare number without dots — fall through to SAN match
         }
         // Null move (analysis placeholder)
-        const nullMatch = text.substring(i).match(/^(Z0|--(?![-+])|0000|@@@@)/);
-        if (nullMatch) {
-            tokens.push({ type: 'move', value: '--' });
-            i += nullMatch[0].length;
-            continue;
+        if (ch === 90 && i + 1 < len && text.charCodeAt(i + 1) === 48) { // Z0
+            tokens.push({ type: 'move', value: '--' }); i += 2; continue;
+        }
+        if (ch === 45 && i + 1 < len && text.charCodeAt(i + 1) === 45 && // --
+            (i + 2 >= len || (text.charCodeAt(i + 2) !== 45 && text.charCodeAt(i + 2) !== 43))) {
+            tokens.push({ type: 'move', value: '--' }); i += 2; continue;
         }
         // SAN move (includes standard piece moves, castling, pawn moves)
         // Zero-castling (0-0, 0-0-0) normalized to O-O, O-O-O
-        const sanMatch = text.substring(i).match(/^([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|(?:O-O-O|0-0-0)[+#]?|(?:O-O|0-0)[+#]?)/);
+        sanRe.lastIndex = i;
+        const sanMatch = sanRe.exec(text);
         if (sanMatch) {
-            tokens.push({ type: 'move', value: sanMatch[1].replace(/0-0-0/, 'O-O-O').replace(/0-0/, 'O-O') });
-            i += sanMatch[0].length;
+            let san = sanMatch[1];
+            if (san.charCodeAt(0) === 48) san = san.replace(/0-0-0/, 'O-O-O').replace(/0-0/, 'O-O');
+            tokens.push({ type: 'move', value: san });
+            i = sanRe.lastIndex;
             continue;
         }
         // Skip diagram markers [%...] or unknown characters

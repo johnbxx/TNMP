@@ -696,8 +696,9 @@
           <li>Vite build with hashed assets</li>
           <li><code>app.js</code> → 19 ES modules in <code>src/</code></li>
           <li>Chess.js + Chessground for game viewer</li>
+          <li>Stockfish 18 WASM analysis (eval bar, multi-PV)</li>
           <li>PGN editor with move validation</li>
-          <li>Game browser with filters + PGN import</li>
+          <li>Game browser with virtual list + filters + PGN import</li>
           <li>Player profiles with all-time stats</li>
         </ul>
       </div>
@@ -792,8 +793,9 @@
           <h4 style="color:var(--cyan)">State &amp; Data</h4>
           <ul>
             <li><code>config.js</code> — constants, state getters/setters</li>
-            <li><code>games.js</code> — /query fetch/cache, filters, explorer trie</li>
-            <li><code>tree.js</code> — 0x88 replay engine, Zobrist hashing (65× faster than chess.js)</li>
+            <li><code>games.js</code> — /query fetch/cache, filters, explorer trie, virtual game list</li>
+            <li><code>tree.js</code> — 0x88 replay engine, Zobrist hashing (~20× faster than chess.js)</li>
+            <li><code>engine.js</code> — Stockfish 18 WASM wrapper (UCI, NNUE loading, eval cache)</li>
             <li><code>eco.js</code> — frontend ECO classification (localStorage cache)</li>
           </ul>
         </div>
@@ -822,8 +824,9 @@
         <div class="fe-cluster c-pink" id="fd-panel">
           <h4 style="color:var(--pink)">Game Panel</h4>
           <ul>
-            <li><code>game-panel.js</code> — modal lifecycle, viewer/editor/browser</li>
+            <li><code>game-panel.js</code> — modal lifecycle, viewer/editor/browser, engine UI</li>
             <li>Mode switching, embedded browser sidebar (desktop)</li>
+            <li>Virtual game list, folder import, explorer state (active/suspended)</li>
             <li>Receives state via <code>onChange</code>, routes actions to data</li>
           </ul>
         </div>
@@ -953,7 +956,7 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">tree.js</h4>
       <div class="path">src/tree.js</div>
-      <p>0x88 replay engine with Zobrist hashing for explorer tree building. Replays trusted SAN moves without legality checks — 65× faster than chess.js. Used only by <code>games.js</code> for tree construction and position lookups.</p>
+      <p>0x88 replay engine with Zobrist hashing for explorer tree building. Replays trusted SAN moves without legality checks — ~20× faster than chess.js. Used only by <code>games.js</code> for tree construction and position lookups.</p>
       <div class="exports">
         <span>ReplayEngine</span>
         <span>hashFen()</span>

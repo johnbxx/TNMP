@@ -41,9 +41,11 @@ export function resultSymbol(result, side) {
  * @param {string} pgn - Full PGN text
  * @param {string} tag - Header tag name (e.g., "White", "Round")
  */
+const _headerRegexCache = {};
 export function getHeader(pgn, tag) {
-    const m = pgn.match(new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`));
-    return m ? m[1] : '';
+    let re = _headerRegexCache[tag];
+    if (!re) { re = new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`); _headerRegexCache[tag] = re; }
+    return pgn.match(re)?.[1] || '';
 }
 
 /**

@@ -37,6 +37,9 @@ jobs:
         run: npm test
         working-directory: worker
 
+      - name: Copy engine files
+        run: npm run build:engine
+
       - name: Build frontend
         run: npx vite build
 
@@ -78,6 +81,7 @@ jobs:
 
       - name: Build and deploy frontend
         run: |
+          npm run build:engine
           npx vite build
           npx wrangler pages deploy dist --project-name=tnmpairings
         env:

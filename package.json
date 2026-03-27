@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:engine && vite build",
+    "build:only": "vite build",
+    "build:engine": "node scripts/build-engine.js",
     "build:eco": "node scripts/build-eco.js",
     "preview": "vite preview",
     "test": "vitest run",
@@ -21,6 +23,7 @@
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.1.0",
+    "@lichess-org/stockfish-web": "^0.2.3",
     "chess.js": "^1.4.0"
   }
 }

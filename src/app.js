@@ -12,6 +12,7 @@ import {
     resolveDirtyDialog,
     explorerGoToStart, explorerGoBack, explorerGoForward,
     goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode,
+    toggleEngine, confirmEngineChoice, toggleEnginePause, openEngineSettings, applyEngineSettings,
     getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
     toggleNag, showImportDialog, hideImportDialog, doImport, submitGame,
     showHeaderEditor, saveHeaderEditor,
@@ -282,10 +283,15 @@ const ACTIONS = {
     },
     'view-tracker-game': (e) => {
         const btn = e.target.closest('[data-action="view-tracker-game"]');
-        const game = btn?.dataset.gameId ? getCachedGame(btn.dataset.gameId) : null;
-        if (!game) return;
-        if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, btn.dataset.gameId);
-        else openGameViewer({ game });
+        const gameId = btn?.dataset.gameId;
+        if (!gameId) return;
+        // Always use openGameWithPlayerNav — it fetches fresh data via selectPlayer,
+        // so it works even if the games.js cache was cleared by closing the browser.
+        if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
+        else {
+            const game = getCachedGame(gameId);
+            if (game) openGameViewer({ game });
+        }
     },
     // Viewer
     'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
@@ -299,6 +305,8 @@ const ACTIONS = {
         btn.classList.toggle('active', toggleBranchMode());
     },
     'viewer-analysis': async () => {
+        document.getElementById('share-popover')?.classList.add('hidden');
+        document.getElementById('overflow-menu')?.classList.add('hidden');
         const pgn = getGamePgn();
         if (!pgn) return;
         const nodes = getNodes();
@@ -344,6 +352,24 @@ const ACTIONS = {
         const showing = toggleBranchMode();
         document.getElementById('viewer-branch')?.classList.toggle('active', showing);
         e.target.closest('.overflow-item')?.classList.toggle('active', showing);
+    },
+    'viewer-engine': () => toggleEngine(),
+    'overflow-engine': () => {
+        document.getElementById('overflow-menu')?.classList.add('hidden');
+        toggleEngine();
+    },
+    'engine-confirm': () => {
+        const variant = document.querySelector('input[name="engine-variant"]:checked')?.value || 'lite';
+        confirmEngineChoice(variant);
+    },
+    'engine-cancel': () => {
+        document.getElementById('engine-choice-dialog')?.classList.add('hidden');
+    },
+    'engine-pause': () => toggleEnginePause(),
+    'engine-settings': () => openEngineSettings(),
+    'engine-settings-save': () => applyEngineSettings(),
+    'engine-settings-cancel': () => {
+        document.getElementById('engine-settings-dialog')?.classList.add('hidden');
     },
     'overflow-analysis': () => {
         document.getElementById('overflow-menu')?.classList.add('hidden');

@@ -140,6 +140,8 @@ export function setAutoShapes(shapes) {
     _cg.setAutoShapes(shapes || []);
 }
 
+export function getOrientation() { return _orientation; }
+
 export function flip() {
     setOrientation(_orientation === 'white' ? 'black' : 'white');
 }

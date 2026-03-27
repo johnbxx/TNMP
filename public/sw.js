@@ -38,7 +38,8 @@ self.addEventListener('fetch', (event) => {
     const isNavigate = STATIC_ASSETS.includes(url.pathname);
     const isAsset = url.pathname.startsWith('/assets/')
         || url.pathname.startsWith(MEME_PATH)
-        || url.pathname.startsWith('/pieces/');
+        || url.pathname.startsWith('/pieces/')
+        || url.pathname.startsWith('/engine/');
 
     if (isNavigate) {
         // Network-first for HTML shell — always fresh, offline fallback from cache

@@ -6,4 +6,7 @@ dist/
 *.pgn
 *.png
 local/
+.vscode/
+scripts/serve-coop.mjs
+public/engine/
 CLAUDE.md
