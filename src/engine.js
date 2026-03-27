@@ -32,11 +32,11 @@ const CACHE_MAX = 500;
 export function isReady() { return _ready; }
 export function isLoading() { return _loading; }
 export function isActive() { return _ready && _sf !== null; }
-export function getVariant() { return 'full'; } // lichess build is always full SF18
+export function getVariant() { return _variant; }
 export function getOptions() { return { ..._options }; }
 export function onChange(fn) { _onChange = fn; }
 
-function notify() { _onChange?.({ ready: _ready, loading: _loading, variant: 'full' }); }
+function notify() { _onChange?.({ ready: _ready, loading: _loading, variant: _variant }); }
 
 export function getSavedVariant() {
     return localStorage.getItem('engine-variant'); // kept for settings UI compat
@@ -119,22 +119,26 @@ const NNUE_CACHE = 'tnmp-nnue-v1';
 
 async function _loadNnue(variant) {
     if (!_sf) return;
-    const index = variant === 'lite' ? 1 : 0;
-    const name = _sf.getRecommendedNnue(index);
-    if (!name) return;
-    const url = `https://api.tnmpairings.com/nnue/${name}`;
-
-    // Try Cache API first (persists across sessions)
+    // SF18 uses two nets: big (index 0) for complex positions, small (index 1) for endgames.
+    // 'lite' variant loads only the small net; 'full' loads both.
+    const indices = variant === 'lite' ? [1] : [0, 1];
     const cache = await caches.open(NNUE_CACHE);
-    let resp = await cache.match(url);
-    if (!resp) {
-        resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Failed to fetch NNUE: ${name} (${resp.status})`);
-        cache.put(url, resp.clone());
-    }
 
-    const buf = new Uint8Array(await resp.arrayBuffer());
-    _sf.setNnueBuffer(buf, index);
+    for (const index of indices) {
+        const name = _sf.getRecommendedNnue(index);
+        if (!name) continue;
+        const url = `https://api.tnmpairings.com/nnue/${name}`;
+
+        let resp = await cache.match(url);
+        if (!resp) {
+            resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Failed to fetch NNUE: ${name} (${resp.status})`);
+            cache.put(url, resp.clone());
+        }
+
+        const buf = new Uint8Array(await resp.arrayBuffer());
+        _sf.setNnueBuffer(buf, index);
+    }
 }
 
 /** Send a UCI command to the engine. */
