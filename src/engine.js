@@ -59,7 +59,9 @@ export async function initEngine(variant, options = {}) {
 
     try {
         // Dynamic import at runtime — path must bypass Vite's static analysis
-        const engineUrl = new URL('/engine/sf_18.js', window.location.origin).href;
+        // 'lite' uses sf_18_smallnet (single small NNUE), 'full' uses sf_18 (dual NNUE)
+        const jsFile = _variant === 'lite' ? 'sf_18_smallnet.js' : 'sf_18.js';
+        const engineUrl = new URL(`/engine/${jsFile}`, window.location.origin).href;
         const mod = await import(/* @vite-ignore */ engineUrl);
         const Sf_18_Web = mod.default;
         _sf = await Sf_18_Web();
@@ -119,8 +121,8 @@ const NNUE_CACHE = 'tnmp-nnue-v1';
 
 async function _loadNnue(variant) {
     if (!_sf) return;
-    // 'full' loads big net (index 0, ~104MB), 'lite' loads small net (index 1, ~3.4MB)
-    const indices = variant === 'lite' ? [1] : [0];
+    // 'full' (sf_18) needs both nets; 'lite' (sf_18_smallnet) needs only its single net
+    const indices = variant === 'lite' ? [0] : [0, 1];
     const cache = await caches.open(NNUE_CACHE);
 
     for (const index of indices) {

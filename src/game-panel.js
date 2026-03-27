@@ -229,7 +229,7 @@ export function initGamePanel(mount) {
                     <div class="engine-choices">
                         <label class="engine-choice">
                             <input type="radio" name="engine-variant" value="lite" checked>
-                            <span class="engine-choice-label">Lite Engine<small>~7 MB download, good for casual analysis</small></span>
+                            <span class="engine-choice-label">Lite Engine<small>~4 MB download, good for casual analysis</small></span>
                         </label>
                         <label class="engine-choice">
                             <input type="radio" name="engine-variant" value="full">

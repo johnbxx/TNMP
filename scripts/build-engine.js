@@ -10,8 +10,10 @@ const dest = join(root, 'public', 'engine');
 
 mkdirSync(dest, { recursive: true });
 
-// Copy engine WASM/JS files (NNUE weights are fetched from stockfishchess.org at runtime)
-const files = ['sf_18.js', 'sf_18.wasm'];
+// Copy both engine builds (NNUE weights fetched at runtime via worker proxy)
+// sf_18: full strength, needs big + small NNUE nets (~104MB + ~3.4MB)
+// sf_18_smallnet: lite, needs only one small net (~3.4MB)
+const files = ['sf_18.js', 'sf_18.wasm', 'sf_18_smallnet.js', 'sf_18_smallnet.wasm'];
 for (const file of files) {
     cpSync(join(src, file), join(dest, file));
 }

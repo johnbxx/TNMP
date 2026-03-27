@@ -1459,6 +1459,7 @@ select.editor-header-input option {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+    color: var(--text-primary, #e0e0e0);
 }
 .engine-choice-label small {
     color: var(--text-secondary, #999);
