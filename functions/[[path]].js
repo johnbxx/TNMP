@@ -16,7 +16,7 @@ const SECURITY_HEADERS = {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.tnmpairings.com https://lichess.org https://data.stockfishchess.org https://static.cloudflareinsights.com; frame-ancestors 'none';",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.tnmpairings.com https://lichess.org https://cloudflareinsights.com https://static.cloudflareinsights.com; frame-ancestors 'none';",
 };
 
 function addSecurityHeaders(response) {

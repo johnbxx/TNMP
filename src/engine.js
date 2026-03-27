@@ -122,7 +122,7 @@ async function _loadNnue(variant) {
     const index = variant === 'lite' ? 1 : 0;
     const name = _sf.getRecommendedNnue(index);
     if (!name) return;
-    const url = `https://data.stockfishchess.org/nn/${name}`;
+    const url = `https://api.tnmpairings.com/nnue/${name}`;
 
     // Try Cache API first (persists across sessions)
     const cache = await caches.open(NNUE_CACHE);

@@ -73,6 +73,18 @@ export default {
                 }
             }
 
+            // NNUE proxy — fetch from stockfishchess.org, add CORS headers, cache at edge
+            if (path.startsWith('/nnue/') && request.method === 'GET') {
+                const name = path.slice(6);
+                if (!/^nn-[a-f0-9]+\.nnue$/.test(name)) return corsResponse({ error: 'Invalid NNUE filename' }, 400, env, request);
+                const upstream = await fetch(`https://data.stockfishchess.org/nn/${name}`);
+                if (!upstream.ok) return corsResponse({ error: 'NNUE not found' }, upstream.status, env, request);
+                const headers = new Headers(upstream.headers);
+                headers.set('Access-Control-Allow-Origin', '*');
+                headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+                return new Response(upstream.body, { status: 200, headers });
+            }
+
             return corsResponse({ error: 'Not found' }, 404, env, request);
         } catch (err) {
             console.error('Request error:', err);
