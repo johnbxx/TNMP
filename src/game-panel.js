@@ -229,11 +229,11 @@ export function initGamePanel(mount) {
                     <div class="engine-choices">
                         <label class="engine-choice">
                             <input type="radio" name="engine-variant" value="lite" checked>
-                            <span class="engine-choice-label">Lite Engine<small>~4 MB download, good for casual analysis</small></span>
+                            <span class="engine-choice-label">Lite Engine<small>~15 MB download, good for casual analysis</small></span>
                         </label>
                         <label class="engine-choice">
                             <input type="radio" name="engine-variant" value="full">
-                            <span class="engine-choice-label">Full Engine<small>~100 MB download, maximum strength</small></span>
+                            <span class="engine-choice-label">Full Engine<small>~108 MB download, maximum strength</small></span>
                         </label>
                     </div>
                     <div class="editor-import-actions">
@@ -249,8 +249,8 @@ export function initGamePanel(mount) {
                         <label class="engine-setting">
                             <span class="engine-setting-name">Engine</span>
                             <select id="engine-setting-variant" class="engine-setting-select">
-                                <option value="lite">Lite (~7 MB)</option>
-                                <option value="full">Full (~100 MB)</option>
+                                <option value="lite">Lite (~15 MB)</option>
+                                <option value="full">Full (~108 MB)</option>
                             </select>
                         </label>
                         <label class="engine-setting">
@@ -532,11 +532,22 @@ export function confirmEngineChoice(variant) {
 
 function startEngine(variant) {
     document.getElementById('viewer-engine')?.classList.add('active');
+
+    // Show loading state immediately
+    const panel = document.getElementById('engine-panel');
+    const pvContainer = document.getElementById('engine-pv-lines');
+    if (panel) panel.classList.remove('hidden');
+    if (pvContainer) pvContainer.innerHTML = '<div class="engine-pv-loading">Loading Stockfish\u2026</div>';
+    const badge = document.getElementById('engine-variant-badge');
+    if (badge) badge.textContent = variant === 'full' ? 'Full' : 'Lite';
+    positionEnginePanel();
+
     engine.initEngine(variant, { hash: _engineHash, threads: _engineThreads }).then(() => {
         activateEngine();
     }).catch((err) => {
         console.error('Engine failed to load:', err);
         document.getElementById('viewer-engine')?.classList.remove('active');
+        if (panel) panel.classList.add('hidden');
         showToast('Engine failed to load', 'error');
     });
 }

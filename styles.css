@@ -1611,6 +1611,7 @@ select.editor-header-input option {
     color: var(--text-primary);
 }
 .engine-pv-empty { min-height: 1.6em; }
+.engine-pv-loading { color: var(--text-subtle); font-size: 0.8rem; padding: 0.5rem 0; }
 
 /* Engine pause/play button */
 .engine-pause-btn {
