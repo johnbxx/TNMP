@@ -256,8 +256,8 @@ export function initGamePanel(mount) {
                         <label class="engine-setting">
                             <span class="engine-setting-name">Depth</span>
                             <div class="engine-setting-depth-row">
-                                <input id="engine-setting-depth" type="range" min="1" max="40" value="20" class="engine-setting-range">
-                                <span id="engine-setting-depth-val" class="engine-setting-val">20</span>
+                                <input id="engine-setting-depth" type="range" min="1" max="40" value="30" class="engine-setting-range">
+                                <span id="engine-setting-depth-val" class="engine-setting-val">30</span>
                                 <label class="engine-setting-inf-label"><input id="engine-setting-infinite" type="checkbox"> <span>&infin;</span></label>
                             </div>
                         </label>
@@ -501,9 +501,9 @@ function onPositionChange(fen, from, to, annotations) {
 
 let _engineNumLines = parseInt(localStorage.getItem('engine-lines')) || 3;
 let _pvInfos = [];  // latest info per PV index
-let _engineDepth = parseInt(localStorage.getItem('engine-depth')) || 20;
+let _engineDepth = parseInt(localStorage.getItem('engine-depth')) || 30;
 let _engineInfinite = localStorage.getItem('engine-infinite') === 'true';
-let _engineHash = parseInt(localStorage.getItem('engine-hash')) || 16;
+let _engineHash = parseInt(localStorage.getItem('engine-hash')) || 256;
 let _engineThreads = parseInt(localStorage.getItem('engine-threads')) || 0; // 0 = auto
 
 export function toggleEngine() {

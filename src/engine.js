@@ -22,7 +22,7 @@ let _onLine = null;          // current line handler
 let _onChange = null;
 
 // Current engine options (applied between uciok and isready)
-let _options = { hash: 16, threads: 0 }; // threads 0 = auto
+let _options = { hash: 256, threads: 0 }; // threads 0 = auto
 
 const EVAL_CACHE = new Map();
 const CACHE_MAX = 500;
@@ -151,7 +151,7 @@ function _send(cmd) {
 function _sendInitOptions() {
     const threads = _resolveThreads();
     if (threads > 1) _send(`setoption name Threads value ${threads}`);
-    if (_options.hash !== 16) _send(`setoption name Hash value ${_options.hash}`);
+    _send(`setoption name Hash value ${_options.hash}`);
     _send('setoption name UCI_ShowWDL value true');
 }
 
