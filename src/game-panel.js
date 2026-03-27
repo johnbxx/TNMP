@@ -844,7 +844,7 @@ export function applyEngineSettings() {
 
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
 
-async function openPanel() {
+async function openPanel(browserQuery) {
     wireViewerHeader();
 
     const viewerModal = document.getElementById('viewer-modal');
@@ -856,7 +856,7 @@ async function openPanel() {
     if (panelEl && panelEl.classList.contains('hidden')) {
         panelEl.classList.remove('hidden');
         panelEl.closest('.modal-content-viewer')?.classList.add('has-browser');
-        await games.openBrowser();
+        await games.openBrowser(browserQuery);
         hadAsyncGap = true;
     }
 
@@ -1200,13 +1200,13 @@ function openGameAtIndex(gameList, idx) {
     highlightActiveGame(gameList[idx]);
 }
 
-export function openGameWithPlayerNav(playerName, gameId) {
-    games.selectPlayer(playerName).then(() => {
-        const gameList = _gamesState?.gameIdList || [];
-        const idx = gameList.indexOf(gameId);
-        if (idx === -1) return;
-        openGameAtIndex(gameList, idx);
-    });
+export async function openGameWithPlayerNav(playerName, gameId) {
+    await openPanel({ player: playerName });
+    const searchInput = document.getElementById('browser-search-input');
+    const clearBtn = document.getElementById('browser-search-clear');
+    if (searchInput) searchInput.value = playerName;
+    if (clearBtn) clearBtn.classList.remove('hidden');
+    openGameFromBrowser(gameId);
 }
 
 export async function openImportedGames(importedGames) {

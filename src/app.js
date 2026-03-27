@@ -285,8 +285,7 @@ const ACTIONS = {
         const btn = e.target.closest('[data-action="view-tracker-game"]');
         const gameId = btn?.dataset.gameId;
         if (!gameId) return;
-        // Always use openGameWithPlayerNav — it fetches fresh data via selectPlayer,
-        // so it works even if the games.js cache was cleared by closing the browser.
+        // Open browser with player filter so nav and visible list match.
         if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
         else {
             const game = getCachedGame(gameId);
