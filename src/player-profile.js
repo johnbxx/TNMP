@@ -121,7 +121,7 @@ function renderOverview(stats) {
     // Sort tournaments by appearance order in games (most recent first)
     const slugOrder = [];
     const seen = new Set();
-    for (const g of _profileData?.games) {
+    for (const g of _profileData?.games || []) {
         if (!seen.has(g.tournamentSlug)) { seen.add(g.tournamentSlug); slugOrder.push(g.tournamentSlug); }
     }
     const entries = [...stats.tournaments.entries()].sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
