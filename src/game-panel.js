@@ -357,7 +357,6 @@ export function initGamePanel(mount) {
     // Wire browser listeners once (scaffold is now permanent)
     wireBrowserListeners(document.getElementById('viewer-browser-panel'));
 
-    // Reset browser state after close animation finishes
     onModalClose('viewer-modal', () => {
         games.closeBrowser();
         const panelEl = document.getElementById('viewer-browser-panel');
@@ -365,8 +364,6 @@ export function initGamePanel(mount) {
             panelEl.classList.add('hidden');
             panelEl.closest('.modal-content-viewer')?.classList.remove('has-browser');
         }
-        const searchInput = document.getElementById('browser-search-input');
-        if (searchInput) searchInput.value = '';
     });
 }
 
@@ -844,30 +841,21 @@ export function applyEngineSettings() {
 
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
 
-async function openPanel(browserQuery) {
+export function openPanel() {
     wireViewerHeader();
-
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
     if (!alreadyOpen) openModal('viewer-modal');
-
     const panelEl = document.getElementById('viewer-browser-panel');
-    let hadAsyncGap = false;
     if (panelEl && panelEl.classList.contains('hidden')) {
         panelEl.classList.remove('hidden');
         panelEl.closest('.modal-content-viewer')?.classList.add('has-browser');
-        await games.openBrowser(browserQuery);
-        hadAsyncGap = true;
     }
-
+    ensureBoard();
     updateLayout();
-
-    if (!hadAsyncGap && !alreadyOpen) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-    }
 }
 
-export async function openGamePanel(opts = {}) {
+export function openGamePanel(opts = {}) {
     const game = opts.game;
     _varToggled.clear();
     dismissBranchPopover();
@@ -891,21 +879,17 @@ export async function openGamePanel(opts = {}) {
     meta.onPrev = _panel.onPrev;
     meta.onNext = _panel.onNext;
 
-    await openPanel();
+    openPanel();
 
-    // No game specified — explorer on desktop, browser list on mobile
+    // No game specified — explorer mode (default)
     if (!game && !opts.pgn) {
-        if (isCombinedWidth()) {
-            loadExplorer();
-        } else {
-            showBrowser();
-        }
+        loadExplorer();
         return;
     }
 
     let playerColor = opts.orientation;
-    if (!playerColor && game?.blackNorm && CONFIG.playerName) {
-        playerColor = game.blackNorm === games.normalizeKey(CONFIG.playerName) ? 'Black' : 'White';
+    if (!playerColor && game?.blackNorm && CONFIG.playerNorm) {
+        playerColor = game.blackNorm === CONFIG.playerNorm ? 'Black' : 'White';
     }
     if (!playerColor) playerColor = 'White';
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
@@ -960,7 +944,6 @@ function loadGame(pgnText, orientation = 'white') {
     _pendingSubmission = null;
     showViewer();
     updateLayout();
-    ensureBoard();
     setToolbarButtons();
     document.getElementById('game-header')?.classList.remove('hidden');
     document.getElementById('explorer-header')?.classList.add('hidden');
@@ -984,17 +967,17 @@ function loadExplorer({ restoreMoves } = {}) {
     document.getElementById('explorer-header')?.classList.remove('hidden');
     document.getElementById('editor-comment-input')?.classList.add('hidden');
 
-    ensureBoard();
     board.setOrientation(_gamesState?.color === 'black' ? 'black' : 'white');
     board.highlightSquares(null, null);
     if (_gamesState?.explorerActive) {
-        // Explorer already running — just re-render
         renderExplorerHeader(_gamesState);
         renderExplorerMoveList();
         board.setPosition(_gamesState.explorerFen, false);
         board.resize();
+    } else if (restoreMoves?.length) {
+        games.setExplorerPosition(restoreMoves);
     } else {
-        games.launchExplorer({ restoreMoves });
+        games.launchExplorer();
     }
 }
 
@@ -1200,22 +1183,10 @@ function openGameAtIndex(gameList, idx) {
     highlightActiveGame(gameList[idx]);
 }
 
-export async function openGameWithPlayerNav(playerName, gameId) {
-    await openPanel({ player: playerName });
-    const searchInput = document.getElementById('browser-search-input');
-    const clearBtn = document.getElementById('browser-search-clear');
-    if (searchInput) searchInput.value = playerName;
-    if (clearBtn) clearBtn.classList.remove('hidden');
-    openGameFromBrowser(gameId);
-}
-
-export async function openImportedGames(importedGames) {
+export function openImportedGames(importedGames) {
     if (!importedGames || importedGames.length === 0) return;
-    // Close stale explorer before opening browser with new data,
-    // so no intermediate renders flash old tree + new games.
     if (_gamesState?.explorerActive) games.closeExplorer();
-    await openPanel();
-    await games.openBrowser();
+    openPanel();
     if (isCombinedWidth()) {
         games.launchExplorer();
     } else {
@@ -1755,6 +1726,19 @@ function renderBrowserPanel(state) {
     const panelEl = document.getElementById('viewer-browser-panel');
     if (panelEl.classList.contains('hidden')) return;
 
+    // Sync search bar to player mode state
+    const searchInput = document.getElementById('browser-search-input');
+    const clearBtn = document.getElementById('browser-search-clear');
+    if (searchInput) {
+        if (state.isPlayerMode) {
+            searchInput.value = state.player || '';
+            clearBtn?.classList.remove('hidden');
+        } else if (!searchInput.matches(':focus')) {
+            searchInput.value = '';
+            clearBtn?.classList.add('hidden');
+        }
+    }
+
     renderBrowserTitle(panelEl, state);
     renderBrowserChips(panelEl, state);
     renderBrowserFilters(panelEl, state);
@@ -1819,15 +1803,12 @@ function renderBrowserChips(panelEl, state) {
     const isLocal = state.isLocal;
 
     let sourceHtml = '';
-    if (sources.length > 1) {
+    if (sources.length > 0) {
         const options = sources.map(({ value, label }) =>
             `<option value="${value}"${state.tournament === value ? ' selected' : ''}>${label}</option>`
         ).join('');
         const allLabel = isLocal ? 'All Events' : 'All Tournaments';
         sourceHtml = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">${allLabel}</option>${options}</select>`;
-    } else if (sources.length === 1) {
-        const { value, label } = sources[0];
-        sourceHtml = `<button type="button" class="browser-section-btn${state.tournament ? ' browser-section-active' : ''}" data-chip="tournament" data-value="${value}">${label}</button>`;
     }
 
     container.innerHTML = `
@@ -2064,14 +2045,14 @@ function wireBrowserListeners(panelEl) {
         if (matches.length === 0) {
             autocomplete.innerHTML = '<div class="browser-ac-empty">No players found</div>';
         } else {
-            autocomplete.innerHTML = matches.map(name =>
-                `<button type="button" class="browser-ac-item" role="option" data-player="${name}">${highlightMatch(name, query)}</button>`
+            autocomplete.innerHTML = matches.map(p =>
+                `<button type="button" class="browser-ac-item" role="option" data-player="${p.name}" data-norm="${p.norm}">${highlightMatch(p.name, query)}</button>`
             ).join('');
-            const exactMatch = matches.find(n => n.toLowerCase() === query);
+            const exactMatch = matches.find(p => p.name.toLowerCase() === query);
             if (!_gamesState?.isLocal && (matches.length === 1 || exactMatch)) {
-                const profileName = exactMatch || matches[0];
+                const profile = exactMatch || matches[0];
                 autocomplete.insertAdjacentHTML('afterbegin',
-                    `<button type="button" class="browser-ac-item browser-ac-profile" data-profile="${profileName}">View <strong>${profileName}</strong> profile</button>`
+                    `<button type="button" class="browser-ac-item browser-ac-profile" data-profile="${profile.name}">View <strong>${profile.name}</strong> profile</button>`
                 );
             }
         }
@@ -2090,7 +2071,7 @@ function wireBrowserListeners(panelEl) {
         }
         const item = e.target.closest('[data-player]');
         if (!item) return;
-        doSelectPlayer(item.dataset.player, searchInput, autocomplete, clearBtn);
+        doSelectPlayer(item.dataset.player, searchInput, autocomplete, clearBtn, item.dataset.norm);
     }, { signal });
 
     searchInput?.addEventListener('keydown', (e) => {
@@ -2098,7 +2079,7 @@ function wireBrowserListeners(panelEl) {
             e.preventDefault();
             const focused = autocomplete.querySelector('.browser-ac-focused');
             const name = focused?.dataset.player || searchInput.value.trim();
-            if (name) doSelectPlayer(name, searchInput, autocomplete, clearBtn);
+            if (name) doSelectPlayer(name, searchInput, autocomplete, clearBtn, focused?.dataset.norm);
             return;
         }
         if (e.key === 'Escape') {
@@ -2141,10 +2122,7 @@ function wireBrowserListeners(panelEl) {
 
         const chip = e.target.closest('[data-chip]');
         if (chip) {
-            if (chip.dataset.chip === 'tournament') {
-                loadExplorer();
-                games.toggleTournamentFilter(chip.dataset.value);
-            } else if (chip.dataset.chip === 'color') {
+            if (chip.dataset.chip === 'color') {
                 const toggling = chip.dataset.value;
                 const wasActive = _gamesState?.color === toggling;
                 games.toggleColorFilter(toggling);
@@ -2192,13 +2170,13 @@ function wireBrowserListeners(panelEl) {
     }, { signal });
 }
 
-function doSelectPlayer(name, searchInput, autocomplete, clearBtn) {
+function doSelectPlayer(name, searchInput, autocomplete, clearBtn, norm) {
     searchInput.value = name;
     searchInput.blur();
     autocomplete.classList.add('hidden');
     searchInput.setAttribute('aria-expanded', 'false');
     clearBtn.classList.remove('hidden');
-    games.selectPlayer(name);
+    games.selectPlayer(name, { norm });
 }
 
 // ─── Re-exports for app.js action dispatch ─────────────────────────

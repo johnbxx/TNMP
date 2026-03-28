@@ -7,7 +7,7 @@ import { openStyle, initStyle } from './style.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
-    openGamePanel as openGameViewer, openGameWithPlayerNav, closeGamePanel, handlePanelKeydown,
+    openGamePanel as openGameViewer, openGameFromBrowser, closeGamePanel, handlePanelKeydown,
     explorerBackToBrowser,
     resolveDirtyDialog,
     explorerGoToStart, explorerGoBack, explorerGoForward,
@@ -19,7 +19,7 @@ import {
     launchExplorer, initGamePanel,
 } from './game-panel.js';
 import { showToast } from './toast.js';
-import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, normalizeKey } from './games.js';
+import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, selectPlayer } from './games.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
@@ -213,10 +213,13 @@ async function checkPairings() {
     let trackerRounds = {};
     if (CONFIG.playerName && serverState.state !== 'off_season' && serverState.tournamentSlug) {
         try {
-            const playerNorm = normalizeKey(CONFIG.playerName);
-            const qUrl = `${WORKER_URL}/query?player=${encodeURIComponent(CONFIG.playerName)}&tournament=${encodeURIComponent(serverState.tournamentSlug)}`;
+            const playerParam = CONFIG.playerNorm
+                ? `player_norm=${encodeURIComponent(CONFIG.playerNorm)}`
+                : `player=${encodeURIComponent(CONFIG.playerName)}`;
+            const qUrl = `${WORKER_URL}/query?${playerParam}&tournament=${encodeURIComponent(serverState.tournamentSlug)}`;
             const qData = await (await fetch(qUrl)).json();
-            trackerRounds = buildTrackerRounds(qData.games || [], qData.byes || [], playerNorm);
+            if (qData.playerNorm) CONFIG.playerNorm = qData.playerNorm;
+            trackerRounds = buildTrackerRounds(qData.games || [], qData.byes || [], qData.playerNorm);
             localStorage.setItem('lastTrackerRounds', JSON.stringify(trackerRounds));
         } catch { /* network failure */ }
     }
@@ -281,13 +284,15 @@ const ACTIONS = {
         const btn = e.target.closest('[data-action="open-profile"]');
         if (btn?.dataset.name) openPlayerProfile(btn.dataset.name);
     },
-    'view-tracker-game': (e) => {
+    'view-tracker-game': async (e) => {
         const btn = e.target.closest('[data-action="view-tracker-game"]');
         const gameId = btn?.dataset.gameId;
         if (!gameId) return;
-        // Open browser with player filter so nav and visible list match.
-        if (CONFIG.playerName) openGameWithPlayerNav(CONFIG.playerName, gameId);
-        else {
+        if (CONFIG.playerName) {
+            await selectPlayer(CONFIG.playerName, { norm: CONFIG.playerNorm || undefined });
+            openGameViewer();
+            openGameFromBrowser(gameId);
+        } else {
             const game = getCachedGame(gameId);
             if (game) openGameViewer({ game });
         }
@@ -549,7 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchGames({ gameId, include: 'pgn' }).then(() => {
             const game = getCachedGame(gameId);
             if (game) {
-                const pNorm = CONFIG.playerName ? normalizeKey(CONFIG.playerName) : null;
+                const pNorm = CONFIG.playerNorm || null;
                 const orientation = pNorm && game.blackNorm === pNorm ? 'Black' : 'White';
                 openGameViewer({ game, orientation });
             }

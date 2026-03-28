@@ -117,8 +117,10 @@ function parseEcoFilter(eco) {
 export async function handleQuery(request, env) {
     const url = new URL(request.url);
     const player = url.searchParams.get('player');
+    const playerNormParam = url.searchParams.get('player_norm');
     const color = url.searchParams.get('color')?.toLowerCase();
     const opponent = url.searchParams.get('opponent');
+    const opponentNormParam = url.searchParams.get('opponent_norm');
     const eco = url.searchParams.get('eco');
     const result = url.searchParams.get('result')?.toLowerCase();
     const minRating = url.searchParams.get('minRating');
@@ -153,16 +155,16 @@ export async function handleQuery(request, env) {
         tournamentSlug = resolved.slug;
     }
 
-    // Player filter (resolve aliases so old name variants still find games)
-    const norm = player ? await resolvePlayerNorm(normalizePlayerName(player), env) : null;
+    // Player filter: prefer norm param, fall back to name lookup
+    const norm = playerNormParam || (player ? await resolvePlayerNorm(normalizePlayerName(player), env) : null);
     if (norm) {
         if (color === 'white') { conditions.push('g.white_norm = ?'); params.push(norm); }
         else if (color === 'black') { conditions.push('g.black_norm = ?'); params.push(norm); }
         else { conditions.push('(g.white_norm = ? OR g.black_norm = ?)'); params.push(norm, norm); }
     }
 
-    if (opponent && player) {
-        const oppNorm = await resolvePlayerNorm(normalizePlayerName(opponent), env);
+    if (opponent || opponentNormParam) {
+        const oppNorm = opponentNormParam || await resolvePlayerNorm(normalizePlayerName(opponent), env);
         conditions.push('(g.white_norm = ? OR g.black_norm = ?)');
         params.push(oppNorm, oppNorm);
     }
@@ -217,15 +219,15 @@ export async function handleQuery(request, env) {
     const includePgn = includeSet.has('pgn');
     const includeSubmissions = includeSet.has('submissions');
 
+    const tournamentCols = ', t.name as tournament_name, t.total_rounds, t.sections as tournament_sections';
     let selectCols;
     if (includePgn) {
-        selectCols = 'g.*, t.name as tournament_name';
+        selectCols = 'g.*' + tournamentCols;
     } else {
         selectCols = `g.tournament_slug, g.round, g.board, g.white, g.black, g.white_norm, g.black_norm,
            g.white_elo, g.black_elo,
            g.result, g.eco, g.opening_name, g.section, g.date, g.game_id,
-           (g.pgn IS NOT NULL AND g.pgn != '') as has_pgn,
-           t.name as tournament_name`;
+           (g.pgn IS NOT NULL AND g.pgn != '') as has_pgn` + tournamentCols;
     }
 
     // LEFT JOIN submissions when requested
@@ -314,10 +316,17 @@ export async function handleQuery(request, env) {
         return game;
     });
 
+    // Extract tournament metadata from first row (same for all rows in a single-tournament query)
+    const firstRow = gamesResult.results[0];
     const response = { games, total: countResult.total, limit, offset };
+    if (firstRow?.total_rounds) response.totalRounds = firstRow.total_rounds;
+    if (firstRow?.tournament_sections) {
+        try { response.sections = JSON.parse(firstRow.tournament_sections); } catch { /* ignore */ }
+    }
     if (byeResult) {
         response.byes = byeResult.results.map(r => ({ round: r.round, type: r.bye_type }));
     }
+    if (norm) response.playerNorm = norm;
     if (playerRow?.uscf_id) response.uscfId = playerRow.uscf_id;
     if (playerRow?.rating) response.playerRating = playerRow.rating;
     return corsResponse(response, 200, env, request);
@@ -348,12 +357,13 @@ export async function handlePlayers(request, env) {
     // Try players table first, fall back to distinct names from games
     try {
         const result = await env.DB.prepare(
-            'SELECT name, uscf_id, rating FROM players ORDER BY name'
+            'SELECT name, name_norm, uscf_id, rating FROM players ORDER BY name'
         ).all();
         if (result.results.length > 0) {
             return corsResponse({
                 players: result.results.map(r => ({
                     name: formatPlayerName(r.name),
+                    norm: r.name_norm,
                     dbName: r.name,
                     uscfId: r.uscf_id || null,
                     rating: r.rating || null,

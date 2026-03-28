@@ -88,6 +88,7 @@ export function saveSettings(checkPairings) {
     const oldName = CONFIG.playerName;
 
     CONFIG.playerName = newName;
+    CONFIG.playerNorm = input.dataset.norm || '';
 
     const dark = document.getElementById('dark-mode-toggle').checked;
     localStorage.setItem('darkMode', dark ? '1' : '0');
@@ -127,12 +128,12 @@ function initNameAutocomplete(input) {
         if (matches.length === 0) {
             dropdown.innerHTML = '<div class="browser-ac-empty">No players found</div>';
         } else {
-            dropdown.innerHTML = matches.map(name => {
-                const idx = name.toLowerCase().indexOf(query.toLowerCase());
-                const before = name.slice(0, idx);
-                const match = name.slice(idx, idx + query.length);
-                const after = name.slice(idx + query.length);
-                return `<button type="button" class="browser-ac-item" role="option" data-player="${name}">${before}<strong>${match}</strong>${after}</button>`;
+            dropdown.innerHTML = matches.map(p => {
+                const idx = p.name.toLowerCase().indexOf(query.toLowerCase());
+                const before = p.name.slice(0, idx);
+                const match = p.name.slice(idx, idx + query.length);
+                const after = p.name.slice(idx + query.length);
+                return `<button type="button" class="browser-ac-item" role="option" data-player="${p.name}" data-norm="${p.norm}">${before}<strong>${match}</strong>${after}</button>`;
             }).join('');
         }
         dropdown.classList.remove('hidden');
@@ -143,6 +144,7 @@ function initNameAutocomplete(input) {
         const item = e.target.closest('[data-player]');
         if (!item) return;
         input.value = item.dataset.player;
+        input.dataset.norm = item.dataset.norm || '';
         dropdown.classList.add('hidden');
         input.setAttribute('aria-expanded', 'false');
     });

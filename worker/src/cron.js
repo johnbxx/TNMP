@@ -407,6 +407,27 @@ async function runCronLogic(env) {
     }
     t.shellRecords = performance.now() - t0;
 
+    // Update tournament metadata (total_rounds, sections)
+    try {
+        const maxRound = await env.DB.prepare(
+            'SELECT MAX(round) as max_round FROM games WHERE tournament_slug = ?'
+        ).bind(slug).first();
+        const sectionRows = await env.DB.prepare(
+            'SELECT DISTINCT section FROM games WHERE tournament_slug = ? AND section IS NOT NULL'
+        ).bind(slug).all();
+        const sortOrder = (s) => {
+            if (/extra/i.test(s)) return 9999;
+            const m = s.match(/(\d+)/);
+            return m ? -parseInt(m[1], 10) : 0;
+        };
+        const sections = sectionRows.results.map(r => r.section).sort((a, b) => sortOrder(a) - sortOrder(b));
+        await env.DB.prepare(
+            'UPDATE tournaments SET total_rounds = ?, sections = ? WHERE slug = ?'
+        ).bind(maxRound.max_round, sections.length > 0 ? JSON.stringify(sections) : null, slug).run();
+    } catch (err) {
+        console.error('Failed to update tournament metadata:', err.message);
+    }
+
     if (newAliases.length > 0) {
         try {
             const stmts = newAliases.map(a =>

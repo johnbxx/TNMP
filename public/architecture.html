@@ -944,11 +944,11 @@
         <span>fetchGames()</span>
         <span>prefetchGames()</span>
         <span>getCachedGame()</span>
-        <span>normalizeKey()</span>
         <span>selectPlayer()</span>
-        <span>openBrowser()</span>
+        <span>clearPlayerMode()</span>
         <span>switchDataSource()</span>
         <span>launchExplorer()</span>
+        <span>setExplorerPosition()</span>
         <span>explorerPlayMove()</span>
       </div>
     </div>
@@ -1040,7 +1040,7 @@
     <div class="module-card" style="border-left:3px solid var(--text-dim)">
       <h4>player-profile.js</h4>
       <div class="path">src/player-profile.js</div>
-      <p>Player profile modal. Fetches all-time stats from <code>/query?player=NAME&amp;tournament=all</code>. Win/loss/draw by tournament, opening repertoire by color, opponent history. Navigates to explorer/browser on row click.</p>
+      <p>Player profile modal. Fetches all-time stats from <code>/query?player=NAME&amp;tournament=all</code>. Win/loss/draw by tournament, opening repertoire by color, opponent history. Row clicks pass fetched data directly to <code>selectPlayer()</code> to avoid re-fetching.</p>
       <div class="exports">
         <span>openPlayerProfile()</span>
       </div>

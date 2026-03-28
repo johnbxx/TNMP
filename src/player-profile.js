@@ -1,12 +1,14 @@
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { normalizeKey, openBrowser, closeExplorer, explorerPlayMove } from './games.js';
-import { openGamePanel, setBoardOrientation } from './game-panel.js';
+import { selectPlayer, setExplorerPosition } from './games.js';
+// openViewer = openGamePanel (opens modal + board + explorer mode)
+import { openGamePanel as openViewer, setBoardOrientation } from './game-panel.js';
 import { findOpeningByName } from './eco.js';
 
 let currentPlayer = null;
+let currentPlayerNorm = null;
 let currentUscfId = null;
-let cachedGames = null;
+let _profileData = null;        // same shape as _playerData: { games, query }
 let cachedStats = null;
 
 // --- Data fetching ---
@@ -15,26 +17,32 @@ async function fetchAllPlayerGames(playerName) {
     const allGames = [];
     let uscfId = null;
     let playerRating = null;
+    let playerNorm = null;
     let offset = 0;
     const limit = 500;
     while (true) {
-        const url = `${WORKER_URL}/query?player=${encodeURIComponent(playerName)}&tournament=all&limit=${limit}&offset=${offset}`;
+        const url = `${WORKER_URL}/query?player=${encodeURIComponent(playerName)}&tournament=all&include=pgn&limit=${limit}&offset=${offset}`;
         const resp = await fetch(url);
         if (!resp.ok) throw new Error('Server error');
         const data = await resp.json();
         allGames.push(...data.games);
         if (data.uscfId) uscfId = data.uscfId;
         if (data.playerRating) playerRating = data.playerRating;
+        if (data.playerNorm) playerNorm = data.playerNorm;
         if (allGames.length >= data.total || data.games.length < limit) break;
         offset += limit;
     }
-    return { games: allGames, uscfId, playerRating };
+    return {
+        data: { games: allGames },
+        uscfId,
+        playerRating,
+        playerNorm,
+    };
 }
 
 // --- Stats computation (single pass) ---
 
-function computeStats(games, playerName) {
-    const norm = normalizeKey(playerName);
+function computeStats(games, norm) {
     const totals = { all: wld(), white: wld(), black: wld() };
     const tournaments = new Map();
     const ecos = new Map();
@@ -66,8 +74,8 @@ function computeStats(games, playerName) {
         // Opponent (keyed by norm to merge name variations)
         const oppName = side === 'white' ? game.black : game.white;
         const oppNorm = side === 'white' ? game.blackNorm : game.whiteNorm;
-        const oppKey = oppNorm || normalizeKey(oppName);
-        if (!opponents.has(oppKey)) opponents.set(oppKey, { name: oppName, ...wld() });
+        const oppKey = oppNorm;
+        if (!opponents.has(oppKey)) opponents.set(oppKey, { name: oppName, norm: oppNorm, ...wld() });
         tally(opponents.get(oppKey), outcome);
     }
 
@@ -113,7 +121,7 @@ function renderOverview(stats) {
     // Sort tournaments by appearance order in games (most recent first)
     const slugOrder = [];
     const seen = new Set();
-    for (const g of cachedGames) {
+    for (const g of _profileData?.games) {
         if (!seen.has(g.tournamentSlug)) { seen.add(g.tournamentSlug); slugOrder.push(g.tournamentSlug); }
     }
     const entries = [...stats.tournaments.entries()].sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
@@ -172,7 +180,7 @@ function renderOpponentList(opponents, filter = '') {
         .sort((a, b) => total(b) - total(a));
     if (!sorted.length) return `<p class="profile-empty-small">${f ? 'No matching opponents.' : 'No opponents found.'}</p>`;
     return sorted.map(o =>
-        profileRow(o.name, o, JSON.stringify({ player: currentPlayer, opponent: o.name }), { compact: true, profileName: o.name })
+        profileRow(o.name, o, JSON.stringify({ player: currentPlayer, opponent: o.name, opponentNorm: o.norm }), { compact: true, profileName: o.name })
     ).join('');
 }
 
@@ -212,8 +220,9 @@ function renderActiveTab() {
 
 export async function openPlayerProfile(playerName) {
     currentPlayer = playerName;
+    currentPlayerNorm = null;
     currentUscfId = null;
-    cachedGames = null;
+    _profileData = null;
     cachedStats = null;
 
     openModal('profile-modal');
@@ -230,7 +239,8 @@ export async function openPlayerProfile(playerName) {
 
     try {
         const result = await fetchAllPlayerGames(playerName);
-        cachedGames = result.games;
+        _profileData = result.data;
+        currentPlayerNorm = result.playerNorm;
         if (!currentUscfId) currentUscfId = result.uscfId;
         const rating = result.playerRating;
 
@@ -240,12 +250,13 @@ export async function openPlayerProfile(playerName) {
             ? `${nameText} <a href="https://ratings.uschess.org/player/${currentUscfId}" target="_blank" rel="noopener" class="profile-uscf-link">USCF</a>`
             : nameText;
 
-        if (!cachedGames.length) {
+        const games = _profileData.games;
+        if (!games.length) {
             body.querySelector('.profile-loading').classList.add('hidden');
             body.querySelector('.profile-empty').classList.remove('hidden');
             return;
         }
-        cachedStats = computeStats(cachedGames, playerName);
+        cachedStats = computeStats(games, currentPlayerNorm);
         body.querySelector('.profile-loading').classList.add('hidden');
         tabs.classList.remove('hidden');
         tabs.dataset.active = 'overview';
@@ -264,8 +275,9 @@ export async function openPlayerProfile(playerName) {
 export function closePlayerProfile() {
     closeModal('profile-modal');
     currentPlayer = null;
+    currentPlayerNorm = null;
     currentUscfId = null;
-    cachedGames = null;
+    _profileData = null;
     cachedStats = null;
 }
 
@@ -301,31 +313,41 @@ export function initPlayerProfile(mount) {
         renderActiveTab();
     });
 
-    async function browseTo(query) {
-        closePlayerProfile();
-        closeExplorer();
-        await openGamePanel();
-        await openBrowser(query);
-
-        // Orient board to match color filter
-        if (query.color === 'black') setBoardOrientation('black');
-
-        // Advance explorer to the opening's root position
-        if (query.ecoLabel) {
-            const opening = findOpeningByName(query.ecoLabel);
-            if (opening?.pgn) {
-                const moves = opening.pgn.replace(/\d+\.\s*/g, '').trim().split(/\s+/);
-                for (const san of moves) explorerPlayMove(san);
-            }
-        }
-    }
-
     // Click handling — all profile rows and opponent links
-    document.getElementById('profile-body').addEventListener('click', async (e) => {
+    document.getElementById('profile-body').addEventListener('click', (e) => {
         const profileLink = e.target.closest('[data-action-profile]');
         if (profileLink) return openPlayerProfile(profileLink.dataset.actionProfile);
 
         const row = e.target.closest('[data-action-query]');
-        if (row) return browseTo(JSON.parse(row.dataset.actionQuery));
+        if (row) {
+            const query = JSON.parse(row.dataset.actionQuery);
+            const playerName = currentPlayer;
+            const playerNorm = currentPlayerNorm;
+            const profileData = _profileData;
+            closePlayerProfile();
+
+            // Set all data state BEFORE opening panel
+            selectPlayer(playerName, {
+                data: profileData,
+                norm: playerNorm,
+                tournament: query.tournament,
+                color: query.color,
+                opponent: query.opponent,
+                opponentNorm: query.opponentNorm,
+            });
+
+            // Now open panel — it reads the correct state
+            openViewer();
+
+            if (query.color === 'black') setBoardOrientation('black');
+
+            if (query.ecoLabel) {
+                const opening = findOpeningByName(query.ecoLabel);
+                if (opening?.pgn) {
+                    const moves = opening.pgn.replace(/\d+\.\s*/g, '').trim().split(/\s+/);
+                    setExplorerPosition(moves);
+                }
+            }
+        }
     });
 }

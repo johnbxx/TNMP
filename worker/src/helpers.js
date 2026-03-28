@@ -52,7 +52,11 @@ export function formatPlayerName(name) {
     return name;
 }
 
-// Fix truncated rating ranges ("1600-199" → "1600-1999") and normalize "u" → "U"
+// Normalize section names to canonical forms:
+// - Fix truncated rating ranges ("1600-199" → "1600-1999")
+// - "u" → "U" prefix
+// - U2000 → 1600-1999 (same rating band, name changed over time)
+// - Extra Game/Extra Games/Extra Rated Games → Extra Rated
 export function normalizeSection(section) {
     if (!section) return section;
     let s = section.trim().replace(/^u(?=\d)/i, 'U');
@@ -61,6 +65,8 @@ export function normalizeSection(section) {
         const candidate = loThousands * 1000 + 999;
         return candidate > parseInt(lo) ? `${lo}-${candidate}` : `${lo}-${hi}`;
     });
+    if (s === 'U2000') s = '1600-1999';
+    if (/^extra/i.test(s)) s = 'Extra Rated';
     return s;
 }
 

@@ -16,10 +16,20 @@ export const CONFIG = {
                 localStorage.setItem('playerName', value.trim());
             } else {
                 localStorage.removeItem('playerName');
+                localStorage.removeItem('playerNorm');
             }
         } catch (e) {
             console.warn('Failed to save player name (storage full?):', e.message);
         }
+    },
+    get playerNorm() {
+        return localStorage.getItem('playerNorm') || '';
+    },
+    set playerNorm(value) {
+        try {
+            if (value) localStorage.setItem('playerNorm', value);
+            else localStorage.removeItem('playerNorm');
+        } catch { /* quota */ }
     }
 };
 
