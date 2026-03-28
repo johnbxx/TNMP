@@ -1,34 +1,17 @@
 // 0x88 replay engine with Zobrist hashing for explorer tree building.
-// Replays trusted SAN moves without legality checks — 65x faster than chess.js.
+// Replays trusted SAN moves without legality checks.
+// ReplayEngine: board-centric, zero allocation per move.
 // Exports ReplayEngine (for tree building) and hashFen (for position lookups).
-
-// ─── 0x88 Board ─────────────────────────────────────────────────────
-
-const Ox88 = {
-    a8:   0, b8:   1, c8:   2, d8:   3, e8:   4, f8:   5, g8:   6, h8:   7,
-    a7:  16, b7:  17, c7:  18, d7:  19, e7:  20, f7:  21, g7:  22, h7:  23,
-    a6:  32, b6:  33, c6:  34, d6:  35, e6:  36, f6:  37, g6:  38, h6:  39,
-    a5:  48, b5:  49, c5:  50, d5:  51, e5:  52, f5:  53, g5:  54, h5:  55,
-    a4:  64, b4:  65, c4:  66, d4:  67, e4:  68, f4:  69, g4:  70, h4:  71,
-    a3:  80, b3:  81, c3:  82, d3:  83, e3:  84, f3:  85, g3:  86, h3:  87,
-    a2:  96, b2:  97, c2:  98, d2:  99, e2: 100, f2: 101, g2: 102, h2: 103,
-    a1: 112, b1: 113, c1: 114, d1: 115, e1: 116, f1: 117, g1: 118, h1: 119,
-};
-
-function rank(sq) { return sq >> 4; }
-function file(sq) { return sq & 0xf; }
-function parseSquare(s) { return Ox88[s]; }
 
 // ─── Piece Encoding ─────────────────────────────────────────────────
 // White: 1-6, Black: 9-14. p=1 n=2 b=3 r=4 q=5 k=6. Empty=0.
 
 const W = 0, B = 8;
 const P = 1, N = 2, _B = 3, R = 4, Q = 5, K = 6;
-const CHAR_TO_PIECE = { p: P, n: N, b: _B, r: R, q: Q, k: K };
 const pieceColor = (p) => p >> 3;
 const pieceType = (p) => p & 7;
 
-// ─── Reachability ───────────────────────────────────────────────────
+// ─── Piece Offsets ──────────────────────────────────────────────────
 
 const PIECE_OFFSETS = {
     [N]: [-18, -33, -31, -14, 18, 33, 31, 14],
@@ -37,28 +20,6 @@ const PIECE_OFFSETS = {
     [Q]: [-17, -16, -15, 1, 17, 16, 15, -1],
     [K]: [-17, -16, -15, 1, 17, 16, 15, -1],
 };
-
-const IS_SLIDING = { [_B]: true, [R]: true, [Q]: true };
-
-function canReach(board, type, from, to) {
-    const offsets = PIECE_OFFSETS[type];
-    if (!offsets) return false;
-    if (IS_SLIDING[type]) {
-        for (const offset of offsets) {
-            let sq = from + offset;
-            while (!(sq & 0x88)) {
-                if (sq === to) return true;
-                if (board[sq]) break;
-                sq += offset;
-            }
-        }
-    } else {
-        for (const offset of offsets) {
-            if (from + offset === to) return true;
-        }
-    }
-    return false;
-}
 
 // ─── Zobrist Keys ───────────────────────────────────────────────────
 
@@ -140,14 +101,29 @@ export function hashFen(fen) {
 export const START_HASH = hashFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -');
 
 // ─── ReplayEngine ───────────────────────────────────────────────────
+// Board-centric engine: no piece lists, no object allocation per move.
+// Finds pieces via reverse lookup from target square instead of
+// scanning a piece list — inspired by Lichess compression library's
+// approach of working directly with board state.
+
+// Char code → piece type (supports N/B/R/Q/K in both cases)
+const CC = new Uint8Array(128);
+CC[78] = N; CC[66] = _B; CC[82] = R; CC[81] = Q; CC[75] = K;
+CC[110] = N; CC[98] = _B; CC[114] = R; CC[113] = Q; CC[107] = K;
+
+// Compute 0x88 square from two chars at position i in string s
+function sqAt(s, i) {
+    return (56 - s.charCodeAt(i + 1)) * 16 + s.charCodeAt(i) - 97;
+}
 
 export class ReplayEngine {
     constructor() {
         this.board = new Uint8Array(128);
-        this.pieces = { w: [], b: [] };
-        this.kings = { w: -1, b: -1 };
-        this.turn = 'w';
-        this.castling = { w: 0, b: 0 };
+        this.wKing = 0;
+        this.bKing = 0;
+        this.us = W;        // 0 = white, 8 = black (matches color encoding)
+        this.castleW = 0;
+        this.castleB = 0;
         this.epSquare = -1;
         this.hash = 0n;
         this.reset();
@@ -155,176 +131,194 @@ export class ReplayEngine {
 
     reset() {
         this.board.fill(0);
-        this.pieces = { w: [], b: [] };
-        this.turn = 'w';
-        this.castling = { w: 3, b: 3 };
+        this.us = W;
+        this.castleW = 3;
+        this.castleB = 3;
         this.epSquare = -1;
         this.hash = 0n;
-
-        const backRank = [R, N, _B, Q, K, _B, N, R];
+        const back = [R, N, _B, Q, K, _B, N, R];
         for (let f = 0; f < 8; f++) {
-            this._put(W, backRank[f], Ox88.a1 + f);
-            this._put(W, P, Ox88.a2 + f);
-            this._put(B, backRank[f], Ox88.a8 + f);
-            this._put(B, P, Ox88.a7 + f);
+            const wBack = W | back[f], wPawn = W | P;
+            const bBack = B | back[f], bPawn = B | P;
+            this.board[112 + f] = wBack; this.hash ^= hashPiece(wBack, 112 + f);
+            this.board[96 + f]  = wPawn; this.hash ^= hashPiece(wPawn, 96 + f);
+            this.board[f]       = bBack; this.hash ^= hashPiece(bBack, f);
+            this.board[16 + f]  = bPawn; this.hash ^= hashPiece(bPawn, 16 + f);
         }
-
-        this.hash ^= CASTLING_KEYS[this.castling.w | (this.castling.b << 2)];
+        this.wKing = 116; // e1
+        this.bKing = 4;   // e8
+        this.hash ^= CASTLING_KEYS[3 | (3 << 2)];
     }
 
-    _put(color, type, sq) {
-        const encoded = color | type;
-        this.board[sq] = encoded;
-        const colorKey = color ? 'b' : 'w';
-        this.pieces[colorKey].push({ type, sq });
-        if (type === K) this.kings[colorKey] = sq;
-        this.hash ^= hashPiece(encoded, sq);
-    }
-
-    _remove(sq) {
-        const encoded = this.board[sq];
-        if (!encoded) return;
-        this.board[sq] = 0;
-        this.hash ^= hashPiece(encoded, sq);
-        const colorKey = pieceColor(encoded) ? 'b' : 'w';
-        const list = this.pieces[colorKey];
-        for (let i = 0; i < list.length; i++) {
-            if (list[i].sq === sq) {
-                list[i] = list[list.length - 1];
-                list.pop();
-                break;
-            }
-        }
-    }
-
-    _movePiece(from, to) {
-        const encoded = this.board[from];
-        this.hash ^= hashPiece(encoded, from);
-        this.hash ^= hashPiece(encoded, to);
-        this.board[to] = encoded;
-        this.board[from] = 0;
-        const colorKey = pieceColor(encoded) ? 'b' : 'w';
-        for (const entry of this.pieces[colorKey]) {
-            if (entry.sq === from) { entry.sq = to; break; }
-        }
-        if (pieceType(encoded) === K) this.kings[colorKey] = to;
-    }
+    // Getter/setter for compatibility with code that reads .turn as 'w'/'b'
+    get turn() { return this.us === W ? 'w' : 'b'; }
+    set turn(v) { this.us = v === 'w' ? W : B; }
 
     move(san) {
-        const us = this.turn;
-        const them = us === 'w' ? 'b' : 'w';
+        let len = san.length;
+        const lastC = san.charCodeAt(len - 1);
+        if (lastC === 43 || lastC === 35) len--; // strip + or #
 
-        const last = san[san.length - 1];
-        if (last === '+' || last === '#') san = san.slice(0, -1);
+        const c0 = san.charCodeAt(0);
 
-        if (san === 'O-O' || san === 'O-O-O') {
-            const isKingside = san === 'O-O';
-            const kFrom = this.kings[us];
-            const kTo = isKingside ? kFrom + 2 : kFrom - 2;
-            const rFrom = isKingside ? kFrom + 3 : kFrom - 4;
-            const rTo = isKingside ? kFrom + 1 : kFrom - 1;
+        // ── Castling ──────────────────────────────────────────────
+        if (c0 === 79) { // 'O'
+            const ks = len === 3; // O-O vs O-O-O
+            const kFrom = this.us === W ? this.wKing : this.bKing;
+            const kTo = ks ? kFrom + 2 : kFrom - 2;
+            const rFrom = ks ? kFrom + 3 : kFrom - 4;
+            const rTo = ks ? kFrom + 1 : kFrom - 1;
+            const kEnc = this.board[kFrom];
+            const rEnc = this.board[rFrom];
 
-            this.hash ^= CASTLING_KEYS[this.castling.w | (this.castling.b << 2)];
-            this._movePiece(kFrom, kTo);
-            this._movePiece(rFrom, rTo);
-            this.castling[us] = 0;
-            this.hash ^= CASTLING_KEYS[this.castling.w | (this.castling.b << 2)];
+            const oldCI = this.castleW | (this.castleB << 2);
+            this.hash ^= CASTLING_KEYS[oldCI];
+            // Move king
+            this.hash ^= hashPiece(kEnc, kFrom) ^ hashPiece(kEnc, kTo);
+            this.board[kTo] = kEnc; this.board[kFrom] = 0;
+            // Move rook
+            this.hash ^= hashPiece(rEnc, rFrom) ^ hashPiece(rEnc, rTo);
+            this.board[rTo] = rEnc; this.board[rFrom] = 0;
+
+            if (this.us === W) { this.wKing = kTo; this.castleW = 0; }
+            else { this.bKing = kTo; this.castleB = 0; }
+            this.hash ^= CASTLING_KEYS[this.castleW | (this.castleB << 2)];
 
             if (this.epSquare !== -1) {
-                this.hash ^= EP_KEYS[file(this.epSquare)];
+                this.hash ^= EP_KEYS[this.epSquare & 0xf];
                 this.epSquare = -1;
             }
             this.hash ^= SIDE_KEY;
-            this.turn = them;
+            this.us ^= 8;
             return;
         }
 
-        let pt, fromFile = -1, fromRank = -1, toSq, promotion = null;
+        // ── Parse SAN ─────────────────────────────────────────────
+        let pt, fromFile = -1, fromRank = -1, toSq, promotion = 0;
 
-        const eqIdx = san.indexOf('=');
-        if (eqIdx !== -1) {
-            promotion = CHAR_TO_PIECE[san[eqIdx + 1].toLowerCase()];
-            san = san.substring(0, eqIdx);
-        }
-
-        if (san[0] >= 'a' && san[0] <= 'h') {
+        if (c0 >= 97 && c0 <= 104) {
+            // Pawn move (starts with a-h)
             pt = P;
-            fromFile = san.charCodeAt(0) - 97;
-            if (san[1] === 'x') {
-                toSq = parseSquare(san.substring(2, 4));
-            } else if (san.length >= 2 && san[1] >= '1' && san[1] <= '8') {
-                toSq = parseSquare(san.substring(0, 2));
+            fromFile = c0 - 97;
+            const c1 = san.charCodeAt(1);
+            if (c1 === 120) { // 'x' capture
+                toSq = sqAt(san, 2);
+                if (len > 4 && san.charCodeAt(4) === 61) promotion = CC[san.charCodeAt(5)];
             } else {
-                return;
+                toSq = sqAt(san, 0);
+                if (len > 2 && san.charCodeAt(2) === 61) promotion = CC[san.charCodeAt(3)];
             }
         } else {
-            pt = CHAR_TO_PIECE[san[0].toLowerCase()];
-            const xIdx = san.indexOf('x');
-            const rest = xIdx !== -1 ? san.substring(0, xIdx) + san.substring(xIdx + 1) : san;
-            toSq = parseSquare(rest.substring(rest.length - 2));
-            const disambig = rest.substring(1, rest.length - 2);
-            for (const c of disambig) {
-                if (c >= 'a' && c <= 'h') fromFile = c.charCodeAt(0) - 97;
-                else if (c >= '1' && c <= '8') fromRank = '87654321'.indexOf(c);
+            // Piece move (N/B/R/Q/K)
+            pt = CC[c0];
+            if (!pt) return; // unknown token (e.g. -- null move)
+            toSq = sqAt(san, len - 2);
+            for (let i = 1; i < len - 2; i++) {
+                const ch = san.charCodeAt(i);
+                if (ch >= 97 && ch <= 104) fromFile = ch - 97;      // a-h
+                else if (ch >= 49 && ch <= 56) fromRank = 56 - ch;   // 1-8 → 0x88 rank
             }
         }
 
-        if (toSq === undefined) return;
-
+        // ── Find source square (reverse lookup from target) ───────
+        const ourPiece = this.us | pt;
         let fromSq = -1;
-        for (const entry of this.pieces[us]) {
-            if (entry.type !== pt) continue;
-            if (fromFile !== -1 && file(entry.sq) !== fromFile) continue;
-            if (fromRank !== -1 && rank(entry.sq) !== fromRank) continue;
-            if (pt === P) {
-                const dir = us === 'w' ? -16 : 16;
-                const isSinglePush = entry.sq + dir === toSq;
-                const startRank = us === 'w' ? 6 : 1;
-                const isDoublePush = rank(entry.sq) === startRank && entry.sq + dir * 2 === toSq && !this.board[entry.sq + dir];
-                const isCapture = (entry.sq + dir - 1 === toSq || entry.sq + dir + 1 === toSq);
-                if (!isSinglePush && !isDoublePush && !isCapture) continue;
-            } else if (!canReach(this.board, pt, entry.sq, toSq)) continue;
-            fromSq = entry.sq;
-            break;
+
+        if (pt === P) {
+            const dir = this.us === W ? -16 : 16;
+            if (fromFile !== (toSq & 0xf)) {
+                // Capture: pawn on fromFile, one rank behind target
+                const sq = ((toSq - dir) & 0xF0) | fromFile;
+                if (!(sq & 0x88) && this.board[sq] === ourPiece) fromSq = sq;
+            } else {
+                // Push: single, then double
+                const sq1 = toSq - dir;
+                if (this.board[sq1] === ourPiece) {
+                    fromSq = sq1;
+                } else if (!this.board[sq1]) {
+                    const sq2 = toSq - dir * 2;
+                    if (this.board[sq2] === ourPiece) fromSq = sq2;
+                }
+            }
+        } else if (pt === K) {
+            fromSq = this.us === W ? this.wKing : this.bKing;
+        } else if (pt === N) {
+            const offsets = PIECE_OFFSETS[N];
+            for (let i = 0; i < 8; i++) {
+                const sq = toSq - offsets[i];
+                if (sq & 0x88) continue;
+                if (this.board[sq] !== ourPiece) continue;
+                if (fromFile !== -1 && (sq & 0xf) !== fromFile) continue;
+                if (fromRank !== -1 && (sq >> 4) !== fromRank) continue;
+                fromSq = sq;
+                break;
+            }
+        } else {
+            // Sliding piece (B/R/Q): walk rays backward from target
+            const offsets = PIECE_OFFSETS[pt];
+            for (let d = 0; d < offsets.length; d++) {
+                const offset = offsets[d];
+                let sq = toSq - offset;
+                while (!(sq & 0x88)) {
+                    const p = this.board[sq];
+                    if (p) {
+                        if (p === ourPiece &&
+                            (fromFile === -1 || (sq & 0xf) === fromFile) &&
+                            (fromRank === -1 || (sq >> 4) === fromRank)) {
+                            fromSq = sq;
+                        }
+                        break;
+                    }
+                    sq -= offset;
+                }
+                if (fromSq !== -1) break;
+            }
         }
 
         if (fromSq === -1) return;
 
-        const oldCastlingIdx = this.castling.w | (this.castling.b << 2);
+        // ── Apply move ────────────────────────────────────────────
+        const oldCI = this.castleW | (this.castleB << 2);
 
-        if (this.epSquare !== -1) {
-            this.hash ^= EP_KEYS[file(this.epSquare)];
-        }
+        // Clear old EP hash
+        if (this.epSquare !== -1) this.hash ^= EP_KEYS[this.epSquare & 0xf];
 
+        // Handle capture
         if (pt === P && toSq === this.epSquare) {
-            const capSq = us === 'w' ? toSq + 16 : toSq - 16;
-            this._remove(capSq);
+            const capSq = this.us === W ? toSq + 16 : toSq - 16;
+            this.hash ^= hashPiece(this.board[capSq], capSq);
+            this.board[capSq] = 0;
         } else if (this.board[toSq]) {
-            this._remove(toSq);
+            this.hash ^= hashPiece(this.board[toSq], toSq);
+            this.board[toSq] = 0;
         }
 
-        this._movePiece(fromSq, toSq);
+        // Move piece (no method call, no piece list scan)
+        this.hash ^= hashPiece(ourPiece, fromSq) ^ hashPiece(ourPiece, toSq);
+        this.board[toSq] = ourPiece;
+        this.board[fromSq] = 0;
 
+        // Track king
+        if (pt === K) {
+            if (this.us === W) this.wKing = toSq; else this.bKing = toSq;
+        }
+
+        // Promotion
         if (promotion) {
-            const colorBit = us === 'w' ? W : B;
-            this.hash ^= hashPiece(colorBit | P, toSq);
-            this.board[toSq] = colorBit | promotion;
-            this.hash ^= hashPiece(colorBit | promotion, toSq);
-            for (const entry of this.pieces[us]) {
-                if (entry.sq === toSq) { entry.type = promotion; break; }
-            }
+            const promoted = this.us | promotion;
+            this.hash ^= hashPiece(ourPiece, toSq) ^ hashPiece(promoted, toSq);
+            this.board[toSq] = promoted;
         }
 
-        if (pt === P && Math.abs(rank(fromSq) - rank(toSq)) === 2) {
-            const epSq = (fromSq + toSq) / 2;
-            // Only set EP if an enemy pawn can actually capture (matches chess.js / FIDE)
-            const enemyPawn = (them === 'w' ? W : B) | P;
-            const left = toSq - 1;
-            const right = toSq + 1;
+        // Set new EP square
+        if (pt === P && Math.abs(fromSq - toSq) === 32) {
+            const epSq = (fromSq + toSq) >> 1;
+            const enemyPawn = (this.us ^ 8) | P;
+            const left = toSq - 1, right = toSq + 1;
             if ((!(left & 0x88) && this.board[left] === enemyPawn) ||
                 (!(right & 0x88) && this.board[right] === enemyPawn)) {
                 this.epSquare = epSq;
-                this.hash ^= EP_KEYS[file(epSq)];
+                this.hash ^= EP_KEYS[epSq & 0xf];
             } else {
                 this.epSquare = -1;
             }
@@ -332,24 +326,23 @@ export class ReplayEngine {
             this.epSquare = -1;
         }
 
+        // Castling rights — our piece
         if (pt === K) {
-            this.castling[us] = 0;
+            if (this.us === W) this.castleW = 0; else this.castleB = 0;
         } else if (pt === R) {
-            const homeRank = us === 'w' ? Ox88.a1 : Ox88.a8;
-            if (fromSq === homeRank) this.castling[us] &= ~2;
-            else if (fromSq === homeRank + 7) this.castling[us] &= ~1;
+            const homeRank = this.us === W ? 112 : 0;
+            if (fromSq === homeRank) { if (this.us === W) this.castleW &= ~2; else this.castleB &= ~2; }
+            else if (fromSq === homeRank + 7) { if (this.us === W) this.castleW &= ~1; else this.castleB &= ~1; }
         }
-        const theirRank = them === 'w' ? Ox88.a1 : Ox88.a8;
-        if (toSq === theirRank) this.castling[them] &= ~2;
-        else if (toSq === theirRank + 7) this.castling[them] &= ~1;
+        // Castling rights — opponent rook captured
+        const theirRank = this.us === W ? 0 : 112;
+        if (toSq === theirRank) { if (this.us === W) this.castleB &= ~2; else this.castleW &= ~2; }
+        else if (toSq === theirRank + 7) { if (this.us === W) this.castleB &= ~1; else this.castleW &= ~1; }
 
-        const newCastlingIdx = this.castling.w | (this.castling.b << 2);
-        if (oldCastlingIdx !== newCastlingIdx) {
-            this.hash ^= CASTLING_KEYS[oldCastlingIdx];
-            this.hash ^= CASTLING_KEYS[newCastlingIdx];
-        }
+        const newCI = this.castleW | (this.castleB << 2);
+        if (oldCI !== newCI) this.hash ^= CASTLING_KEYS[oldCI] ^ CASTLING_KEYS[newCI];
 
         this.hash ^= SIDE_KEY;
-        this.turn = them;
+        this.us ^= 8;
     }
 }

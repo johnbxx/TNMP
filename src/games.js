@@ -47,7 +47,7 @@ let _visibleSections = new Set();
 // Explorer
 let _explorer = null;           // { chess, moveHistory }
 let _explorerActive = false;
-let _tree = null;               // explorer trie, rebuilt when source/filters change
+// _trie is declared near allocTrie()
 
 // ─── Observer ──────────────────────────────────────────────────────
 
@@ -270,7 +270,7 @@ export function setExplorerPosition(moves = []) {
         try { _explorer.chess.move(san); } catch { break; }
         _explorer.moveHistory.push(san);
     }
-    notifyChange();
+    _onChange?.(); // notify UI without dirtying the tree
 }
 
 // ─── Fetch & Cache ─────────────────────────────────────────────────
@@ -325,6 +325,7 @@ export function prefetchGames() {
             _sectionList = _tournamentSections;
             _visibleSections = new Set(_sectionList);
             resolveDefaultRound();
+            notifyChange();
         }
     } catch {
         localStorage.removeItem(GAMES_CACHE_KEY);
@@ -338,6 +339,10 @@ export function prefetchGames() {
 export function setGamesData(data) {
     _fetchGeneration++;
     _localData = data;
+    _filters = { ...EMPTY_FILTERS };
+    _sectionList = [];
+    _visibleSections = new Set();
+    notifyChange();
 }
 
 async function fetchPlayerList() {
@@ -454,14 +459,106 @@ function buildPlayerListFromGames() {
     return [...byNorm].map(([norm, name]) => ({ name, norm })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// ─── Explorer Trie ─────────────────────────────────────────────────
+// ─── Explorer Trie (flat typed-array) ─────────────────────────────
+
+// Trie storage — lazily allocated, reused across rebuilds
+let _trie = null;
+
+function allocTrie(gameCount) {
+    // Size estimates: ~80 positions/game, ~1.01 edges/position, 20% headroom
+    const maxNodes = Math.max(gameCount * 100, 4096);
+    const maxEdges = Math.max(maxNodes + maxNodes / 4 | 0, 4096);
+    const htBits = Math.max(12, 32 - Math.clz32(maxNodes * 2 - 1)); // next power of 2, ≥2× nodes
+    const htCap = 1 << htBits;
+    return {
+        htCap, htMask: htCap - 1,
+        htKeys: new BigUint64Array(htCap),
+        htNodeIds: new Int32Array(htCap).fill(-1),
+        nTotal: new Uint32Array(maxNodes),
+        nW: new Uint32Array(maxNodes), nD: new Uint32Array(maxNodes), nB: new Uint32Array(maxNodes),
+        nFirstEdge: new Int32Array(maxNodes).fill(-1),
+        nGameIds: [],
+        nodeCount: 0,
+        eNext: new Int32Array(maxEdges).fill(-1),
+        eSanIdx: new Uint16Array(maxEdges),
+        eTotal: new Uint32Array(maxEdges),
+        eW: new Uint32Array(maxEdges), eD: new Uint32Array(maxEdges), eB: new Uint32Array(maxEdges),
+        edgeCount: 0,
+        sanStrings: [], sanMap: new Map(),
+    };
+}
+
+function resetTrie(t) {
+    t.htKeys.fill(0n); t.htNodeIds.fill(-1);
+    t.nTotal.fill(0); t.nW.fill(0); t.nD.fill(0); t.nB.fill(0);
+    t.nFirstEdge.fill(-1); t.nGameIds.length = 0;
+    t.eNext.fill(-1); t.eSanIdx.fill(0);
+    t.eTotal.fill(0); t.eW.fill(0); t.eD.fill(0); t.eB.fill(0);
+    t.nodeCount = 0; t.edgeCount = 0;
+    t.sanStrings.length = 0; t.sanMap.clear();
+}
+
+function trieGetOrCreate(t, hash) {
+    let slot = Number(hash & BigInt(t.htMask));
+    while (true) {
+        if (t.htNodeIds[slot] === -1) {
+            const id = t.nodeCount++;
+            t.htKeys[slot] = hash;
+            t.htNodeIds[slot] = id;
+            t.nGameIds[id] = [];
+            return id;
+        }
+        if (t.htKeys[slot] === hash) return t.htNodeIds[slot];
+        slot = (slot + 1) & t.htMask;
+    }
+}
+
+function trieLookup(t, hash) {
+    let slot = Number(hash & BigInt(t.htMask));
+    while (true) {
+        if (t.htNodeIds[slot] === -1) return -1;
+        if (t.htKeys[slot] === hash) return t.htNodeIds[slot];
+        slot = (slot + 1) & t.htMask;
+    }
+}
+
+function trieInternSan(t, san) {
+    let i = t.sanMap.get(san);
+    if (i === undefined) { i = t.sanStrings.length; t.sanStrings.push(san); t.sanMap.set(san, i); }
+    return i;
+}
+
+function trieFindOrAddEdge(t, nodeId, sanIdx) {
+    let e = t.nFirstEdge[nodeId];
+    while (e !== -1) {
+        if (t.eSanIdx[e] === sanIdx) return e;
+        e = t.eNext[e];
+    }
+    e = t.edgeCount++;
+    t.eSanIdx[e] = sanIdx;
+    t.eNext[e] = t.nFirstEdge[nodeId];
+    t.nFirstEdge[nodeId] = e;
+    return e;
+}
 
 export function getExplorerStats() {
     if (!_explorer) return null;
-    const node = buildExplorerTree().get(hashFen(_explorer.chess.fen()));
-    if (!node) return null;
-    const moves = [...node.moves.values()].sort((a, b) => b.total - a.total);
-    return { total: node.total, whiteWins: node.whiteWins, draws: node.draws, blackWins: node.blackWins, moves, gameIds: node.gameIds };
+    buildExplorerTree();
+    const t = _trie;
+    if (!t) return null;
+    const nodeId = trieLookup(t, hashFen(_explorer.chess.fen()));
+    if (nodeId === -1) return null;
+
+    // Walk edges to build moves array
+    const moves = [];
+    let e = t.nFirstEdge[nodeId];
+    while (e !== -1) {
+        moves.push({ san: t.sanStrings[t.eSanIdx[e]], total: t.eTotal[e], whiteWins: t.eW[e], draws: t.eD[e], blackWins: t.eB[e] });
+        e = t.eNext[e];
+    }
+    moves.sort((a, b) => b.total - a.total);
+
+    return { total: t.nTotal[nodeId], whiteWins: t.nW[nodeId], draws: t.nD[nodeId], blackWins: t.nB[nodeId], moves, gameIds: t.nGameIds[nodeId] };
 }
 
 function extractMoveTokens(pgn) {
@@ -498,15 +595,18 @@ function extractMoveTokens(pgn) {
 const RESULT = { '1-0': { w: 1, d: 0, b: 0 }, '0-1': { w: 0, d: 0, b: 1 }, '1/2-1/2': { w: 0, d: 1, b: 0 }, '*': { w: 0, d: 0, b: 0 } };
 
 function buildExplorerTree() {
-    if (!_treeDirty) return _tree;
+    if (!_treeDirty) return;
     _treeDirty = false;
+    const t0 = performance.now();
     const games = (getSourceGames()?.games || []).filter(g => g.pgn && g.gameId && passesUserFilters(g));
-    const tree = new Map();
-    function getOrCreate(hash) {
-        let node = tree.get(hash);
-        if (!node) { node = { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; tree.set(hash, node); }
-        return node;
+
+    // Allocate or reset trie
+    if (!_trie || _trie.nTotal.length < games.length * 70) {
+        _trie = allocTrie(games.length);
+    } else {
+        resetTrie(_trie);
     }
+    const t = _trie;
 
     const engine = new ReplayEngine();
 
@@ -519,34 +619,30 @@ function buildExplorerTree() {
         if (moves.length === 0) continue;
 
         engine.reset();
-        let hash = START_HASH;
-        let countedAtRoot = false;
+        const gid = game.gameId;
+
+        let curId = trieGetOrCreate(t, START_HASH);
+        t.nTotal[curId]++; t.nW[curId] += r.w; t.nD[curId] += r.d; t.nB[curId] += r.b;
+        if (gid) t.nGameIds[curId].push(gid);
 
         for (let i = 0; i < moves.length; i++) {
             const san = moves[i];
             const prevHash = engine.hash;
             engine.move(san);
-            if (engine.hash === prevHash) break; // move failed (hash unchanged = no-op)
+            if (engine.hash === prevHash) break;
 
-            if (!countedAtRoot) {
-                const startNode = getOrCreate(hash);
-                startNode.total++; startNode.whiteWins += r.w; startNode.draws += r.d; startNode.blackWins += r.b;
-                if (game.gameId) startNode.gameIds.push(game.gameId);
-                countedAtRoot = true;
-            }
-            const nextHash = engine.hash;
+            const sanIdx = trieInternSan(t, san);
+            const eid = trieFindOrAddEdge(t, curId, sanIdx);
+            t.eTotal[eid]++; t.eW[eid] += r.w; t.eD[eid] += r.d; t.eB[eid] += r.b;
 
-            const node = tree.get(hash);
-            let moveStats = node.moves.get(san);
-            if (!moveStats) { moveStats = { san, total: 0, whiteWins: 0, draws: 0, blackWins: 0 }; node.moves.set(san, moveStats); }
-            moveStats.total++; moveStats.whiteWins += r.w; moveStats.draws += r.d; moveStats.blackWins += r.b;
-
-            const nextNode = getOrCreate(nextHash);
-            nextNode.total++; nextNode.whiteWins += r.w; nextNode.draws += r.d; nextNode.blackWins += r.b;
-            if (game.gameId) nextNode.gameIds.push(game.gameId);
-            hash = nextHash;
+            const nextId = trieGetOrCreate(t, engine.hash);
+            t.nTotal[nextId]++; t.nW[nextId] += r.w; t.nD[nextId] += r.d; t.nB[nextId] += r.b;
+            if (gid) t.nGameIds[nextId].push(gid);
+            curId = nextId;
         }
     }
-    _tree = tree;
-    return _tree;
+    if (games.length > 0) {
+        const elapsed = (performance.now() - t0).toFixed(1);
+        console.log(`Explorer: ${games.length} games → ${t.nodeCount.toLocaleString()} positions in ${elapsed}ms (${(games.length / (performance.now() - t0) * 1000 | 0).toLocaleString()} games/sec)`);
+    }
 }

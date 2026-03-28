@@ -1018,7 +1018,7 @@ function loadExplorer({ restoreMoves } = {}) {
         games.setExplorerPosition(restoreMoves);
     } else {
         games.ensureExplorer();
-        renderExplorerHeader(_gamesState);
+        if (_gamesState) renderExplorerHeader(_gamesState);
         renderExplorerMoveList();
         board.setPosition(games.getExplorerFen(), false);
         board.resize();
