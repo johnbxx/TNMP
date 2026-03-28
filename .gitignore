@@ -8,5 +8,6 @@ dist/
 local/
 .vscode/
 scripts/serve-coop.mjs
+scripts/backfill-tournament-meta.mjs
 public/engine/
 CLAUDE.md
