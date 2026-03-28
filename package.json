@@ -19,7 +19,7 @@
     "eslint": "^10.1.0",
     "vite": "^8.0.0",
     "vitest": "^4.1.0",
-    "wrangler": "^4.75.0"
+    "wrangler": "^4.77.0"
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.1.0",
