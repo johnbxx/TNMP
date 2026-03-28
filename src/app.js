@@ -19,7 +19,7 @@ import {
     launchExplorer, initGamePanel,
 } from './game-panel.js';
 import { showToast } from './toast.js';
-import { prefetchGames, getCachedGame, getState as getGamesState, fetchGames, selectPlayer } from './games.js';
+import { prefetchGames, getCachedGame, fetchGames, selectPlayer, getPlayer, getGroupedGames, getFilter } from './games.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
@@ -33,11 +33,6 @@ function downloadPgn(pgnText, filename) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-}
-
-function sectionForFilename(s) {
-    if (!s) return null;
-    return s.replace(/[^a-zA-Z0-9]/g, '');
 }
 
 // --- Info text (computed client-side from state + round + tournament context) ---
@@ -290,7 +285,6 @@ const ACTIONS = {
         if (!gameId) return;
         if (CONFIG.playerName) {
             await selectPlayer(CONFIG.playerName, { norm: CONFIG.playerNorm || undefined });
-            openGameViewer();
             openGameFromBrowser(gameId);
         } else {
             const game = getCachedGame(gameId);
@@ -486,25 +480,23 @@ async function handleShareAction(action) {
 }
 
 function handleBrowserExport() {
-    const state = getGamesState();
-    if (!state.gameIdList.length) { showToast('No games to export', 'error'); return; }
-    const games = state.gameIdList.map(id => getCachedGame(id)).filter(g => g?.pgn);
+    const gameIds = getGroupedGames().flatMap(g => g.games).filter(g => g.gameId).map(g => g.gameId);
+    if (!gameIds.length) { showToast('No games to export', 'error'); return; }
+    const games = gameIds.map(id => getCachedGame(id)).filter(g => g?.pgn);
     if (!games.length) { showToast('No PGN data available', 'error'); return; }
     const slug = getTournamentMeta().slug;
-    const filter = state.activeFilter;
     const prefix = slug || 'games';
     let filename;
-    if (filter?.type === 'player') {
-        const parts = [filter.label.replace(/\s+/g, '-')];
-        if (filter.tournament) parts.push(filter.tournament);
-        if (filter.color) parts.push(filter.color.charAt(0).toUpperCase() + filter.color.slice(1));
-        if (filter.eco) parts.push(filter.eco.join('-'));
-        if (filter.opponent) parts.push('vs-' + filter.opponent.replace(/\s+/g, '-'));
+    const playerName = getPlayer();
+    if (playerName) {
+        const parts = [playerName.replace(/\s+/g, '-')];
+        const t = getFilter('tournament');
+        if (t) parts.push(t);
+        const c = getFilter('color');
+        if (c) parts.push(c.charAt(0).toUpperCase() + c.slice(1));
         filename = parts.join('-') + '.pgn';
-    } else if (filter?.type === 'section') {
-        filename = `${prefix}-${filter.sections.map(sectionForFilename).join('-')}-R${games[0].round}.pgn`;
     } else {
-        filename = `${prefix}-R${games[0].round}.pgn`;
+        filename = `${prefix}-R${games[0]?.round || 'all'}.pgn`;
     }
     downloadPgn(games.map(g => g.pgn).join('\n\n'), filename);
     showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`, 'success');

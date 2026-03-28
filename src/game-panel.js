@@ -12,11 +12,10 @@
 import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn, pgnToGameObject, extractMoveText } from './pgn-parser.js';
-import { formatName, resultClass, resultSymbol } from './utils.js';
+import { formatName, resultClass, resultSymbol, scorePercent } from './utils.js';
 import { CONFIG, SUBMISSIONS_ENABLED } from './config.js';
 import { showToast } from './toast.js';
 import { classifyFen, loadEcoData } from './eco.js';
-import { scorePercent } from './games.js';
 import * as games from './games.js';
 import * as board from './board.js';
 import * as pgn from './pgn.js';
@@ -24,10 +23,40 @@ import * as engine from './engine.js';
 
 loadEcoData();
 
+// SVG icon sprite — each icon defined once, referenced via <use href="#i-name"/>
+const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+<symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></symbol>
+<symbol id="i-start" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></symbol>
+<symbol id="i-prev" viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></symbol>
+<symbol id="i-next" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></symbol>
+<symbol id="i-end" viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></symbol>
+<symbol id="i-flip" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></symbol>
+<symbol id="i-comments" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></symbol>
+<symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></symbol>
+<symbol id="i-engine" viewBox="-0.5 -0.5 24 24" fill="none"><path stroke="currentColor" d="M4.79 4.79h13.42v13.42H4.79z" stroke-width="1.5"/><path stroke="currentColor" d="M8.63 4.79V.96" stroke-width="1.5"/><path stroke="currentColor" d="M14.38 4.79V.96" stroke-width="1.5"/><path stroke="currentColor" d="M8.63 22.04v-3.83" stroke-width="1.5"/><path stroke="currentColor" d="M14.38 22.04v-3.83" stroke-width="1.5"/><path stroke="currentColor" d="M18.21 8.63h3.83" stroke-width="1.5"/><path stroke="currentColor" d="M18.21 14.38h3.83" stroke-width="1.5"/><path stroke="currentColor" d="M.96 8.63h3.83" stroke-width="1.5"/><path stroke="currentColor" d="M.96 14.38h3.83" stroke-width="1.5"/><path stroke="currentColor" d="M15.33 14.38h-3.83" stroke-width="1.5"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></symbol>
+<symbol id="i-headers" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></symbol>
+<symbol id="i-overflow" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></symbol>
+<symbol id="i-explore" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/></symbol>
+<symbol id="i-import" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></symbol>
+</svg>`;
+
+function icon(name, size) {
+    const s = size ? ` width="${size}" height="${size}"` : '';
+    return `<svg${s}><use href="#i-${name}"/></svg>`;
+}
+
 export function initGamePanel(mount) {
     mount.innerHTML = `
     <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true" data-manual-close>
         <div class="modal-backdrop"></div>
+        ${ICON_SPRITE}
         <div class="modal-content modal-content-viewer">
             <button class="viewer-close" data-action="close-panel" aria-label="Close">&times;</button>
             <div id="viewer-browser-panel" class="viewer-browser-panel hidden">
@@ -39,9 +68,9 @@ export function initGamePanel(mount) {
                             <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
                             <div id="browser-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
                         </div>
-                        <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/></svg></button>
-                        <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg></button>
-                        <button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>
+                        <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer">${icon('explore', 16)}</button>
+                        <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN">${icon('import', 16)}</button>
+                        <button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs">${icon('download', 16)}</button>
                     </div>
                     <div class="browser-chips hidden" id="browser-chips"></div>
                     <div class="browser-filters hidden" id="browser-filters"></div>
@@ -90,7 +119,7 @@ export function initGamePanel(mount) {
                         <div id="engine-panel" class="engine-panel hidden">
                             <div class="engine-panel-header">
                                 <div class="engine-panel-title">
-                                    <button data-action="engine-pause" id="engine-pause-btn" class="engine-pause-btn" aria-label="Pause/resume analysis"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg></button>
+                                    <button data-action="engine-pause" id="engine-pause-btn" class="engine-pause-btn" aria-label="Pause/resume analysis">${icon('play', 14)}</button>
                                     <span class="engine-name">Stockfish 18</span>
                                     <span class="engine-variant-badge" id="engine-variant-badge"></span>
                                     <span class="engine-nps" id="engine-nps"></span>
@@ -107,7 +136,7 @@ export function initGamePanel(mount) {
                                             <option value="5">5</option>
                                         </select>
                                     </label>
-                                    <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
+                                    <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings">${icon('settings', 14)}</button>
                                 </div>
                             </div>
                             <div class="engine-pv-lines" id="engine-pv-lines"></div>
@@ -116,23 +145,23 @@ export function initGamePanel(mount) {
                 </div>
                 <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
                 <div class="viewer-tool-group">
-                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg></button>
-                    <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg></button>
-                    <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>
+                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)">${icon('comments')}</button>
+                    <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)">${icon('branch')}</button>
+                    <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip')}</button>
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-nav-group">
-                    <button data-action="viewer-start" class="viewer-nav-btn" aria-label="Go to start" data-tooltip="Start"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>
-                    <button data-action="viewer-prev" data-hold class="viewer-nav-btn" aria-label="Previous move" data-tooltip="Previous move (Left)"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></svg></button>
-                    <button id="viewer-play" data-action="viewer-play" class="viewer-nav-btn" aria-label="Play" data-tooltip="Play (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg></button>
-                    <button data-action="viewer-next" data-hold class="viewer-nav-btn" aria-label="Next move" data-tooltip="Next move (Right)"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></svg></button>
-                    <button data-action="viewer-end" class="viewer-nav-btn" aria-label="Go to end" data-tooltip="End"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></svg></button>
+                    <button data-action="viewer-start" class="viewer-nav-btn" aria-label="Go to start" data-tooltip="Start">${icon('start')}</button>
+                    <button data-action="viewer-prev" data-hold class="viewer-nav-btn" aria-label="Previous move" data-tooltip="Previous move (Left)">${icon('prev')}</button>
+                    <button id="viewer-play" data-action="viewer-play" class="viewer-nav-btn" aria-label="Play" data-tooltip="Play (Space)">${icon('play')}</button>
+                    <button data-action="viewer-next" data-hold class="viewer-nav-btn" aria-label="Next move" data-tooltip="Next move (Right)">${icon('next')}</button>
+                    <button data-action="viewer-end" class="viewer-nav-btn" aria-label="Go to end" data-tooltip="End">${icon('end')}</button>
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-tool-group viewer-tool-group-end">
-                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Engine (A)"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="-0.5 -0.5 24 24" height="24" width="24"><path stroke="currentColor" d="M4.791666666666667 4.791666666666667h13.416666666666668v13.416666666666668H4.791666666666667z" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M15.333333333333334 14.375h-3.8333333333333335" stroke-width="1.5"></path></svg></button>
+                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Engine (A)">${icon('engine')}</button>
                     <div class="share-btn-wrapper">
-                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg></button>
+                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share">${icon('share')}</button>
                         <div id="share-popover" class="share-popover hidden">
                             <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
                             <button class="share-option" data-action="share-copy-link">Copy Link</button>
@@ -141,21 +170,21 @@ export function initGamePanel(mount) {
                             <button class="share-option" data-action="share-native">Share...</button>
                         </div>
                     </div>
-                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg></button>
+                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info">${icon('headers')}</button>
                 </div>
                 <div class="overflow-btn-wrapper">
-                    <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+                    <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options">${icon('overflow')}</button>
                     <div id="overflow-menu" class="overflow-menu hidden">
-                        <button class="overflow-item" data-action="overflow-comments"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>Comments</button>
-                        <button class="overflow-item" data-action="overflow-branch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H4.603M21 17l-3-3m3 3-3 3M4.603 17H3m1.603 0a6 6 0 0 0 5.145-2.913l2.504-4.174A6 6 0 0 1 17.397 7H21m0 0-3 3m3-3-3-3"/></svg>Variations</button>
-                        <button class="overflow-item" data-action="overflow-engine"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="-0.5 -0.5 24 24" height="24" width="24"><path stroke="currentColor" d="M4.791666666666667 4.791666666666667h13.416666666666668v13.416666666666668H4.791666666666667z" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 4.791666666666667V0.9583333333333334" stroke-width="1.5"></path><path stroke="currentColor" d="M8.625 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M14.375 22.041666666666668v-3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M18.208333333333336 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 8.625h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M0.9583333333333334 14.375h3.8333333333333335" stroke-width="1.5"></path><path stroke="currentColor" d="M15.333333333333334 14.375h-3.8333333333333335" stroke-width="1.5"></path></svg>Engine</button>
-                        <button class="overflow-item" data-action="overflow-analysis"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>Analyze on Lichess</button>
-                        <button class="overflow-item" data-action="overflow-headers"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/></svg>Game Info</button>
+                        <button class="overflow-item" data-action="overflow-comments">${icon('comments')}Comments</button>
+                        <button class="overflow-item" data-action="overflow-branch">${icon('branch')}Variations</button>
+                        <button class="overflow-item" data-action="overflow-engine">${icon('engine')}Engine</button>
+                        <button class="overflow-item" data-action="overflow-analysis">${icon('search')}Analyze on Lichess</button>
+                        <button class="overflow-item" data-action="overflow-headers">${icon('headers')}Game Info</button>
                         <div class="overflow-sep"></div>
-                        <button class="overflow-item" data-action="share-copy-pgn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Copy PGN</button>
-                        <button class="overflow-item" data-action="share-copy-link"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>Copy Link</button>
-                        <button class="overflow-item" data-action="share-download"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>Download PGN</button>
-                        <button class="overflow-item" data-action="share-native"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/></svg>Share...</button>
+                        <button class="overflow-item" data-action="share-copy-pgn">${icon('copy')}Copy PGN</button>
+                        <button class="overflow-item" data-action="share-copy-link">${icon('link')}Copy Link</button>
+                        <button class="overflow-item" data-action="share-download">${icon('download')}Download PGN</button>
+                        <button class="overflow-item" data-action="share-native">${icon('share')}Share...</button>
                     </div>
                 </div>
                 </div>
@@ -379,12 +408,20 @@ combinedWidthQuery.addEventListener('change', () => {
     updateLayout();
     board.resize();
     positionEnginePanel();
+    if (_gamesState) renderBrowserPanel(_gamesState);
+    if (_viewMode === 'game') renderPgnMoveList();
 });
+
 
 // Mobile view toggle: browser-panel vs viewer-main
 function showBrowser() {
     const modal = document.querySelector('.modal-content-viewer');
-    if (modal && !isCombinedWidth()) modal.classList.add('browser-only');
+    if (modal && !isCombinedWidth()) {
+        modal.classList.add('browser-only');
+        requestAnimationFrame(() => {
+            if (_gamesState) renderBrowserPanel(_gamesState);
+        });
+    }
 }
 function showViewer() {
     const modal = document.querySelector('.modal-content-viewer');
@@ -433,24 +470,34 @@ pgn.onChange((state) => {
     if (headerEl && _viewMode === 'game') updateGameHeader(_panel.meta);
 });
 
-games.onChange((state) => {
-    _gamesState = state;
-    renderBrowserPanel(state);
+games.onChange(() => {
+    _gamesState = {
+        round: games.getFilter('round'),
+        tournament: games.getFilter('tournament'),
+        color: games.getFilter('color'),
+        event: games.getFilter('event'),
+        visibleSections: games.getVisibleSections(),
+        groupedGames: games.getGroupedGames(),
+        explorerActive: games.isExplorerActive(),
+        explorerFen: games.getExplorerFen(),
+        explorerMoveHistory: games.getExplorerMoves(),
+    };
+    renderBrowserPanel(_gamesState);
     // Explorer takes over the board/moves only when no game is loaded
-    if (state.explorerActive && _viewMode !== 'game') {
+    if (_gamesState.explorerActive && _viewMode !== 'game') {
         setToolbarButtons();
         document.getElementById('editor-comment-input')?.classList.add('hidden');
-        renderExplorerHeader(state);
+        renderExplorerHeader(_gamesState);
         renderExplorerMoveList();
-        board.setPosition(state.explorerFen, true);
+        board.setPosition(games.getExplorerFen(), true);
         board.highlightSquares(null, null);
         board.resize();
     }
 });
 
 function onBoardMove(san) {
-    if (_viewMode === 'explorer' && _gamesState?.explorerActive) {
-        games.explorerPlayMove(san);
+    if (_viewMode === 'explorer' && games.isExplorerActive()) {
+        games.setExplorerPosition([...games.getExplorerMoves(), san]);
     } else {
         pgn.playMove(san);
     }
@@ -580,7 +627,7 @@ function activateEngine() {
     const badge = document.getElementById('engine-variant-badge');
     if (badge) badge.textContent = engine.getVariant() === 'full' ? 'Full' : 'Lite';
     const pauseBtn = document.getElementById('engine-pause-btn');
-    if (pauseBtn) pauseBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+    if (pauseBtn) pauseBtn.innerHTML = icon('pause', 14);
 
 
     // Wire lines selector
@@ -608,9 +655,7 @@ export function toggleEnginePause() {
     _enginePaused = !_enginePaused;
     const btn = document.getElementById('engine-pause-btn');
     if (btn) {
-        btn.innerHTML = _enginePaused
-            ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>'
-            : '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
+        btn.innerHTML = _enginePaused ? icon('play', 14) : icon('pause', 14);
     }
     if (_enginePaused) {
         engine.stopAnalysis();
@@ -853,6 +898,8 @@ export function openPanel() {
     }
     ensureBoard();
     updateLayout();
+    // Render browser panel if state was pushed while panel was invisible
+    if (_gamesState && panelEl?.offsetHeight) renderBrowserPanel(_gamesState);
 }
 
 export function openGamePanel(opts = {}) {
@@ -894,9 +941,6 @@ export function openGamePanel(opts = {}) {
     if (!playerColor) playerColor = 'White';
     const orientation = (playerColor === 'Black') ? 'black' : 'white';
 
-    if (_gamesState?.explorerActive) {
-        games.closeExplorer();
-    }
 
     loadGame(game?.pgn || opts.pgn || '*', orientation);
 }
@@ -957,7 +1001,8 @@ function loadGame(pgnText, orientation = 'white') {
 }
 
 function loadExplorer({ restoreMoves } = {}) {
-    if (_viewMode === 'game') { pgn.destroyGame(); }
+    const wasGame = _viewMode === 'game';
+    if (wasGame) pgn.destroyGame();
     _viewMode = 'explorer';
     _pendingSubmission = null;
     showViewer();
@@ -967,17 +1012,16 @@ function loadExplorer({ restoreMoves } = {}) {
     document.getElementById('explorer-header')?.classList.remove('hidden');
     document.getElementById('editor-comment-input')?.classList.add('hidden');
 
-    board.setOrientation(_gamesState?.color === 'black' ? 'black' : 'white');
+    board.setOrientation(games.getFilter('color') === 'black' ? 'black' : 'white');
     board.highlightSquares(null, null);
-    if (_gamesState?.explorerActive) {
-        renderExplorerHeader(_gamesState);
-        renderExplorerMoveList();
-        board.setPosition(_gamesState.explorerFen, false);
-        board.resize();
-    } else if (restoreMoves?.length) {
+    if (restoreMoves?.length) {
         games.setExplorerPosition(restoreMoves);
     } else {
-        games.launchExplorer();
+        games.ensureExplorer();
+        renderExplorerHeader(_gamesState);
+        renderExplorerMoveList();
+        board.setPosition(games.getExplorerFen(), false);
+        board.resize();
     }
 }
 
@@ -993,7 +1037,7 @@ export function explorerBackToBrowser() {
         showBrowser();
         return;
     }
-    loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
+    loadExplorer({ restoreMoves: games.getExplorerMoves() });
 }
 
 // Dirty dialog
@@ -1152,18 +1196,22 @@ function wireContextMenu() {
 }
 
 // Explorer toolbar delegations
-export function explorerGoToStart() { games.explorerGoToStart(); }
-export function explorerGoBack() { games.explorerGoBack(); }
+export function explorerGoToStart() { games.setExplorerPosition([]); }
+export function explorerGoBack() { games.setExplorerPosition(games.getExplorerMoves().slice(0, -1)); }
 export function explorerGoForward() {
-    const stats = _gamesState?.explorerStats;
+    const stats = games.getExplorerStats();
     if (stats?.moves?.length > 0) {
-        games.explorerPlayMove(stats.moves[0].san);
+        games.setExplorerPosition([...games.getExplorerMoves(), stats.moves[0].san]);
     }
 }
 
 // Navigation helpers
+function getGameIdList() {
+    return games.getGroupedGames().flatMap(g => g.games).filter(g => g.gameId).map(g => g.gameId);
+}
+
 export function openGameFromBrowser(gameId) {
-    const gameList = _gamesState?.gameIdList || [];
+    const gameList = getGameIdList();
     const idx = gameList.indexOf(gameId);
     if (idx === -1) return;
     openGameAtIndex(gameList, idx);
@@ -1173,22 +1221,19 @@ function openGameAtIndex(gameList, idx) {
     const game = games.getCachedGame(gameList[idx]);
     if (!game) return;
     const orientation = games.getOrientationForGame(game);
-    const filter = _gamesState?.activeFilter;
     openGamePanel({
         game, orientation,
         onPrev: idx > 0 ? () => openGameAtIndex(gameList, idx - 1) : null,
         onNext: idx < gameList.length - 1 ? () => openGameAtIndex(gameList, idx + 1) : null,
-        meta: filter ? { filterLabel: filter.label } : {},
     });
     highlightActiveGame(gameList[idx]);
 }
 
 export function openImportedGames(importedGames) {
     if (!importedGames || importedGames.length === 0) return;
-    if (_gamesState?.explorerActive) games.closeExplorer();
     openPanel();
     if (isCombinedWidth()) {
-        games.launchExplorer();
+        games.ensureExplorer();
     } else {
         const first = importedGames.find(g => g.hasPgn && g.gameId);
         if (first) openGameFromBrowser(first.gameId);
@@ -1197,7 +1242,7 @@ export function openImportedGames(importedGames) {
 
 export function launchExplorer({ restore = false } = {}) {
     loadExplorer({
-        restoreMoves: restore ? _gamesState?.explorerMoveHistory : undefined,
+        restoreMoves: restore ? games.getExplorerMoves() : undefined,
     });
 }
 
@@ -1219,8 +1264,8 @@ export function handlePanelKeydown(e) {
     }
 
     // Explorer mode keyboard (only when explorer view is active, not while viewing a game)
-    if (_viewMode === 'explorer' && _gamesState?.explorerActive) {
-        const moves = _gamesState.explorerStats?.moves;
+    if (_viewMode === 'explorer' && games.isExplorerActive()) {
+        const moves = games.getExplorerStats()?.moves;
         if (e.key === 'ArrowDown' && moves?.length) {
             _explorerSelectedIdx = Math.min(_explorerSelectedIdx + 1, moves.length - 1);
             updateExplorerSelection();
@@ -1230,11 +1275,11 @@ export function handlePanelKeydown(e) {
             updateExplorerSelection();
             e.preventDefault();
         } else if ((e.key === 'Enter' || e.key === 'ArrowRight') && moves?.length && _explorerSelectedIdx >= 0) {
-            games.explorerPlayMove(moves[_explorerSelectedIdx].san);
+            games.setExplorerPosition([...games.getExplorerMoves(), moves[_explorerSelectedIdx].san]);
             e.preventDefault();
         } else if (e.key === 'ArrowRight') { explorerGoForward(); e.preventDefault(); }
-        else if (e.key === 'ArrowLeft') { games.explorerGoBack(); e.preventDefault(); }
-        else if (e.key === 'Home') { games.explorerGoToStart(); e.preventDefault(); }
+        else if (e.key === 'ArrowLeft') { games.setExplorerPosition(games.getExplorerMoves().slice(0, -1)); e.preventDefault(); }
+        else if (e.key === 'Home') { games.setExplorerPosition([]); e.preventDefault(); }
         else if (e.key === 'f' || e.key === 'F') { board.flip(); }
         else if (e.key === 'Escape') { closeGamePanel(); }
         return;
@@ -1414,9 +1459,9 @@ function renderExplorerMoveListHtml(stats, moveHistory) {
     const atStart = !moveHistory || moveHistory.length === 0;
     const dis = atStart ? ' disabled' : '';
     html += '<div class="explorer-toolbar">';
-    html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset"${dis}><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></svg></button>`;
-    html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back"${dis}><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="18,5 7,12 18,19"/></svg></button>`;
-    html += `<button class="explorer-tb-btn" data-action="explorer-flip" aria-label="Flip board"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></svg></button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset"${dis}>${icon('start', 16)}</button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back"${dis}>${icon('prev', 16)}</button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-flip" aria-label="Flip board">${icon('flip', 16)}</button>`;
     if (total > 0) {
         html += `<button class="explorer-tb-btn explorer-tb-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
     }
@@ -1621,7 +1666,7 @@ function highlightMatch(name, query) {
 function renderExplorerHeader(state) {
     const el = document.getElementById('explorer-header');
     const moveHistory = state.explorerMoveHistory;
-    const total = state.explorerStats?.total || 0;
+    const total = games.getExplorerStats()?.total || 0;
     const gameLabel = total === 1 ? 'game' : 'games';
 
     // Move history (clickable plies)
@@ -1672,7 +1717,7 @@ function renderPgnMoveList() {
         return;
     }
 
-    if (window.matchMedia('(min-width: 768px)').matches) {
+    if (isCombinedWidth()) {
         container.innerHTML = renderMoveTableHtml(nodes, currentNodeId, commentsHidden);
     } else {
         container.innerHTML = renderMovesInlineHtml(nodes, currentNodeId, nodes[0].mainChild, false);
@@ -1684,17 +1729,16 @@ function renderPgnMoveList() {
 
 function renderExplorerMoveList() {
     const container = document.getElementById('viewer-moves');
-    if (!_gamesState) return;
-
-    container.innerHTML = renderExplorerMoveListHtml(_gamesState.explorerStats, _gamesState.explorerMoveHistory);
-    _explorerSelectedIdx = _gamesState.explorerStats?.moves?.length ? 0 : -1;
+    const stats = games.getExplorerStats();
+    container.innerHTML = renderExplorerMoveListHtml(stats, games.getExplorerMoves());
+    _explorerSelectedIdx = stats?.moves?.length ? 0 : -1;
     updateExplorerSelection();
 }
 
 function updatePlayButton(isPlaying) {
     const btn = document.getElementById('viewer-play');
-    const pauseSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>';
-    const playSvg = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>';
+    const pauseSvg = icon('pause');
+    const playSvg = icon('play');
     btn.innerHTML = isPlaying ? pauseSvg : playSvg;
     btn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
 }
@@ -1724,14 +1768,14 @@ function highlightActiveGame(gameId) {
 
 function renderBrowserPanel(state) {
     const panelEl = document.getElementById('viewer-browser-panel');
-    if (panelEl.classList.contains('hidden')) return;
+    if (!panelEl.offsetHeight) return;
 
     // Sync search bar to player mode state
     const searchInput = document.getElementById('browser-search-input');
     const clearBtn = document.getElementById('browser-search-clear');
     if (searchInput) {
-        if (state.isPlayerMode) {
-            searchInput.value = state.player || '';
+        if (games.isPlayerMode()) {
+            searchInput.value = games.getPlayer() || '';
             clearBtn?.classList.remove('hidden');
         } else if (!searchInput.matches(':focus')) {
             searchInput.value = '';
@@ -1749,20 +1793,21 @@ function renderBrowserPanel(state) {
 function renderBrowserTitle(panelEl, state) {
     const titleEl = panelEl.querySelector('#browser-title-panel');
 
-    if (state.isPlayerMode) {
-        titleEl.textContent = `${state.player}'s Games`;
+    if (games.isPlayerMode()) {
+        titleEl.textContent = `${games.getPlayer()}'s Games`;
         return;
     }
 
     // Don't clobber existing dropdown if mode hasn't changed
     const existingSelect = titleEl.querySelector('#browser-title-select');
-    const currentMode = state.isLocal ? 'local' : 'server';
+    const currentMode = games.isLocalMode() ? 'local' : 'server';
     if (existingSelect && existingSelect.dataset.mode === currentMode) return;
 
     // Local mode with multiple events: dropdown with "All Events (N games)" default
-    if (state.isLocal && state.localEvents && state.localEvents.length > 1) {
-        const allLabel = `All Events (${state.totalGames} games)`;
-        const options = state.localEvents.map(e =>
+    const localEvents = games.getLocalEvents();
+    if (localEvents) {
+        const allLabel = `All Events (${state.groupedGames.reduce((n, g) => n + g.games.length, 0)} games)`;
+        const options = localEvents.map(e =>
             `<option value="${e}"${state.event === e ? ' selected' : ''}>${e}</option>`
         ).join('');
         titleEl.innerHTML = `<select id="browser-title-select" class="browser-title-select" data-mode="local"><option value="">${allLabel}</option>${options}</select>`;
@@ -1773,15 +1818,15 @@ function renderBrowserTitle(panelEl, state) {
     }
 
     // Server mode: dropdown from prefetched tournament list
-    const tournaments = state.tournamentList;
+    const tournaments = games.getTournamentList();
     if (!tournaments || tournaments.length <= 1) {
-        titleEl.textContent = state.title;
+        titleEl.textContent = games.getTitle();
         return;
     }
 
-    const slug = state.tournamentSlug;
+    const slug = games.getActiveTournamentSlug();
     const options = tournaments.map(t =>
-        `<option value="${t.slug}"${(t.slug === slug || (!slug && t.name === state.title)) ? ' selected' : ''}>${t.name}</option>`
+        `<option value="${t.slug}"${(t.slug === slug || (!slug && t.name === games.getTitle())) ? ' selected' : ''}>${t.name}</option>`
     ).join('');
 
     titleEl.innerHTML = `<select id="browser-title-select" class="browser-title-select" data-mode="server">${options}</select>`;
@@ -1793,14 +1838,14 @@ function renderBrowserTitle(panelEl, state) {
 function renderBrowserChips(panelEl, state) {
     const container = panelEl.querySelector('#browser-chips');
 
-    if (!state.isPlayerMode) {
+    if (!games.isPlayerMode()) {
         container.classList.add('hidden');
         return;
     }
     container.classList.remove('hidden');
 
-    const sources = state.playerSources;
-    const isLocal = state.isLocal;
+    const sources = games.getPlayerSources();
+    const isLocal = games.isLocalMode();
 
     let sourceHtml = '';
     if (sources.length > 0) {
@@ -1820,9 +1865,11 @@ function renderBrowserChips(panelEl, state) {
 
 function renderBrowserFilters(panelEl, state) {
     const container = panelEl.querySelector('#browser-filters');
-    const isLocal = state.isLocal;
-    const showRounds = !state.isPlayerMode && state.roundNumbers.length > 0 && (!isLocal || state.event);
-    const showSections = !state.isPlayerMode && state.sectionList.length > 1 && (!isLocal || state.event);
+    const isLocal = games.isLocalMode();
+    const roundNumbers = games.getRoundNumbers();
+    const sectionList = games.getSectionList();
+    const showRounds = !games.isPlayerMode() && roundNumbers.length > 0 && (!isLocal || state.event);
+    const showSections = !games.isPlayerMode() && sectionList.length > 1 && (!isLocal || state.event);
 
     if (!showRounds && !showSections) {
         container.classList.add('hidden');
@@ -1833,7 +1880,7 @@ function renderBrowserFilters(panelEl, state) {
     let html = '';
     if (showRounds) {
         html += '<select class="browser-round-select" id="browser-round-select">';
-        for (const r of state.roundNumbers) {
+        for (const r of roundNumbers) {
             const selected = r === state.round ? ' selected' : '';
             const label = window.innerWidth > 600 ? `Round ${r}` : `R${r}`;
             html += `<option value="${r}"${selected}>${label}</option>`;
@@ -1841,7 +1888,7 @@ function renderBrowserFilters(panelEl, state) {
         html += '</select>';
     }
     if (showSections) {
-        for (const s of state.sectionList) {
+        for (const s of sectionList) {
             const active = state.visibleSections.has(s) ? ' browser-section-active' : '';
             html += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
         }
@@ -1867,23 +1914,19 @@ function renderBrowserGameList(panelEl, state) {
     const gamesEl = panelEl.querySelector('#browser-games');
     _vlist.scrollEl = gamesEl;
 
-    const gamesList = state.visibleGames;
-    if (!gamesList || gamesList.length === 0) {
+    const hasGames = state.groupedGames.some(g => g.games.length > 0);
+    if (!hasGames) {
         _vlist.items = null;
-        if (state.loading) {
-            gamesEl.innerHTML = '<div class="browser-empty"><p>Loading games\u2026</p></div>';
-        } else {
-            const label = state.explorerActive ? 'No games reached this position.' : 'No games found.';
-            gamesEl.innerHTML = `<div class="browser-empty"><p>${label}</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>`;
-        }
+        const label = state.explorerActive ? 'No games reached this position.' : 'No games found.';
+        gamesEl.innerHTML = `<div class="browser-empty"><p>${label}</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>`;
         return;
     }
 
     // Build flat item list
     const items = [];
-    const isPlayerMode = state.isPlayerMode;
-    if (isPlayerMode && !state.tournament && !state.isLocal) {
-        items.push({ type: 'profile', data: state.player });
+    const isPlayerMode = games.isPlayerMode();
+    if (isPlayerMode && !state.tournament && !games.isLocalMode()) {
+        items.push({ type: 'profile', data: games.getPlayer() });
     }
     for (const { header, games: groupItems } of state.groupedGames) {
         if (header) items.push({ type: 'header', data: header });
@@ -1967,7 +2010,7 @@ function wireViewerHeader() {
             if (!isCombinedWidth()) {
                 showBrowser();
             } else {
-                loadExplorer({ restoreMoves: _gamesState?.explorerMoveHistory });
+                loadExplorer({ restoreMoves: games.getExplorerMoves() });
             }
             return;
         }
@@ -1988,8 +2031,7 @@ function wireViewerHeader() {
         const plyEl = e.target.closest('[data-ply]');
         if (plyEl) {
             const ply = parseInt(plyEl.dataset.ply, 10);
-            if (ply === 0) games.explorerGoToStart();
-            else games.explorerGoToMove(ply);
+            games.setExplorerPosition(games.getExplorerMoves().slice(0, ply));
         }
     });
 
@@ -2013,7 +2055,7 @@ function wireViewerHeader() {
         }
         const explorerRow = e.target.closest('[data-explorer-san]');
         if (explorerRow) {
-            games.explorerPlayMove(explorerRow.dataset.explorerSan);
+            games.setExplorerPosition([...games.getExplorerMoves(), explorerRow.dataset.explorerSan]);
         }
     });
 }
@@ -2034,7 +2076,7 @@ function wireBrowserListeners(panelEl) {
             autocomplete.classList.add('hidden');
             searchInput.setAttribute('aria-expanded', 'false');
             panelEl.querySelector('#browser-filters')?.classList.remove('hidden');
-            if (_gamesState?.isPlayerMode) {
+            if (games.isPlayerMode()) {
                 games.clearPlayerMode();
                 clearBtn.classList.add('hidden');
             }
@@ -2049,7 +2091,7 @@ function wireBrowserListeners(panelEl) {
                 `<button type="button" class="browser-ac-item" role="option" data-player="${p.name}" data-norm="${p.norm}">${highlightMatch(p.name, query)}</button>`
             ).join('');
             const exactMatch = matches.find(p => p.name.toLowerCase() === query);
-            if (!_gamesState?.isLocal && (matches.length === 1 || exactMatch)) {
+            if (!games.isLocalMode() && (matches.length === 1 || exactMatch)) {
                 const profile = exactMatch || matches[0];
                 autocomplete.insertAdjacentHTML('afterbegin',
                     `<button type="button" class="browser-ac-item browser-ac-profile" data-profile="${profile.name}">View <strong>${profile.name}</strong> profile</button>`
@@ -2124,8 +2166,8 @@ function wireBrowserListeners(panelEl) {
         if (chip) {
             if (chip.dataset.chip === 'color') {
                 const toggling = chip.dataset.value;
-                const wasActive = _gamesState?.color === toggling;
-                games.toggleColorFilter(toggling);
+                const wasActive = games.getFilter('color') === toggling;
+                games.setFilter('color', games.getFilter('color') === toggling ? null : toggling);
                 // Orient board when entering a color filter
                 if (!wasActive && _viewMode === 'explorer') {
                     board.setOrientation(toggling === 'black' ? 'black' : 'white');
@@ -2161,11 +2203,11 @@ function wireBrowserListeners(panelEl) {
 
     panelEl.addEventListener('change', (e) => {
         if (e.target.id === 'browser-round-select') {
-            games.setRound(parseInt(e.target.value, 10));
+            games.setFilter('round', parseInt(e.target.value, 10));
         }
         if (e.target.dataset?.chip === 'tournament-select') {
             loadExplorer();
-            games.setTournamentFilter(e.target.value);
+            games.setFilter('tournament', e.target.value || null);
         }
     }, { signal });
 }

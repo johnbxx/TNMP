@@ -920,16 +920,16 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">game-panel.js</h4>
       <div class="path">src/game-panel.js</div>
-      <p>View/controller for the unified game panel. Orchestrates modal lifecycle, viewer↔editor mode switching, embedded browser sidebar, keyboard dispatch. Receives state from <code>games.js</code> via <code>onChange</code> — never calls getters.</p>
+      <p>View/controller for the unified game panel. Orchestrates modal lifecycle, viewer↔editor mode switching, embedded browser sidebar, keyboard dispatch. Pulls state from <code>games.js</code> via getters when <code>onChange</code> signal fires. SVG icons via sprite sheet with <code>icon()</code> helper.</p>
       <div class="exports">
         <span>openGamePanel()</span>
+        <span>openPanel()</span>
+        <span>openGameFromBrowser()</span>
         <span>closeGamePanel()</span>
-        <span>openGameWithPlayerNav()</span>
         <span>handlePanelKeydown()</span>
         <span>goToStart/Prev/Next/End()</span>
         <span>flipBoard()</span>
         <span>toggleAutoPlay()</span>
-        <span>toggleNag()</span>
         <span>launchExplorer()</span>
       </div>
     </div>
@@ -937,19 +937,21 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">games.js</h4>
       <div class="path">src/games.js</div>
-      <p>Pure data layer. Fetches <code>/query</code>, caches games, builds indexes by round/player/section, opening explorer trie (via <code>tree.js</code> replay engine), player search, tournament switching. Zero DOM. Pushes complete state via <code>onChange(callback)</code>.</p>
+      <p>Pure data store with named getters. Fetches <code>/query</code>, caches games, builds explorer trie (via <code>tree.js</code> replay engine), player search, tournament switching. Zero DOM. <code>onChange</code> is a bare signal — observers pull state via getters.</p>
       <div class="exports">
         <span>onChange()</span>
-        <span>getState()</span>
-        <span>fetchGames()</span>
-        <span>prefetchGames()</span>
-        <span>getCachedGame()</span>
+        <span>getGroupedGames()</span>
+        <span>getPlayer()</span>
+        <span>isPlayerMode()</span>
+        <span>getFilter()</span>
+        <span>setFilter()</span>
+        <span>isExplorerActive()</span>
+        <span>getExplorerStats()</span>
+        <span>ensureExplorer()</span>
+        <span>setExplorerPosition()</span>
         <span>selectPlayer()</span>
         <span>clearPlayerMode()</span>
         <span>switchDataSource()</span>
-        <span>launchExplorer()</span>
-        <span>setExplorerPosition()</span>
-        <span>explorerPlayMove()</span>
       </div>
     </div>
 
@@ -1058,7 +1060,7 @@
     <div class="module-card" style="border-left:3px solid var(--text-dim)">
       <h4>utils.js</h4>
       <div class="path">src/utils.js</div>
-      <p>Helpers: name formatting, result symbols, PGN header extraction.</p>
+      <p>Helpers: name formatting, result symbols, PGN header extraction, score percentage calculation.</p>
     </div>
     <div class="module-card" style="border-left:3px solid var(--text-dim)">
       <h4>toast.js</h4>

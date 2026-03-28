@@ -28,7 +28,6 @@ let _fetchGeneration = 0;
 
 let _allPlayers = null;         // [{ name, norm }] (for autocomplete)
 
-
 // Source selection
 let _currentSource = 'tournament';  // 'tournament' | 'player'
 let _currentPlayer = null;
@@ -46,92 +45,26 @@ let _sectionList = [];
 let _visibleSections = new Set();
 
 // Explorer
-let _explorer = null;           // { chess, moveHistory, gameIds }
+let _explorer = null;           // { chess, moveHistory }
 let _explorerActive = false;
 let _tree = null;               // explorer trie, rebuilt when source/filters change
-let _loading = false;
 
 // ─── Observer ──────────────────────────────────────────────────────
 
 let _onChange = null;
 
 export function onChange(fn) { _onChange = fn || null; }
-
-let _treeDirty = true;
-
-function notifyChange() {
-    _treeDirty = true;
-    if (_explorer) updateExplorerGameIds();
-    _onChange?.(getState());
-}
-
-function ensureTree() {
-    if (!_treeDirty) return;
-    _treeDirty = false;
-    const source = getSourceGames();
-    if (!source?.games) { _tree = null; return; }
-    const validIds = getFilteredGameIds();
-    const filtered = source.games.filter(g => g.pgn && g.gameId && validIds.has(g.gameId));
-    _tree = buildExplorerTree(filtered);
-}
-
-function getSourceTree() {
-    ensureTree();
-    return _tree;
-}
-
-// ─── State Snapshot ────────────────────────────────────────────────
-
-export function getState() {
-    const games = getVisibleGames();
-    const groups = groupGames(games);
-    const roundNumbers = _currentSource === 'tournament' && _tournamentTotalRounds > 0
-        ? Array.from({ length: _tournamentTotalRounds }, (_, i) => i + 1)
-        : [];
-
-    return {
-        // Source
-        player: _currentPlayer,
-        isPlayerMode: _currentSource === 'player',
-
-        // Filters
-        round: _filters.round,
-        tournament: _filters.tournament,
-        color: _filters.color,
-        event: _filters.event,
-        isLocal: isLocalMode(),
-
-        // Filter options
-        roundNumbers,
-        sectionList: _sectionList,
-        visibleSections: _visibleSections,
-        playerSources: _playerSources,
-        tournamentList: _tournamentList,
-        tournamentSlug: _activeTournamentSlug,
-
-        // Games
-        title: computeTitle(),
-        totalGames: (activeData()?.games || []).length,
-        localEvents: isLocalMode() ? [...new Set((_localData?.games || []).map(g => g.tournament).filter(Boolean))] : null,
-        visibleGames: games,
-        groupedGames: groups,
-        gameIdList: groups.flatMap(g => g.games).filter(g => g.gameId).map(g => g.gameId),
-
-        // Explorer
-        explorerActive: _explorerActive,
-        explorerFen: _explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-        explorerStats: _explorer ? getExplorerStats() : null,
-        explorerMoveHistory: _explorer?.moveHistory.slice() ?? [],
-
-        // Status
-        loading: _loading,
-
-        // Derived
-        activeFilter: computeActiveFilter(),
-    };
-}
-
-function computeTitle() {
+export function getActiveTournamentSlug() { return _activeTournamentSlug; }
+export function getExplorerMoves() { return _explorer?.moveHistory ?? []; }
+export function getFilter(key) { return _filters[key] ?? null; }
+export function getVisibleSections() { return _visibleSections; }
+export function isExplorerActive() { return _explorerActive; }
+export function getExplorerFen() { return _explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'; }
+export function getTournamentList() { return _tournamentList; }
+export function getPlayer() { return _currentPlayer; }
+export function isPlayerMode() { return _currentSource === 'player'; }
+export function getPlayerSources() { return _playerSources; }
+export function getTitle() {
     if (isLocalMode()) {
         const games = _localData.games || [];
         const events = new Set(games.map(g => g.tournament).filter(Boolean));
@@ -140,30 +73,28 @@ function computeTitle() {
     }
     return activeData()?.games?.[0]?.tournament || 'Tournament Games';
 }
-
-function buildPlayerSources() {
-    const allGames = _playerData?.games || [];
-    const sources = new Map();
-    for (const g of allGames) {
-        const key = g.tournamentSlug || g.tournament;
-        if (key && !sources.has(key)) sources.set(key, g.tournament || key);
-    }
-    return [...sources].map(([value, label]) => ({ value, label }));
+export function getRoundNumbers() {
+    return _currentSource === 'tournament' && _tournamentTotalRounds > 0
+        ? Array.from({ length: _tournamentTotalRounds }, (_, i) => i + 1) : [];
+}
+export function getSectionList() { return _sectionList; }
+export function getLocalEvents() {
+    if (!_localData?.games) return null;
+    const events = [...new Set(_localData.games.map(g => g.tournament).filter(Boolean))];
+    return events.length > 1 ? events : null;
 }
 
-function computeActiveFilter() {
-    if (_currentSource === 'player') {
-        return {
-            type: 'player', label: _currentPlayer,
-            tournament: _filters.tournament, color: _filters.color,
-            opponent: _filters.opponent,
-        };
-    }
-    if (_sectionList.length > 1 && _visibleSections.size < _sectionList.length) {
-        const sections = [..._visibleSections];
-        return { type: 'section', label: sections.join(', '), sections };
-    }
-    return null;
+let _treeDirty = true;
+
+function notifyChange() {
+    _treeDirty = true;
+    _onChange?.();
+}
+
+// ─── Derived Queries ──────────────────────────────────────────────
+
+export function getGroupedGames() {
+    return groupGames(getVisibleGames());
 }
 
 // ─── Queries ───────────────────────────────────────────────────────
@@ -187,7 +118,6 @@ export function updateCachedGame(gameId, headers) {
     if (headers.BlackElo) game.blackElo = headers.BlackElo;
     if (headers.ECO) game.eco = headers.ECO;
     if (headers.Opening) game.openingName = headers.Opening;
-    notifyChange();
 }
 
 export function getOrientationForGame(game) {
@@ -206,15 +136,6 @@ export function searchPlayers(query) {
 
 // ─── Mutations ─────────────────────────────────────────────────────
 
-function applySubFilters({ tournament, color, opponent, opponentNorm } = {}) {
-    if (tournament && tournament !== 'all') _filters.tournament = tournament;
-    if (color) _filters.color = color;
-    if (opponent) {
-        _filters.opponent = opponent;
-        _filters.opponentNorm = opponentNorm || null;
-    }
-}
-
 export async function selectPlayer(name, opts = {}) {
     let norm = opts.norm || null;
 
@@ -223,24 +144,26 @@ export async function selectPlayer(name, opts = {}) {
     if (opts.data) {
         _playerData = opts.data;
     } else if (!isLocalMode() && (!_playerData?.games.length || !isSamePlayer)) {
-        _currentSource = 'player';
-        _currentPlayer = name;
-        _loading = true;
-        notifyChange();
         const query = norm
             ? { player_norm: norm, tournament: 'all', include: 'pgn' }
             : { player: name, tournament: 'all', include: 'pgn' };
         const data = await fetchGames(query);
         if (data.playerNorm) norm = data.playerNorm;
-        _loading = false;
     }
 
     _currentSource = 'player';
     _currentPlayer = name;
     _currentPlayerNorm = norm;
-    _playerSources = buildPlayerSources();
+    const sources = new Map();
+    for (const g of (_playerData?.games || [])) {
+        const key = g.tournamentSlug || g.tournament;
+        if (key && !sources.has(key)) sources.set(key, g.tournament || key);
+    }
+    _playerSources = [...sources].map(([value, label]) => ({ value, label }));
     _filters = { ...EMPTY_FILTERS };
-    applySubFilters(opts);
+    if (opts.tournament && opts.tournament !== 'all') _filters.tournament = opts.tournament;
+    if (opts.color) _filters.color = opts.color;
+    if (opts.opponent) { _filters.opponent = opts.opponent; _filters.opponentNorm = opts.opponentNorm || null; }
     notifyChange();
 }
 
@@ -261,7 +184,6 @@ export function clearPlayerMode() {
     if (_explorer) {
         _explorer.chess.reset();
         _explorer.moveHistory = [];
-        _explorer.gameIds = null;
     }
     notifyChange();
 }
@@ -273,18 +195,14 @@ export async function switchDataSource(value, currentSlug) {
     } else {
         const isCurrentTournament = value === currentSlug;
         _activeTournamentSlug = isCurrentTournament ? null : value;
-        _tournamentData = null;
-        _playerData = null;
         _currentSource = 'tournament';
         _currentPlayer = null;
         _currentPlayerNorm = null;
         _playerSources = [];
         _filters = { ...EMPTY_FILTERS };
 
-        _loading = true;
-        notifyChange();
         await fetchGames({ tournament: value, include: 'pgn,submissions' }, { cache: isCurrentTournament });
-        _loading = false;
+        _playerData = null;
 
         try { _playerList = await fetchPlayerList(); } catch { _playerList = buildPlayerListFromGames(); }
     }
@@ -293,13 +211,12 @@ export async function switchDataSource(value, currentSlug) {
     _sectionList = _tournamentSections;
     _visibleSections = new Set(_sectionList);
     _explorer = null;
-    launchExplorer();
+    ensureExplorer();
     notifyChange();
 }
 
-export function setRound(round) {
-    _filters.round = round;
-
+export function setFilter(key, value) {
+    _filters[key] = value ?? null;
     notifyChange();
 }
 
@@ -320,22 +237,10 @@ export function toggleSection(section) {
     notifyChange();
 }
 
-export function setTournamentFilter(value) {
-    _filters.tournament = value || null;
-
-    notifyChange();
-}
-
-export function toggleColorFilter(color) {
-    _filters.color = _filters.color === color ? null : color;
-
-    notifyChange();
-}
 
 export function clearFilter() {
     _filters = { ...EMPTY_FILTERS };
     _visibleSections = new Set(_sectionList);
-    if (_explorer) _explorer.gameIds = null;
     notifyChange();
 }
 
@@ -349,17 +254,12 @@ export function closeBrowser() {
 
 // ─── Explorer ──────────────────────────────────────────────────────
 
-/** Ensure _explorer object exists with a current tree. */
-function ensureExplorer() {
+/** Ensure _explorer object exists and is active. */
+export function ensureExplorer() {
     if (!_explorer) {
-        _explorer = { chess: new Chess(), moveHistory: [], gameIds: null };
+        _explorer = { chess: new Chess(), moveHistory: [] };
     }
-}
-
-export function launchExplorer() {
-    ensureExplorer();
     _explorerActive = true;
-    notifyChange();
 }
 
 export function setExplorerPosition(moves = []) {
@@ -370,49 +270,6 @@ export function setExplorerPosition(moves = []) {
         try { _explorer.chess.move(san); } catch { break; }
         _explorer.moveHistory.push(san);
     }
-    updateExplorerGameIds();
-    _explorerActive = true;
-    notifyChange();
-}
-
-export function closeExplorer() {
-    _explorerActive = false;
-    notifyChange();
-}
-
-export function explorerPlayMove(san) {
-    ensureExplorer();
-    try { _explorer.chess.move(san); } catch { return false; }
-    _explorer.moveHistory.push(san);
-    updateExplorerGameIds();
-    notifyChange();
-    return true;
-}
-
-export function explorerGoBack() {
-    if (!_explorer || _explorer.moveHistory.length === 0) return;
-    _explorer.chess.undo();
-    _explorer.moveHistory.pop();
-    updateExplorerGameIds();
-    notifyChange();
-}
-
-export function explorerGoToStart() {
-    if (!_explorer) return;
-    _explorer.chess.reset();
-    _explorer.moveHistory = [];
-    _explorer.gameIds = null;
-    notifyChange();
-}
-
-export function explorerGoToMove(moveIndex) {
-    if (!_explorer) return;
-    _explorer.chess.reset();
-    _explorer.moveHistory = _explorer.moveHistory.slice(0, moveIndex);
-    for (const san of _explorer.moveHistory) {
-        try { _explorer.chess.move(san); } catch { break; }
-    }
-    updateExplorerGameIds();
     notifyChange();
 }
 
@@ -472,7 +329,7 @@ export function prefetchGames() {
     } catch {
         localStorage.removeItem(GAMES_CACHE_KEY);
     }
-    fetchGames({ include: 'pgn,submissions' }, { cache: true }).then(() => notifyChange()).catch(() => {});
+    fetchGames({ include: 'pgn,submissions' }, { cache: true }).catch(() => {});
     fetchTournamentList().catch(() => {});
     fetchPlayerList().catch(() => {});
 }
@@ -503,14 +360,13 @@ async function fetchTournamentList() {
 
 // ─── Internals ─────────────────────────────────────────────────────
 
-function isLocalMode() { return !!_localData; }
+export function isLocalMode() { return !!_localData; }
 function activeData() { return _localData || _tournamentData; }
 
 function getSourceGames() {
     if (_currentSource === 'player') return _playerData;
     return _localData || _tournamentData;
 }
-
 
 /** Default round: latest round in tournament mode, null otherwise. */
 function resolveDefaultRound(forceReset = false) {
@@ -534,8 +390,10 @@ function passesUserFilters(g) {
 }
 
 function getVisibleGames() {
-    let games = getSourceGames()?.games || [];
-    const explorerGameIds = _explorer?.gameIds;
+    const source = getSourceGames();
+    let games = source?.games || [];
+    const statsGameIds = _explorerActive ? getExplorerStats()?.gameIds : null;
+    const explorerGameIds = statsGameIds ? new Set(statsGameIds) : null;
 
     games = games.filter(g => {
         if (!passesUserFilters(g)) return false;
@@ -596,40 +454,15 @@ function buildPlayerListFromGames() {
     return [...byNorm].map(([norm, name]) => ({ name, norm })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Get the set of gameIds that pass user filters (excluding explorer filter). */
-function getFilteredGameIds() {
-    const games = getSourceGames()?.games || [];
-    const ids = new Set();
-    for (const g of games) {
-        if (passesUserFilters(g) && g.gameId) ids.add(g.gameId);
-    }
-    return ids;
-}
-
-function getExplorerStats() {
-    const tree = getSourceTree();
-    if (!_explorer || !tree) return null;
-    return getPositionStats(tree, _explorer.chess.fen());
-}
-
-function updateExplorerGameIds() {
-    const tree = getSourceTree();
-    if (!_explorer || !tree) {
-        if (_explorer) _explorer.gameIds = null;
-        return;
-    }
-    const stats = getPositionStats(tree, _explorer.chess.fen());
-    _explorer.gameIds = stats?.gameIds ? new Set(stats.gameIds) : new Set();
-}
-
 // ─── Explorer Trie ─────────────────────────────────────────────────
 
-const RESULT_INCREMENTS = {
-    '1-0': { w: 1, d: 0, b: 0 },
-    '0-1': { w: 0, d: 0, b: 1 },
-    '1/2-1/2': { w: 0, d: 1, b: 0 },
-    '*': { w: 0, d: 0, b: 0 },
-};
+export function getExplorerStats() {
+    if (!_explorer) return null;
+    const node = buildExplorerTree().get(hashFen(_explorer.chess.fen()));
+    if (!node) return null;
+    const moves = [...node.moves.values()].sort((a, b) => b.total - a.total);
+    return { total: node.total, whiteWins: node.whiteWins, draws: node.draws, blackWins: node.blackWins, moves, gameIds: node.gameIds };
+}
 
 function extractMoveTokens(pgn) {
     const moveText = extractMoveText(pgn);
@@ -662,13 +495,16 @@ function extractMoveTokens(pgn) {
     return moves;
 }
 
-function createNode() { return { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; }
+const RESULT = { '1-0': { w: 1, d: 0, b: 0 }, '0-1': { w: 0, d: 0, b: 1 }, '1/2-1/2': { w: 0, d: 1, b: 0 }, '*': { w: 0, d: 0, b: 0 } };
 
-function buildExplorerTree(games) {
+function buildExplorerTree() {
+    if (!_treeDirty) return _tree;
+    _treeDirty = false;
+    const games = (getSourceGames()?.games || []).filter(g => g.pgn && g.gameId && passesUserFilters(g));
     const tree = new Map();
     function getOrCreate(hash) {
         let node = tree.get(hash);
-        if (!node) { node = createNode(); tree.set(hash, node); }
+        if (!node) { node = { total: 0, whiteWins: 0, draws: 0, blackWins: 0, moves: new Map(), gameIds: [] }; tree.set(hash, node); }
         return node;
     }
 
@@ -676,7 +512,7 @@ function buildExplorerTree(games) {
 
     for (const game of games) {
         if (!game.pgn || !game.result) continue;
-        const r = RESULT_INCREMENTS[game.result];
+        const r = RESULT[game.result];
         if (!r) continue;
         if (!game._moves) game._moves = extractMoveTokens(game.pgn);
         const moves = game._moves;
@@ -711,19 +547,6 @@ function buildExplorerTree(games) {
             hash = nextHash;
         }
     }
-    return tree;
-}
-
-function getPositionStats(tree, fen) {
-    const hash = hashFen(fen);
-    const node = tree.get(hash);
-    if (!node) return null;
-    const moves = [...node.moves.values()].sort((a, b) => b.total - a.total);
-    return { total: node.total, whiteWins: node.whiteWins, draws: node.draws, blackWins: node.blackWins, moves, gameIds: node.gameIds };
-}
-
-export function scorePercent(whiteWins, draws, blackWins) {
-    const total = whiteWins + draws + blackWins;
-    if (total === 0) return 50;
-    return Math.round(((whiteWins + draws * 0.5) / total) * 100);
+    _tree = tree;
+    return _tree;
 }

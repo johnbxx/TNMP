@@ -68,3 +68,9 @@ export function resultDisplay(code) {
     if (c === 'D' || c === '\u00BD' || c === '½' || c === '&frac12;') return { emoji: '\uD83E\uDD1D', text: 'Draw', outcome: 'draw' };
     return null;
 }
+
+export function scorePercent(whiteWins, draws, blackWins) {
+    const total = whiteWins + draws + blackWins;
+    if (total === 0) return 50;
+    return Math.round(((whiteWins + draws * 0.5) / total) * 100);
+}
