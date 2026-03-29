@@ -931,6 +931,8 @@ export function openGamePanel(opts = {}) {
     // No game specified — explorer mode (default)
     if (!game && !opts.pgn) {
         loadExplorer();
+        // Mobile: show game list instead of explorer board
+        if (!isCombinedWidth()) showBrowser();
         return;
     }
 

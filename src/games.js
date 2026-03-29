@@ -310,6 +310,7 @@ export async function fetchGames(queryParams = {}, { cache = false } = {}) {
         try { localStorage.setItem(GAMES_CACHE_KEY, JSON.stringify({ games: data.games, sections: data.sections, totalRounds: data.totalRounds })); } catch { /* quota */ }
     }
 
+    notifyChange();
     return data;
 }
 
@@ -568,11 +569,11 @@ function extractMoveTokens(pgn) {
     const len = moveText.length;
     while (i < len) {
         const ch = moveText.charCodeAt(i);
+        if (ch === 123) { const end = moveText.indexOf('}', i + 1); i = end === -1 ? len : end + 1; continue; } // { comment } — must be before () tracking
         if (ch === 40) { depth++; i++; continue; } // (
         if (ch === 41) { depth--; i++; continue; } // )
         if (depth > 0) { i++; continue; }
         if (ch <= 32) { i++; continue; } // whitespace
-        if (ch === 123) { const end = moveText.indexOf('}', i + 1); i = end === -1 ? len : end + 1; continue; } // { comment }
         if (ch === 59) { const end = moveText.indexOf('\n', i + 1); i = end === -1 ? len : end + 1; continue; } // ; line comment
         if (ch === 36) { i++; while (i < len && moveText.charCodeAt(i) >= 48 && moveText.charCodeAt(i) <= 57) i++; continue; } // $NAG
         // Collect token

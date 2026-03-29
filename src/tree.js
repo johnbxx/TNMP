@@ -154,6 +154,44 @@ export class ReplayEngine {
     get turn() { return this.us === W ? 'w' : 'b'; }
     set turn(v) { this.us = v === 'w' ? W : B; }
 
+    // Is the piece on `sq` pinned to our king? (i.e., moving it to `toSq` would expose king)
+    // Only returns true if the move doesn't stay on the pin ray.
+    _isPinned(sq, toSq) {
+        const kingSq = this.us === W ? this.wKing : this.bKing;
+        const enemy = this.us ^ 8;
+        // Find ray direction from king to piece
+        const dr = Math.sign((sq >> 4) - (kingSq >> 4));  // rank delta: -1, 0, 1
+        const df = Math.sign((sq & 0xf) - (kingSq & 0xf)); // file delta: -1, 0, 1
+        if (dr === 0 && df === 0) return false;
+        const offset = dr * 16 + df;
+        // Check if sq is actually on a ray from king
+        let s = kingSq + offset;
+        while (!(s & 0x88) && s !== sq) {
+            if (this.board[s]) return false; // something between king and piece, not pinned
+            s += offset;
+        }
+        if (s !== sq) return false; // sq not on this ray from king
+        // Check if toSq is on the same ray (moving along the pin line is legal)
+        const dr2 = Math.sign((toSq >> 4) - (kingSq >> 4));
+        const df2 = Math.sign((toSq & 0xf) - (kingSq & 0xf));
+        if (dr2 === dr && df2 === df) return false; // moving along pin ray toward attacker
+        if (dr2 === -dr && df2 === -df) return false; // moving along pin ray toward king
+        // Walk from sq away from king to find attacker
+        s = sq + offset;
+        while (!(s & 0x88)) {
+            const p = this.board[s];
+            if (p) {
+                if ((p >> 3) !== (enemy >> 3)) return false; // friendly piece, no pin
+                const ptype = p & 7;
+                // Rook/queen pin on rank/file, bishop/queen pin on diagonal
+                if (dr === 0 || df === 0) return ptype === R || ptype === Q;
+                return ptype === _B || ptype === Q;
+            }
+            s += offset;
+        }
+        return false;
+    }
+
     move(san) {
         let len = san.length;
         const lastC = san.charCodeAt(len - 1);
@@ -250,6 +288,7 @@ export class ReplayEngine {
                 if (this.board[sq] !== ourPiece) continue;
                 if (fromFile !== -1 && (sq & 0xf) !== fromFile) continue;
                 if (fromRank !== -1 && (sq >> 4) !== fromRank) continue;
+                if (this._isPinned(sq, toSq)) continue;
                 fromSq = sq;
                 break;
             }
@@ -264,7 +303,8 @@ export class ReplayEngine {
                     if (p) {
                         if (p === ourPiece &&
                             (fromFile === -1 || (sq & 0xf) === fromFile) &&
-                            (fromRank === -1 || (sq >> 4) === fromRank)) {
+                            (fromRank === -1 || (sq >> 4) === fromRank) &&
+                            !this._isPinned(sq, toSq)) {
                             fromSq = sq;
                         }
                         break;
