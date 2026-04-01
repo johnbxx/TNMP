@@ -22,7 +22,7 @@
     "wrangler": "^4.77.0"
   },
   "dependencies": {
-    "@lichess-org/chessground": "^10.1.0",
+    "@lichess-org/chessground": "^10.1.1",
     "@lichess-org/stockfish-web": "^0.2.3",
     "chess.js": "^1.4.0"
   }
