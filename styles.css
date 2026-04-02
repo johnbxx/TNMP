@@ -1,3 +1,6 @@
+@import '@lichess-org/chessground/assets/chessground.base.css';
+@import '@lichess-org/chessground/assets/chessground.cburnett.css';
+
 :root {
     /* State gradient colors */
     --gradient-yes-start: #00c853;
@@ -3892,6 +3895,29 @@ cg-board piece.dragging { z-index: 10000 !important; }
     width: 95%;
     max-height: 90vh;
     overflow: visible;
+    position: relative;
+}
+.style-close-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    background: var(--close-btn-bg);
+    border: none;
+    color: var(--toolbar-icon);
+    font-size: 1.5rem;
+    line-height: 1;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+.style-close-btn:hover {
+    color: var(--toolbar-icon-hover);
+    background: var(--close-btn-bg-hover);
 }
 .style-preview-board {
     display: grid;
@@ -3932,6 +3958,57 @@ cg-board piece.dragging { z-index: 10000 !important; }
     color: var(--text-subtle);
     min-width: 50px;
     margin: 0;
+}
+
+/* Board coordinates — inside the board */
+.cg-wrap coords {
+    font-size: 10px;
+}
+/* Ranks: top-right of each square along the h-file */
+.cg-wrap coords.ranks {
+    top: 0;
+    left: auto;
+    right: 0;
+    text-align: right;
+}
+.cg-wrap coords.ranks coord {
+    transform: none;
+    padding: 0.25em 0.35em 0 0;
+}
+/* Files: bottom-left of each square along rank 1 */
+.cg-wrap coords.files {
+    bottom: 0;
+    left: 0;
+    text-transform: none;
+    text-align: left;
+}
+.cg-wrap coords.files coord {
+    padding: 0 0 0 0.5em;
+}
+/* coord-light = light square → dark text; coord-dark = dark square → light text */
+.cg-wrap coords coord.coord-light { color: rgba(0, 0, 0, 0.6); }
+.cg-wrap coords coord.coord-dark { color: rgba(255, 255, 255, 0.7); }
+
+.style-toggles-row {
+    display: flex;
+    gap: 1.5rem;
+}
+.style-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: normal;
+}
+.style-toggle input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+.style-toggle-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }
 
 /* Custom dropdown */

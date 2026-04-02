@@ -7,6 +7,7 @@
  */
 
 import { openModal } from './modal.js';
+import { setCoordinates } from './board.js';
 
 // --- Piece themes ---
 
@@ -318,14 +319,15 @@ export function initStyle(mount) {
         <div id="style-modal" class="modal hidden" role="dialog" aria-labelledby="style-modal-title" aria-modal="true">
             <div class="modal-backdrop"></div>
             <div class="modal-content style-modal-content">
+                <button data-close-modal class="style-close-btn" aria-label="Close">&times;</button>
                 <h2 id="style-modal-title">Style</h2>
 
                 <div id="style-preview-board" class="style-preview-board"></div>
 
                 <div class="style-controls">
                     <div class="style-row">
-                        <label>Pieces</label>
-                        <div id="style-pieces" class="style-dropdown">
+                        <label>Theme</label>
+                        <div id="style-theme" class="style-dropdown">
                             <button type="button" class="style-dropdown-trigger"></button>
                             <div class="style-dropdown-menu"></div>
                         </div>
@@ -344,17 +346,25 @@ export function initStyle(mount) {
                     </div>
 
                     <div class="style-row">
-                        <label>Theme</label>
-                        <div id="style-theme" class="style-dropdown">
+                        <label>Pieces</label>
+                        <div id="style-pieces" class="style-dropdown">
                             <button type="button" class="style-dropdown-trigger"></button>
                             <div class="style-dropdown-menu"></div>
                         </div>
                     </div>
+
+                    <div class="style-row style-toggles-row">
+                        <label class="style-toggle">
+                            <input type="checkbox" id="style-coords" ${localStorage.getItem('boardCoords') === 'true' ? 'checked' : ''}>
+                            <span class="style-toggle-label">Coordinates</span>
+                        </label>
+                        <label class="style-toggle">
+                            <input type="checkbox" id="style-dark-mode">
+                            <span class="style-toggle-label">Dark Mode</span>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="modal-buttons">
-                    <button data-close-modal class="modal-btn modal-btn-secondary">Close</button>
-                </div>
             </div>
         </div>`;
 
@@ -390,17 +400,38 @@ export function initStyle(mount) {
     lightPicker.addEventListener('input', onColorChange);
     darkPicker.addEventListener('input', onColorChange);
 
+    // Wire up coordinates toggle
+    document.getElementById('style-coords').addEventListener('change', (e) => {
+        setCoordinates(e.target.checked);
+    });
+
     // Wire up app theme dropdown
     initDropdown('style-theme', (schemeId) => {
         applyAppScheme(schemeId);
         updateSchemeTrigger(schemeId);
     });
 
+    // Wire up dark mode toggle
+    document.getElementById('style-dark-mode').addEventListener('change', (e) => {
+        const dark = e.target.checked;
+        localStorage.setItem('darkMode', dark ? '1' : '0');
+        document.documentElement.classList.toggle('dark-mode', dark);
+    });
+
     // Apply stored preferences on load
+    initDarkMode();
     const stored = getStored();
     applyPieceTheme(stored.pieceTheme);
     applyBoardColors(stored.boardLight, stored.boardDark);
     if (stored.appScheme !== 'default') applyAppScheme(stored.appScheme);
+}
+
+function initDarkMode() {
+    const stored = localStorage.getItem('darkMode');
+    const dark = stored !== null
+        ? stored === '1'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (dark) document.documentElement.classList.add('dark-mode');
 }
 
 function refreshPreview() {
@@ -425,6 +456,9 @@ export function openStyle() {
     // Set color pickers
     document.getElementById('board-light-picker').value = stored.boardLight;
     document.getElementById('board-dark-picker').value = stored.boardDark;
+
+    // Set dark mode toggle
+    document.getElementById('style-dark-mode').checked = document.documentElement.classList.contains('dark-mode');
 
     // Render preview
     refreshPreview();

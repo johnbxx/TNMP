@@ -8,9 +8,6 @@
 
 import { Chess } from 'chess.js';
 import { Chessground } from '@lichess-org/chessground';
-import '@lichess-org/chessground/assets/chessground.base.css';
-import '@lichess-org/chessground/assets/chessground.brown.css';
-import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import { START_FEN } from './pgn.js';
 
 let _cg = null;
@@ -112,10 +109,15 @@ export function createBoard(containerId, { onMove, orientation = 'white', fen } 
         animation: { enabled: true, duration: 200 },
         premovable: { enabled: false },
         predroppable: { enabled: false },
-        coordinates: false,
+        coordinates: localStorage.getItem('boardCoords') === 'true',
     });
 
     return _cg;
+}
+
+export function setCoordinates(show) {
+    if (_cg) _cg.set({ coordinates: show });
+    localStorage.setItem('boardCoords', show);
 }
 
 export function setPosition(fen, animate = true) {

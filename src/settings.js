@@ -39,12 +39,6 @@ export function initSettings(mount) {
                     </div>
                     <p id="push-status" class="notification-status hidden" role="alert" aria-live="assertive"></p>
                 </div>
-                <div class="setting-group">
-                    <label class="notify-pref-label">
-                        <input type="checkbox" id="dark-mode-toggle">
-                        Dark mode
-                    </label>
-                </div>
                 <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
                 <div class="modal-buttons">
                     <button data-close-modal class="modal-btn modal-btn-secondary">Cancel</button>
@@ -52,17 +46,8 @@ export function initSettings(mount) {
                 </div>
             </div>
         </div>`;
-    initDarkMode();
     document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
     document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
-}
-
-function initDarkMode() {
-    const stored = localStorage.getItem('darkMode');
-    const dark = stored !== null
-        ? stored === '1'
-        : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (dark) document.documentElement.classList.add('dark-mode');
 }
 
 // --- Settings modal ---
@@ -73,7 +58,6 @@ export function openSettings() {
     const input = document.getElementById('player-name-input');
     input.value = CONFIG.playerName;
     document.getElementById('settings-autocomplete').classList.add('hidden');
-    document.getElementById('dark-mode-toggle').checked = document.documentElement.classList.contains('dark-mode');
     openModal('settings-modal', input);
     checkPushStatus();
     if (!_autocompleteReady) {
@@ -89,10 +73,6 @@ export function saveSettings(checkPairings) {
 
     CONFIG.playerName = newName;
     CONFIG.playerNorm = input.dataset.norm || '';
-
-    const dark = document.getElementById('dark-mode-toggle').checked;
-    localStorage.setItem('darkMode', dark ? '1' : '0');
-    document.documentElement.classList.toggle('dark-mode', dark);
 
     closeModal('settings-modal');
 
