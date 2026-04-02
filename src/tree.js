@@ -171,11 +171,11 @@ export class ReplayEngine {
             s += offset;
         }
         if (s !== sq) return false; // sq not on this ray from king
-        // Check if toSq is on the same ray (moving along the pin line is legal)
-        const dr2 = Math.sign((toSq >> 4) - (kingSq >> 4));
-        const df2 = Math.sign((toSq & 0xf) - (kingSq & 0xf));
-        if (dr2 === dr && df2 === df) return false; // moving along pin ray toward attacker
-        if (dr2 === -dr && df2 === -df) return false; // moving along pin ray toward king
+        // Check if toSq is actually on the pin ray (walk it, don't approximate with signs)
+        s = kingSq + offset;
+        while (!(s & 0x88)) { if (s === toSq) return false; s += offset; }
+        s = kingSq - offset;
+        while (!(s & 0x88)) { if (s === toSq) return false; s -= offset; }
         // Walk from sq away from king to find attacker
         s = sq + offset;
         while (!(s & 0x88)) {

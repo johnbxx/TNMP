@@ -52,6 +52,30 @@ const APP_SCHEMES = [
     { id: 'mocha',    name: 'Mocha',     accent: '#d4a373', bg: '#2d2420', bgEnd: '#1a1210' },
     { id: 'slate',    name: 'Slate',     accent: '#74b9ff', bg: '#2d3436', bgEnd: '#1a1e20' },
     { id: 'charcoal', name: 'Charcoal',  accent: '#e0e0e0', bg: '#333333', bgEnd: '#1a1a1a' },
+    // --- Light themes ---
+    { id: 'mi-light', name: 'MI Light',  accent: '#00421c', bg: '#fcfcfc', bgEnd: '#fcfcfc', vars: {
+        '--text-primary': '#4f4f4f',
+        '--text-muted': '#000000',
+        '--text-secondary': '#5c5c5c',
+        '--text-subtle': '#545454',
+        '--text-faint': '#545454',
+        '--text-link-hover': '#007523',
+        '--raised-panel-bg': '#f4f4f4',
+        '--shadow-color': '#c2c2c2',
+        '--surface-subtle': '#ebebeb',
+        '--surface': 'rgba(0, 0, 0, 0.04)',
+        '--surface-primary': '#fcfcfc',
+        '--border-color': 'rgba(0, 0, 0, 0.12)',
+        '--overlay-light': 'rgba(0, 0, 0, 0.06)',
+        '--overlay-light-hover': 'rgba(0, 0, 0, 0.1)',
+        '--input-bg': 'rgba(0, 0, 0, 0.05)',
+        '--toolbar-icon': '#666',
+        '--toolbar-icon-hover': '#333',
+        '--close-btn-bg': 'rgba(0, 0, 0, 0.08)',
+        '--close-btn-bg-hover': 'rgba(0, 0, 0, 0.15)',
+        '--search-bg': 'rgba(0, 0, 0, 0.05)',
+        '--popup-bg': 'rgba(252, 252, 252, 0.97)',
+    }},
 ];
 
 // --- State ---
@@ -122,20 +146,32 @@ function applyBoardColors(light, dark) {
 
 // --- App scheme application ---
 
-// Variables set on :root for all themes
-const ROOT_VARS = ['--accent', '--modal-bg-start', '--modal-bg-end', '--surface-primary'];
+// Track which vars were set so we can clear them on theme switch
+let _lastSchemeVars = [];
 
 function applyAppScheme(schemeId) {
     const scheme = APP_SCHEMES.find(s => s.id === schemeId) || APP_SCHEMES[0];
-    const root = document.documentElement;
 
-    for (const v of ROOT_VARS) root.style.removeProperty(v);
+    // Clear previous vars from all modal-content elements
+    const modals = document.querySelectorAll('.modal-content');
+    for (const v of _lastSchemeVars) {
+        for (const m of modals) m.style.removeProperty(v);
+    }
+    _lastSchemeVars = [];
 
     if (schemeId !== 'default') {
-        root.style.setProperty('--accent', scheme.accent);
-        root.style.setProperty('--modal-bg-start', scheme.bg);
-        root.style.setProperty('--modal-bg-end', scheme.bgEnd);
-        root.style.setProperty('--surface-primary', scheme.bgEnd);
+        // Base vars every scheme sets
+        const allVars = {
+            '--accent': scheme.accent,
+            '--modal-bg-start': scheme.bg,
+            '--modal-bg-end': scheme.bgEnd,
+            '--surface-primary': scheme.bgEnd,
+            ...scheme.vars,
+        };
+        for (const [name, val] of Object.entries(allVars)) {
+            for (const m of modals) m.style.setProperty(name, val);
+            _lastSchemeVars.push(name);
+        }
     }
 
     localStorage.setItem('appScheme', schemeId);

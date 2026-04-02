@@ -2,16 +2,11 @@ export const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments
 export const MI_BASE_URL = 'https://www.milibrary.org';
 
 export function corsHeaders(env, request) {
-    const allowed = env.ALLOWED_ORIGIN || '*';
     const requestOrigin = request?.headers?.get('Origin') || '';
 
-    let origin = allowed;
-    if (requestOrigin.startsWith('http://localhost:')) {
-        origin = requestOrigin;
-    }
-
+    // Allow any origin for embed support (restrict to specific domains later)
     return {
-        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Origin': requestOrigin || '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
     };

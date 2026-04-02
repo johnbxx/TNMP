@@ -294,7 +294,7 @@ export async function retryPendingNotifications(env) {
         if (!record?.retryAfter || !record.retryPayload) continue;
         if (new Date(record.retryAfter) > now) continue;
 
-            try {
+        try {
             const payload = JSON.parse(record.retryPayload);
             if (payload.expiresAt && new Date(payload.expiresAt) < now) {
                 console.log(`Retry expired for ${key}, clearing`);

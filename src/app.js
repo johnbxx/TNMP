@@ -510,8 +510,8 @@ if ('serviceWorker' in navigator) {
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
     initSettings(document.getElementById('settings-mount'));
-    initStyle(document.getElementById('style-mount'));
     initGamePanel(document.getElementById('game-panel-mount'));
+    initStyle(document.getElementById('style-mount'));
 
     // Comments button starts active
     document.querySelector('[data-action="viewer-comments"]')?.classList.add('active');
@@ -531,6 +531,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!CONFIG.playerName) setTimeout(() => openSettings(), 300);
         });
         setTimeout(() => openModal('about-modal'), 500);
+    }
+
+    // Dev-only palette editor (Cmd+Shift+P to toggle)
+    if (import.meta.env.DEV) {
+        import('./palette-editor.js').then(m => m.initPaletteEditor());
     }
 
     // App bootstrap

@@ -20,17 +20,18 @@
     --accent-rgb: 0, 200, 83;
     --accent-end: #1de9b6;
 
-    /* Win/loss (never changes with app theme) */
+    /* Win/loss */
     --win: #00c853;
-    --win-rgb: 0, 200, 83;
+    --lose: #ff6b6b;
 
-    /* Result pill styling (overridden by light themes) */
-    --result-win-bg: rgba(var(--win-rgb), 0.1);
-    --result-win-border: var(--win);
-    --result-win-text: var(--win);
-    --result-lose-bg: rgba(var(--status-error-rgb), 0.06);
-    --result-lose-border: var(--status-error);
-    --result-lose-text: var(--status-error);
+    /* Result styling */
+    --result-win-bg: rgba(0, 200, 83, 0.1);
+    --result-win-border: #00c853;
+    --result-win-text: #00c853;
+    --result-lose-bg: rgba(255, 107, 107, 0.06);
+    --result-lose-border: #ff6b6b;
+    --result-lose-text: #ff6b6b;
+    --result-draw-border: rgba(255, 255, 255, 0.5);
 
     /* Text */
     --text-primary: white;
@@ -96,6 +97,15 @@
     --surface-subtle: rgba(255, 255, 255, 0.08);
     --border-color: rgba(255, 255, 255, 0.15);
     --popup-bg: rgba(24, 24, 32, 0.97);
+
+    /* Viewer chrome */
+    --toolbar-icon: rgba(255, 255, 255, 0.85);
+    --toolbar-icon-hover: white;
+    --close-btn-bg: rgba(0, 0, 0, 0.5);
+    --close-btn-bg-hover: rgba(0, 0, 0, 0.7);
+    --search-bg: rgba(255, 255, 255, 0.2);
+    --result-draw-bg: rgba(255, 255, 255, 0.15);
+    --result-name: white;
 
     /* NAG move assessment colors (Lichess-style) */
     --nag-brilliant: #26c6da;
@@ -1178,9 +1188,9 @@ select.editor-header-input option {
     top: 0.4rem;
     right: 0.4rem;
     z-index: 10;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--close-btn-bg);
     border: none;
-    color: var(--text-muted);
+    color: var(--toolbar-icon);
     font-size: 1.5rem;
     line-height: 1;
     width: 2.75rem;
@@ -1194,8 +1204,8 @@ select.editor-header-input option {
 }
 
 .viewer-close:hover {
-    color: var(--text-primary);
-    background: rgba(0, 0, 0, 0.7);
+    color: var(--toolbar-icon-hover);
+    background: var(--close-btn-bg-hover);
 }
 
 /* Chessground overrides */
@@ -1378,8 +1388,8 @@ select.editor-header-input option {
 }
 
 .viewer-player.viewer-draw {
-    border-bottom-color: var(--text-subtle);
-    background: var(--overlay-light);
+    border-bottom-color: var(--result-draw-border);
+    background: var(--result-draw-bg);
 }
 
 .viewer-player-score {
@@ -1391,11 +1401,11 @@ select.editor-header-input option {
 
 .viewer-winner .viewer-player-score { color: var(--result-win-text); }
 .viewer-winner .viewer-player-name,
-.viewer-winner .viewer-player-elo { color: #fff; }
+.viewer-winner .viewer-player-elo { color: var(--result-name); }
 
 .viewer-loser .viewer-player-score { color: var(--result-lose-text); }
 .viewer-loser .viewer-player-name,
-.viewer-loser .viewer-player-elo { color: #fff; }
+.viewer-loser .viewer-player-elo { color: var(--result-name); }
 
 .viewer-piece-icon {
     width: 1.4rem;
@@ -1430,7 +1440,6 @@ select.editor-header-input option {
     gap: 0.75rem;
     flex: 1;
     min-height: 0;
-    overflow: hidden;
 }
 
 .viewer-board {
@@ -1919,7 +1928,7 @@ select.editor-header-input option {
     width: 2rem;
     height: 2rem;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--toolbar-icon);
     border: none;
     border-radius: 50%;
     cursor: pointer;
@@ -1939,7 +1948,7 @@ select.editor-header-input option {
 
 .viewer-tool-btn:hover {
     background: var(--overlay-light);
-    color: var(--text-primary);
+    color: var(--toolbar-icon-hover);
 }
 
 .viewer-tool-btn.active {
@@ -1966,7 +1975,7 @@ select.editor-header-input option {
     width: 2.5rem;
     height: 2.5rem;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--toolbar-icon);
     border: none;
     border-radius: 50%;
     cursor: pointer;
@@ -1985,7 +1994,7 @@ select.editor-header-input option {
 
 .viewer-nav-btn:hover {
     background: var(--overlay-light);
-    color: var(--text-primary);
+    color: var(--toolbar-icon-hover);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
@@ -1996,7 +2005,7 @@ select.editor-header-input option {
 
 .viewer-nav-btn:disabled:hover {
     background: transparent;
-    color: var(--text-muted);
+    color: var(--toolbar-icon);
 }
 
 /* Toolbar tooltips */
@@ -2236,7 +2245,6 @@ select.editor-header-input option {
         display: flex;
         flex-direction: column;
         min-width: 0;
-        overflow: hidden;
     }
     .viewer-layout {
         flex: 1 1 0;
@@ -2723,7 +2731,7 @@ select.editor-header-input option {
     padding: 8px;
     border: 1px solid var(--surface);
     border-radius: var(--radius-sm);
-    background: rgba(0,0,0,0.4);
+    background: var(--input-bg);
     color: var(--text-primary);
     font-family: monospace;
     font-size: 0.8rem;
@@ -2890,7 +2898,7 @@ cg-board piece.dragging { z-index: 10000 !important; }
     font-size: 1rem;
     font-family: inherit;
     color: var(--text-primary);
-    background: var(--overlay-light);
+    background: var(--search-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     outline: none;
@@ -2904,7 +2912,7 @@ cg-board piece.dragging { z-index: 10000 !important; }
 
 .browser-search-input:focus {
     border-color: var(--accent);
-    background: var(--border-color);
+    background: var(--search-bg);
 }
 
 .browser-search-clear {
@@ -3217,7 +3225,8 @@ cg-board piece.dragging { z-index: 10000 !important; }
 }
 
 .browser-result-half.browser-draw {
-    border-bottom-color: var(--text-faint);
+    border-bottom-color: var(--result-draw-border);
+    background: var(--result-draw-bg);
 }
 
 .browser-vs {
@@ -3526,22 +3535,22 @@ cg-board piece.dragging { z-index: 10000 !important; }
 }
 
 .profile-bar-win {
-    background: rgba(var(--win-rgb), 0.12);
+    background: rgba(0, 200, 83, 0.12);
     border-bottom-color: var(--win);
 }
 .profile-bar-win span { color: var(--win); }
 
 .profile-bar-draw {
-    background: var(--overlay-light);
-    border-bottom-color: var(--text-subtle);
+    background: var(--result-draw-bg);
+    border-bottom-color: var(--result-draw-border);
 }
 .profile-bar-draw span { color: var(--text-primary); }
 
 .profile-bar-loss {
-    background: rgba(var(--status-error-rgb), 0.08);
-    border-bottom-color: var(--status-error);
+    background: rgba(255, 107, 107, 0.08);
+    border-bottom-color: var(--lose);
 }
-.profile-bar-loss span { color: var(--status-error); }
+.profile-bar-loss span { color: var(--lose); }
 
 .profile-tab-header {
     flex-shrink: 0;
@@ -3755,18 +3764,18 @@ cg-board piece.dragging { z-index: 10000 !important; }
 }
 
 .explorer-bar-w {
-    background: rgba(var(--win-rgb), 0.25);
+    background: rgba(0, 200, 83, 0.25);
     border-bottom: 2px solid var(--win);
 }
 
 .explorer-bar-d {
     background: var(--surface-subtle);
-    border-bottom: 2px solid var(--text-subtle);
+    border-bottom: 2px solid var(--result-draw-border);
 }
 
 .explorer-bar-b {
-    background: rgba(var(--status-error-rgb), 0.12);
-    border-bottom: 2px solid var(--status-error);
+    background: rgba(255, 107, 107, 0.12);
+    border-bottom: 2px solid var(--lose);
 }
 
 .explorer-col-score {

@@ -185,7 +185,7 @@ function checkResults(sections) {
     let gamesWithResults = 0;
     for (const s of sections) {
         if (s.round !== maxRound) continue;
-        if (/extra games/i.test(s.section)) continue;
+        if (/extra/i.test(s.section)) continue;
         for (const row of s.rows) {
             if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
             totalGames++;

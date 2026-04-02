@@ -9,6 +9,7 @@
     "build:only": "vite build",
     "build:engine": "node scripts/build-engine.js",
     "build:eco": "node scripts/build-eco.js",
+    "build:embed": "node scripts/build-embed-pieces.js && vite build --config vite.config.embed.js",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -18,6 +19,7 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.1.0",
     "vite": "^8.0.3",
+    "vite-plugin-css-injected-by-js": "^4.0.1",
     "vitest": "^4.1.2",
     "wrangler": "^4.77.0"
   },

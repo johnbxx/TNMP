@@ -41,6 +41,12 @@ export async function handleScheduled(env, { force = false } = {}) {
     }
 }
 
+async function updateLastCheck(env, { pairingsFound = false, error = null } = {}) {
+    const data = { timestamp: new Date().toISOString(), pairingsFound };
+    if (error) data.error = error;
+    await env.SUBSCRIBERS.put('state:lastCheck', JSON.stringify(data));
+}
+
 async function runCronLogic(env) {
     console.log('Cron triggered: checking for pairings...');
     const t = {};
@@ -51,6 +57,7 @@ async function runCronLogic(env) {
     t.resolveTournament = performance.now() - t0;
     if (!tournament) {
         console.error('Could not resolve tournament');
+        await updateLastCheck(env, { error: 'Could not resolve tournament' });
         return;
     }
 
@@ -64,11 +71,13 @@ async function runCronLogic(env) {
         });
         if (!response.ok) {
             console.error(`Failed to fetch tournament page: HTTP ${response.status}`);
+            await updateLastCheck(env, { error: `MI page HTTP ${response.status}` });
             return;
         }
         html = await response.text();
     } catch (err) {
         console.error('Fetch error:', err.message);
+        await updateLastCheck(env, { error: `Fetch error: ${err.message}` });
         return;
     }
     t.fetchHtml = performance.now() - t0;
@@ -81,12 +90,25 @@ async function runCronLogic(env) {
     if (hash === storedHash) {
         console.log('HTML unchanged, skipping HTML processing.');
         const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
+        let hasPairingsFlag = false;
         if (cached?.html) {
             const parsed = parseTournamentPage(cached.html);
+            hasPairingsFlag = parsed.hasPairings;
             await dispatchAllNotifications(parsed, tournament, env);
         }
         await checkPendingGamesNotification(tournament, env);
         await retryPendingNotifications(env);
+
+        // Recompute time-dependent app state even when HTML hasn't changed
+        const slug = slugifyTournament(tournament.name);
+        const appState = computeAppState(cached, tournament);
+        await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
+            state: appState.state, round: appState.round,
+            tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
+            tournamentSlug: slug, roundDates: tournament.roundDates || [],
+            fetchedAt: new Date().toISOString(),
+        }));
+        await updateLastCheck(env, { pairingsFound: hasPairingsFlag });
         return;
     }
     await env.SUBSCRIBERS.put('cache:htmlHash', hash);
@@ -441,10 +463,7 @@ async function runCronLogic(env) {
         }
     }
 
-    await env.SUBSCRIBERS.put('state:lastCheck', JSON.stringify({
-        timestamp: new Date().toISOString(),
-        pairingsFound: parsed.hasPairings,
-    }));
+    await updateLastCheck(env, { pairingsFound: parsed.hasPairings });
 
     t0 = performance.now();
     await dispatchAllNotifications(parsed, tournament, env);
@@ -458,10 +477,10 @@ async function runCronLogic(env) {
     console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
 }
 
-function pairingsExpiresAt(roundDates, round) {
+export function pairingsExpiresAt(roundDates, round) {
     const dateStr = roundDates?.[round - 1];
     if (!dateStr) return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    return new Date(`${dateStr}T18:30:00-08:00`).toISOString();
+    return new Date(dateStr).toISOString();
 }
 
 async function dispatchAllNotifications(parsed, tournament, env) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { getTimeState, computeAppState } from './index.js';
+import { getTimeState, computeAppState, pairingsExpiresAt } from './index.js';
 import { pacificOffset } from './helpers.js';
 import * as parser from './parser.js';
 
@@ -345,5 +345,41 @@ describe('pacificOffset', () => {
 
     it('returns PST in December', () => {
         expect(pacificOffset(2025, 12, 25)).toBe('-08:00');
+    });
+});
+
+// --- pairingsExpiresAt ---
+
+describe('pairingsExpiresAt', () => {
+    const roundDates = [
+        '2026-03-03T18:30:00-08:00',
+        '2026-03-11T18:30:00-07:00',
+        '2026-03-18T18:30:00-07:00',
+        '2026-03-25T18:30:00-07:00',
+    ];
+
+    it('returns a valid ISO string for a round with full ISO datetime in roundDates', () => {
+        const result = pairingsExpiresAt(roundDates, 2);
+        expect(() => new Date(result)).not.toThrow();
+        expect(new Date(result).getTime()).not.toBeNaN();
+    });
+
+    it('returns a fallback when roundDates entry is missing', () => {
+        const result = pairingsExpiresAt(roundDates, 99);
+        expect(new Date(result).getTime()).not.toBeNaN();
+    });
+
+    it('returns a fallback when roundDates is null', () => {
+        const result = pairingsExpiresAt(null, 1);
+        expect(new Date(result).getTime()).not.toBeNaN();
+    });
+
+    it('produces a date near the round start time', () => {
+        const result = pairingsExpiresAt(roundDates, 1);
+        const date = new Date(result);
+        // Round 1 is 2026-03-03T18:30:00-08:00 = 2026-03-04T02:30:00Z
+        const expected = new Date('2026-03-03T18:30:00-08:00');
+        // Should be within 2 hours of the round date (allowing for the hardcoded offset)
+        expect(Math.abs(date.getTime() - expected.getTime())).toBeLessThan(2 * 60 * 60 * 1000);
     });
 });

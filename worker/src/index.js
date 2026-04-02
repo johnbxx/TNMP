@@ -11,15 +11,16 @@
 
 import { corsHeaders, corsResponse } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
-import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco, handleBatchImport } from './games.js';
+import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
-import { handleScheduled, TournamentCron } from './cron.js';
+import { handleScheduled, TournamentCron, pairingsExpiresAt } from './cron.js';
 
 // Re-export Durable Object class (required by wrangler)
 export { TournamentCron };
 
 // Re-export for tests
 export { getTimeState, computeAppState } from './tournament.js';
+export { pairingsExpiresAt };
 
 export default {
     async fetch(request, env) {
@@ -52,7 +53,6 @@ export default {
             // Game submissions (disabled — feature not yet live)
             // if (path === '/submit-game' && request.method === 'POST') return await handleSubmitGame(request, env);
             if (path === '/backfill-eco' && request.method === 'POST') return await handleBackfillEco(request, env);
-            if (path === '/admin/import' && request.method === 'POST') return await handleBatchImport(request, env);
 
             // Push notifications
             if (path === '/push-subscribe' && request.method === 'POST') return await handlePushSubscribe(request, env);
