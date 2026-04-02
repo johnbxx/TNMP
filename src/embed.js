@@ -290,6 +290,15 @@ function init() {
     initStyle(styleMount);
     initPlayerProfile(profileMount);
 
+    // Embed branding
+    const brand = document.createElement('a');
+    brand.href = 'https://tnmpairings.com';
+    brand.target = '_blank';
+    brand.rel = 'noopener';
+    brand.className = 'embed-brand';
+    brand.textContent = 'Powered by TNM Pairings';
+    document.querySelector('.modal-content-viewer')?.appendChild(brand);
+
     // Inject inline piece images (chessground CSS + icon src patches)
     injectPieces();
     patchPieceImages(document);

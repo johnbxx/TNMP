@@ -3960,6 +3960,23 @@ cg-board piece.dragging { z-index: 10000 !important; }
     margin: 0;
 }
 
+/* Embed branding */
+.embed-brand {
+    position: absolute;
+    bottom: 0.35rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    pointer-events: auto;
+    z-index: 1;
+}
+.embed-brand:hover {
+    color: var(--text-muted);
+}
+
 /* Board coordinates — inside the board */
 .cg-wrap coords {
     font-size: 10px;
