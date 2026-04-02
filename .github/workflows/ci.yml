@@ -44,7 +44,9 @@ jobs:
         run: npx vite build
 
       - name: Build embed
-        run: npx vite build --config vite.config.embed.js
+        run: |
+          node scripts/build-embed-pieces.js
+          npx vite build --config vite.config.embed.js
 
   deploy:
     needs: test
@@ -86,6 +88,7 @@ jobs:
         run: |
           npm run build:engine
           npx vite build
+          node scripts/build-embed-pieces.js
           npx vite build --config vite.config.embed.js
           mkdir -p dist/embed
           cp dist-embed/tnmp-viewer.js dist/embed/
