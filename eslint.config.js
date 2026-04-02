@@ -2,7 +2,7 @@ import js from '@eslint/js';
 
 export default [
     {
-        ignores: ['dist/', 'node_modules/', 'worker/', 'public/', 'test/', 'scripts/', 'seed-pgn-colors.mjs', '.wrangler/'],
+        ignores: ['dist/', 'dist-embed/', 'local/', 'node_modules/', 'worker/', 'public/', 'test/', 'scripts/', 'seed-pgn-colors.mjs', '.wrangler/', 'src/palette-editor.js'],
     },
     js.configs.recommended,
     {
@@ -43,6 +43,8 @@ export default [
                 Worker: 'readonly',
                 SharedArrayBuffer: 'readonly',
                 caches: 'readonly',
+                MutationObserver: 'readonly',
+                ResizeObserver: 'readonly',
             },
         },
         rules: {

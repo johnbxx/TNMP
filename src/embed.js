@@ -20,13 +20,13 @@ import '../styles.css';
 import { PIECE_URLS, injectPieces } from './embed-pieces.js';
 
 // Viewer + data layer (same modules as the main app)
-import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
+import { trapFocus } from './modal.js';
 import { openStyle, initStyle } from './style.js';
 import { showToast } from './toast.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import {
-    openGamePanel, openGameFromBrowser, closeGamePanel, handlePanelKeydown,
+    openGamePanel, closeGamePanel, handlePanelKeydown,
     explorerBackToBrowser,
     resolveDirtyDialog,
     explorerGoToStart, explorerGoBack, explorerGoForward,
@@ -37,7 +37,7 @@ import {
     showHeaderEditor, saveHeaderEditor,
     launchExplorer, initGamePanel,
 } from './game-panel.js';
-import { prefetchGames, getCachedGame, fetchGames, selectPlayer, getPlayer, getGroupedGames, getFilter } from './games.js';
+import { prefetchGames, getCachedGame, fetchGames, getPlayer, getGroupedGames, getFilter } from './games.js';
 
 // --- PGN download helper ---
 
@@ -295,13 +295,15 @@ function init() {
     patchPieceImages(document);
 
     // Watch for dynamically added piece images
-    new MutationObserver((mutations) => {
-        for (const m of mutations) {
-            for (const node of m.addedNodes) {
-                if (node.nodeType === 1) patchPieceImages(node);
+    if (typeof MutationObserver !== 'undefined') {
+        new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                for (const node of m.addedNodes) {
+                    if (node.nodeType === 1) patchPieceImages(node);
+                }
             }
-        }
-    }).observe(document.body, { childList: true, subtree: true });
+        }).observe(document.body, { childList: true, subtree: true });
+    }
 
     // Comments button starts active
     document.querySelector('[data-action="viewer-comments"]')?.classList.add('active');
