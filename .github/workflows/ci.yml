@@ -43,6 +43,9 @@ jobs:
       - name: Build frontend
         run: npx vite build
 
+      - name: Build embed
+        run: npx vite build --config vite.config.embed.js
+
   deploy:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -83,6 +86,9 @@ jobs:
         run: |
           npm run build:engine
           npx vite build
+          npx vite build --config vite.config.embed.js
+          mkdir -p dist/embed
+          cp dist-embed/tnmp-viewer.js dist/embed/
           npx wrangler pages deploy dist --project-name=tnmpairings
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-embed/
+src/embed-pieces.js
 .wrangler/
 .DS_Store
 .dev.vars

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TNMP Viewer — Embed Test</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f5f5; padding: 2rem; }
+        h1 { font-size: 1.5rem; color: #333; }
+        p { color: #666; }
+        button { padding: 0.75rem 1.5rem; font-size: 1rem; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; background: white; }
+        button:hover { background: #eee; }
+    </style>
+</head>
+<body>
+    <h1>Mechanics' Institute Chess Club</h1>
+    <p>This page simulates an external site embedding the TNMP viewer via a single script tag.</p>
+    <button onclick="TNMPViewer.open()">Browse Games</button>
+
+    <script src="dist-embed/tnmp-viewer.js"></script>
+</body>
+</html>

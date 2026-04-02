@@ -27,6 +27,7 @@ let _activeTournamentSlug = null;
 let _fetchGeneration = 0;
 
 let _allPlayers = null;         // [{ name, norm }] (for autocomplete)
+let _tournamentScope = null;    // embed-only: lock to a single tournament slug
 
 // Source selection
 let _currentSource = 'tournament';  // 'tournament' | 'player'
@@ -60,7 +61,7 @@ export function getFilter(key) { return _filters[key] ?? null; }
 export function getVisibleSections() { return _visibleSections; }
 export function isExplorerActive() { return _explorerActive; }
 export function getExplorerFen() { return _explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'; }
-export function getTournamentList() { return _tournamentList; }
+export function getTournamentList() { return _tournamentScope ? null : _tournamentList; }
 export function getPlayer() { return _currentPlayer; }
 export function isPlayerMode() { return _currentSource === 'player'; }
 export function getPlayerSources() { return _playerSources; }
@@ -314,8 +315,9 @@ export async function fetchGames(queryParams = {}, { cache = false } = {}) {
     return data;
 }
 
-export function prefetchGames() {
+export function prefetchGames({ tournamentScope } = {}) {
     if (_tournamentData) return;
+    if (tournamentScope) _tournamentScope = tournamentScope;
     try {
         const cached = localStorage.getItem(GAMES_CACHE_KEY);
         if (cached) {
@@ -331,8 +333,11 @@ export function prefetchGames() {
     } catch {
         localStorage.removeItem(GAMES_CACHE_KEY);
     }
-    fetchGames({ include: 'pgn,submissions' }, { cache: true }).catch(() => {});
-    fetchTournamentList().catch(() => {});
+    const query = _tournamentScope
+        ? { tournament: _tournamentScope, include: 'pgn' }
+        : { include: 'pgn,submissions' };
+    fetchGames(query, { cache: true }).catch(() => {});
+    if (!_tournamentScope) fetchTournamentList().catch(() => {});
     fetchPlayerList().catch(() => {});
 }
 
