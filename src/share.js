@@ -10,9 +10,10 @@ function getShareText() {
 
     if (pairing && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
         if (pairing.isBye) {
-            pairingText = pairing.byeType === 'full'
-                ? ' I have a full-point bye this round.'
-                : ' I have a half-point bye this round.';
+            pairingText =
+                pairing.byeType === 'full'
+                    ? ' I have a full-point bye this round.'
+                    : ' I have a half-point bye this round.';
         } else if (state === STATE.RESULTS && pairing.playerResult) {
             const result = resultDisplay(pairing.playerResult);
             const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
@@ -56,7 +57,7 @@ export async function shareStatus() {
     const shareData = {
         title: 'Are the Pairings Up?',
         text: text,
-        url: url
+        url: url,
     };
 
     if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {

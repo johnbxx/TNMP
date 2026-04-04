@@ -14,7 +14,6 @@
 import { Chess } from 'chess.js';
 import { parseMoveText, extractMoveText, NAG_INFO } from './pgn-parser.js';
 
-
 export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AUTO_PLAY_INTERVAL_MS = 1200;
 
@@ -22,18 +21,20 @@ let _nodes = [];
 let _currentNodeId = 0;
 let _startingFen = null;
 let _headers = {};
-let _onPositionChange = null;   // (fen, from, to) => void
-let _onChange = null;            // (state) => void — observer for view layer
+let _onPositionChange = null; // (fen, from, to) => void
+let _onChange = null; // (state) => void — observer for view layer
 let _autoPlayTimer = null;
 let _commentsHidden = false;
-let _branchMode = false;         // pause at branch points (UI decides what to show)
+let _branchMode = false; // pause at branch points (UI decides what to show)
 let _dirty = false;
 
 // NAG pairs: White/Black variants (e.g. 22=White zugzwang, 23=Black zugzwang).
 const NAG_PAIRS = { 22: 23, 32: 33, 36: 37, 40: 41, 44: 45, 132: 133, 138: 139 };
 const NAG_PAIR_REVERSE = Object.fromEntries(Object.entries(NAG_PAIRS).map(([w, b]) => [b, +w]));
 
-export function onChange(fn) { _onChange = fn || null; }
+export function onChange(fn) {
+    _onChange = fn || null;
+}
 
 function notifyChange() {
     _onChange?.({
@@ -82,8 +83,17 @@ export function destroyGame() {
 
 function buildMoveTree(moves, fen) {
     const root = {
-        id: 0, parentId: -1, fen, san: null, from: null, to: null,
-        comment: null, nags: null, mainChild: null, children: [], ply: 0,
+        id: 0,
+        parentId: -1,
+        fen,
+        san: null,
+        from: null,
+        to: null,
+        comment: null,
+        nags: null,
+        mainChild: null,
+        children: [],
+        ply: 0,
     };
     const result = [root];
     function walk(moves, parentId, basePly) {
@@ -93,14 +103,25 @@ function buildMoveTree(moves, fen) {
             const prev = result[prevId];
             const engine = new Chess(prev.fen);
             let move;
-            try { move = engine.move(m.san); } catch { /* illegal */ }
+            try {
+                move = engine.move(m.san);
+            } catch {
+                /* illegal */
+            }
             if (!move) break;
             const node = {
-                id: result.length, parentId: prevId,
-                fen: engine.fen(), san: m.san, from: move.from, to: move.to,
-                comment: m.comment, annotations: m.annotations || null,
+                id: result.length,
+                parentId: prevId,
+                fen: engine.fen(),
+                san: m.san,
+                from: move.from,
+                to: move.to,
+                comment: m.comment,
+                annotations: m.annotations || null,
                 nags: m.nags,
-                mainChild: null, children: [], ply: ply + 1,
+                mainChild: null,
+                children: [],
+                ply: ply + 1,
             };
             result.push(node);
             if (prev.mainChild === null) prev.mainChild = node.id;
@@ -133,11 +154,14 @@ function serializeAnnotations(annotations) {
 
 function serializeTree(nodes, headers) {
     const lines = [];
-    const sanitize = v => String(v).replace(/"/g, '');
+    const sanitize = (v) => String(v).replace(/"/g, '');
     const order = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
     const written = new Set();
     for (const key of order) {
-        if (headers[key] != null) { lines.push(`[${key} "${sanitize(headers[key])}"]`); written.add(key); }
+        if (headers[key] != null) {
+            lines.push(`[${key} "${sanitize(headers[key])}"]`);
+            written.add(key);
+        }
     }
     for (const [key, value] of Object.entries(headers)) {
         if (!written.has(key) && value != null) lines.push(`[${key} "${sanitize(value)}"]`);
@@ -159,8 +183,7 @@ function serializeTree(nodes, headers) {
             if (node.nags) for (const nag of node.nags) parts.push(`$${nag}`);
             if (node.comment || node.annotations) {
                 const annStr = serializeAnnotations(node.annotations);
-                const text = node.comment && annStr ? `${node.comment} ${annStr}`
-                    : node.comment || annStr;
+                const text = node.comment && annStr ? `${node.comment} ${annStr}` : node.comment || annStr;
                 parts.push(`{${text}}`);
                 forceNum = true;
             }
@@ -185,8 +208,10 @@ function serializeTree(nodes, headers) {
     const words = fullText.split(/\s+/);
     let line = '';
     for (const word of words) {
-        if (line && (line.length + 1 + word.length) > 80) { lines.push(line); line = word; }
-        else line = line ? line + ' ' + word : word;
+        if (line && line.length + 1 + word.length > 80) {
+            lines.push(line);
+            line = word;
+        } else line = line ? line + ' ' + word : word;
     }
     if (line) lines.push(line);
     return lines.join('\n') + '\n';
@@ -255,7 +280,7 @@ export function goToMove(nodeId) {
 export function playMove(san) {
     _dirty = true;
     const parent = _nodes[_currentNodeId];
-    const existingChild = parent.children.find(cid => _nodes[cid].san === san && !_nodes[cid].deleted);
+    const existingChild = parent.children.find((cid) => _nodes[cid].san === san && !_nodes[cid].deleted);
     if (existingChild !== undefined) {
         stopAutoPlay();
         goToNode(existingChild);
@@ -263,13 +288,25 @@ export function playMove(san) {
     }
     const engine = new Chess(parent.fen);
     let move;
-    try { move = engine.move(san); } catch { return; }
+    try {
+        move = engine.move(san);
+    } catch {
+        return;
+    }
     if (!move) return;
     stopAutoPlay();
     const node = {
-        id: _nodes.length, parentId: _currentNodeId,
-        fen: engine.fen(), san: move.san, from: move.from, to: move.to,
-        comment: null, nags: null, mainChild: null, children: [], ply: parent.ply + 1,
+        id: _nodes.length,
+        parentId: _currentNodeId,
+        fen: engine.fen(),
+        san: move.san,
+        from: move.from,
+        to: move.to,
+        comment: null,
+        nags: null,
+        mainChild: null,
+        children: [],
+        ply: parent.ply + 1,
     };
     _nodes.push(node);
     if (parent.mainChild === null) parent.mainChild = node.id;
@@ -285,7 +322,7 @@ export function deleteFromHere() {
     const node = _nodes[_currentNodeId];
     const parentId = node.parentId;
     const parent = _nodes[parentId];
-    parent.children = parent.children.filter(cid => cid !== _currentNodeId);
+    parent.children = parent.children.filter((cid) => cid !== _currentNodeId);
     if (parent.mainChild === _currentNodeId) {
         parent.mainChild = parent.children.length > 0 ? parent.children[0] : null;
     }
@@ -333,16 +370,14 @@ export function toggleNag(nodeId, nagNum) {
     const pairSet = pair ? new Set([nagNum, pair]) : new Set([nagNum]);
     // Resolve to correct color variant
     const isBlack = node.ply % 2 === 0;
-    const resolved = pair
-        ? (isBlack ? Math.max(...pairSet) : Math.min(...pairSet))
-        : nagNum;
+    const resolved = pair ? (isBlack ? Math.max(...pairSet) : Math.min(...pairSet)) : nagNum;
     if (!node.nags) node.nags = [];
-    if (node.nags.some(n => pairSet.has(n))) {
-        node.nags = node.nags.filter(n => !pairSet.has(n));
+    if (node.nags.some((n) => pairSet.has(n))) {
+        node.nags = node.nags.filter((n) => !pairSet.has(n));
         if (node.nags.length === 0) node.nags = null;
     } else {
         const isMoveNag = NAG_INFO[resolved]?.[2] === 'move';
-        node.nags = node.nags.filter(n => isMoveNag !== (NAG_INFO[n]?.[2] === 'move'));
+        node.nags = node.nags.filter((n) => isMoveNag !== (NAG_INFO[n]?.[2] === 'move'));
         node.nags.push(resolved);
     }
     notifyChange();
@@ -378,7 +413,9 @@ export function toggleBranchMode() {
     return _branchMode;
 }
 
-export function getHeaders() { return { ..._headers }; }
+export function getHeaders() {
+    return { ..._headers };
+}
 
 export function setHeaders(h) {
     _dirty = true;
@@ -392,11 +429,14 @@ export function getPgn() {
 
 export function getReadablePgn() {
     const lines = [];
-    const sanitize = v => String(v).replace(/"/g, '');
+    const sanitize = (v) => String(v).replace(/"/g, '');
     const order = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
     const written = new Set();
     for (const key of order) {
-        if (_headers[key] != null) { lines.push(`[${key} "${sanitize(_headers[key])}"]`); written.add(key); }
+        if (_headers[key] != null) {
+            lines.push(`[${key} "${sanitize(_headers[key])}"]`);
+            written.add(key);
+        }
     }
     for (const [key, value] of Object.entries(_headers)) {
         if (!written.has(key) && value != null) lines.push(`[${key} "${sanitize(value)}"]`);
@@ -430,7 +470,10 @@ function walkReadable(nodes, startId) {
             }
         }
         parts.push(san);
-        if (node.comment) { parts.push(`{${node.comment}}`); forceNum = true; }
+        if (node.comment) {
+            parts.push(`{${node.comment}}`);
+            forceNum = true;
+        }
         const parent = nodes[node.parentId];
         if (!isFirst && parent && parent.children.length > 1) {
             for (const altId of parent.children) {
@@ -446,10 +489,18 @@ function walkReadable(nodes, startId) {
     return parts.join(' ');
 }
 
-export function getCurrentFen() { return _nodes[_currentNodeId]?.fen || _startingFen; }
-export function getCurrentNodeId() { return _currentNodeId; }
-export function getNodes() { return _nodes; }
-export function isDirty() { return _dirty; }
+export function getCurrentFen() {
+    return _nodes[_currentNodeId]?.fen || _startingFen;
+}
+export function getCurrentNodeId() {
+    return _currentNodeId;
+}
+export function getNodes() {
+    return _nodes;
+}
+export function isDirty() {
+    return _dirty;
+}
 
 export function getMovesTo(nodeId) {
     const moves = [];

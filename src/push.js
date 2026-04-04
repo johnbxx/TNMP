@@ -108,9 +108,12 @@ export async function enablePush() {
 
         await checkPushStatus();
     } catch (err) {
-        showPushError(statusEl, err.name === 'NotAllowedError'
-            ? 'Notification permission was denied. Check your browser settings.'
-            : 'Could not enable push notifications. Try again later.');
+        showPushError(
+            statusEl,
+            err.name === 'NotAllowedError'
+                ? 'Notification permission was denied. Check your browser settings.'
+                : 'Could not enable push notifications. Try again later.',
+        );
     }
 }
 
@@ -125,7 +128,9 @@ export async function disablePush() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ endpoint: sub.endpoint, deviceId }),
                 });
-            } catch { /* server unreachable — unsubscribe browser-side anyway */ }
+            } catch {
+                /* server unreachable — unsubscribe browser-side anyway */
+            }
             await sub.unsubscribe();
         }
         localStorage.removeItem('pushEndpoint');
@@ -150,7 +155,12 @@ export async function updatePushPrefs() {
         await fetch(`${WORKER_URL}/push-preferences`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint: sub.endpoint, deviceId, notifyPairings: pairings, notifyResults: results }),
+            body: JSON.stringify({
+                endpoint: sub.endpoint,
+                deviceId,
+                notifyPairings: pairings,
+                notifyResults: results,
+            }),
         });
         showToast('Preferences saved', 'success');
     } catch {
@@ -166,7 +176,9 @@ export async function syncPushSubscription() {
         const sub = await getSubscription();
         if (!sub) return;
         await registerWithServer(sub);
-    } catch { /* subscription may not be available */ }
+    } catch {
+        /* subscription may not be available */
+    }
 }
 
 // --- Internals ---

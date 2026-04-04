@@ -11,7 +11,7 @@ import { Chessground } from '@lichess-org/chessground';
 import { START_FEN } from './pgn.js';
 
 let _cg = null;
-let _onMove = null;          // callback: (san, from, to) => void
+let _onMove = null; // callback: (san, from, to) => void
 let _currentFen = null;
 let _orientation = 'white';
 
@@ -63,14 +63,21 @@ function makeMove(from, to, promotion) {
     const piece = engine.get(from);
     if (!piece) return false;
 
-    if (!promotion && piece.type === 'p' &&
-        ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))) {
+    if (
+        !promotion &&
+        piece.type === 'p' &&
+        ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))
+    ) {
         showPromotionPicker(from, to, piece.color);
         return true;
     }
 
     let move;
-    try { move = engine.move({ from, to, promotion }); } catch { return false; }
+    try {
+        move = engine.move({ from, to, promotion });
+    } catch {
+        return false;
+    }
     if (!move) return false;
 
     _currentFen = engine.fen();
@@ -142,7 +149,9 @@ export function setAutoShapes(shapes) {
     _cg.setAutoShapes(shapes || []);
 }
 
-export function getOrientation() { return _orientation; }
+export function getOrientation() {
+    return _orientation;
+}
 
 export function flip() {
     setOrientation(_orientation === 'white' ? 'black' : 'white');

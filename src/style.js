@@ -27,56 +27,74 @@ const PIECE_THEMES = [
 
 const WHITE_PIECES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP'];
 const ALL_PIECES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'];
-const PIECE_ROLES = { wK: 'king', wQ: 'queen', wR: 'rook', wB: 'bishop', wN: 'knight', wP: 'pawn',
-                      bK: 'king', bQ: 'queen', bR: 'rook', bB: 'bishop', bN: 'knight', bP: 'pawn' };
+const PIECE_ROLES = {
+    wK: 'king',
+    wQ: 'queen',
+    wR: 'rook',
+    wB: 'bishop',
+    wN: 'knight',
+    wP: 'pawn',
+    bK: 'king',
+    bQ: 'queen',
+    bR: 'rook',
+    bB: 'bishop',
+    bN: 'knight',
+    bP: 'pawn',
+};
 const PIECE_COLORS = { w: 'white', b: 'black' };
 
 // --- Board color presets ---
 
 const BOARD_PRESETS = [
-    { id: 'ice',    name: 'Ice',    light: '#dee3e6', dark: '#8ca2ad' },
-    { id: 'brown',  name: 'Brown',  light: '#f0d9b5', dark: '#b58863' },
-    { id: 'green',  name: 'Green',  light: '#ffffdd', dark: '#86a666' },
-    { id: 'blue',   name: 'Blue',   light: '#dee3e6', dark: '#7192ab' },
+    { id: 'ice', name: 'Ice', light: '#dee3e6', dark: '#8ca2ad' },
+    { id: 'brown', name: 'Brown', light: '#f0d9b5', dark: '#b58863' },
+    { id: 'green', name: 'Green', light: '#ffffdd', dark: '#86a666' },
+    { id: 'blue', name: 'Blue', light: '#dee3e6', dark: '#7192ab' },
     { id: 'purple', name: 'Purple', light: '#e8dff0', dark: '#9b72b0' },
-    { id: 'wood',   name: 'Wood',   light: '#e8c889', dark: '#b48b4e' },
+    { id: 'wood', name: 'Wood', light: '#e8c889', dark: '#b48b4e' },
 ];
 
 // --- App color schemes ---
 
-
 const APP_SCHEMES = [
     // --- Dark themes ---
-    { id: 'default',  name: 'Default',   accent: '#00c853', bg: '#2d2d2d', bgEnd: '#1a1a1a' },
-    { id: 'midnight', name: 'Midnight',  accent: '#5c6bc0', bg: '#1a1a2e', bgEnd: '#0d0d1a' },
-    { id: 'forest',   name: 'Forest',    accent: '#66bb6a', bg: '#1b2d1b', bgEnd: '#0f1a0f' },
-    { id: 'mocha',    name: 'Mocha',     accent: '#d4a373', bg: '#2d2420', bgEnd: '#1a1210' },
-    { id: 'slate',    name: 'Slate',     accent: '#74b9ff', bg: '#2d3436', bgEnd: '#1a1e20' },
-    { id: 'charcoal', name: 'Charcoal',  accent: '#e0e0e0', bg: '#333333', bgEnd: '#1a1a1a' },
+    { id: 'default', name: 'Default', accent: '#00c853', bg: '#2d2d2d', bgEnd: '#1a1a1a' },
+    { id: 'midnight', name: 'Midnight', accent: '#5c6bc0', bg: '#1a1a2e', bgEnd: '#0d0d1a' },
+    { id: 'forest', name: 'Forest', accent: '#66bb6a', bg: '#1b2d1b', bgEnd: '#0f1a0f' },
+    { id: 'mocha', name: 'Mocha', accent: '#d4a373', bg: '#2d2420', bgEnd: '#1a1210' },
+    { id: 'slate', name: 'Slate', accent: '#74b9ff', bg: '#2d3436', bgEnd: '#1a1e20' },
+    { id: 'charcoal', name: 'Charcoal', accent: '#e0e0e0', bg: '#333333', bgEnd: '#1a1a1a' },
     // --- Light themes ---
-    { id: 'mi-light', name: 'MI Light',  accent: '#00421c', bg: '#fcfcfc', bgEnd: '#fcfcfc', vars: {
-        '--text-primary': '#4f4f4f',
-        '--text-muted': '#000000',
-        '--text-secondary': '#5c5c5c',
-        '--text-subtle': '#545454',
-        '--text-faint': '#545454',
-        '--text-link-hover': '#007523',
-        '--raised-panel-bg': '#f4f4f4',
-        '--shadow-color': '#c2c2c2',
-        '--surface-subtle': '#ebebeb',
-        '--surface': 'rgba(0, 0, 0, 0.04)',
-        '--surface-primary': '#fcfcfc',
-        '--border-color': 'rgba(0, 0, 0, 0.12)',
-        '--overlay-light': 'rgba(0, 0, 0, 0.06)',
-        '--overlay-light-hover': 'rgba(0, 0, 0, 0.1)',
-        '--input-bg': 'rgba(0, 0, 0, 0.05)',
-        '--toolbar-icon': '#666',
-        '--toolbar-icon-hover': '#333',
-        '--close-btn-bg': 'rgba(0, 0, 0, 0.08)',
-        '--close-btn-bg-hover': 'rgba(0, 0, 0, 0.15)',
-        '--search-bg': 'rgba(0, 0, 0, 0.05)',
-        '--popup-bg': 'rgba(252, 252, 252, 0.97)',
-    }},
+    {
+        id: 'mi-light',
+        name: 'MI Light',
+        accent: '#00421c',
+        bg: '#fcfcfc',
+        bgEnd: '#fcfcfc',
+        vars: {
+            '--text-primary': '#4f4f4f',
+            '--text-muted': '#000000',
+            '--text-secondary': '#5c5c5c',
+            '--text-subtle': '#545454',
+            '--text-faint': '#545454',
+            '--text-link-hover': '#007523',
+            '--raised-panel-bg': '#f4f4f4',
+            '--shadow-color': '#c2c2c2',
+            '--surface-subtle': '#ebebeb',
+            '--surface': 'rgba(0, 0, 0, 0.04)',
+            '--surface-primary': '#fcfcfc',
+            '--border-color': 'rgba(0, 0, 0, 0.12)',
+            '--overlay-light': 'rgba(0, 0, 0, 0.06)',
+            '--overlay-light-hover': 'rgba(0, 0, 0, 0.1)',
+            '--input-bg': 'rgba(0, 0, 0, 0.05)',
+            '--toolbar-icon': '#666',
+            '--toolbar-icon-hover': '#333',
+            '--close-btn-bg': 'rgba(0, 0, 0, 0.08)',
+            '--close-btn-bg-hover': 'rgba(0, 0, 0, 0.15)',
+            '--search-bg': 'rgba(0, 0, 0, 0.05)',
+            '--popup-bg': 'rgba(252, 252, 252, 0.97)',
+        },
+    },
 ];
 
 // --- State ---
@@ -110,7 +128,7 @@ function applyPieceTheme(theme) {
         document.head.appendChild(_pieceStyleEl);
     }
 
-    const rules = ALL_PIECES.map(p => {
+    const rules = ALL_PIECES.map((p) => {
         const color = PIECE_COLORS[p[0]];
         const role = PIECE_ROLES[p];
         return `.cg-wrap piece.${role}.${color} { background-image: url('${pieceSrc(theme, p)}'); }`;
@@ -151,7 +169,7 @@ function applyBoardColors(light, dark) {
 let _lastSchemeVars = [];
 
 function applyAppScheme(schemeId) {
-    const scheme = APP_SCHEMES.find(s => s.id === schemeId) || APP_SCHEMES[0];
+    const scheme = APP_SCHEMES.find((s) => s.id === schemeId) || APP_SCHEMES[0];
 
     // Clear previous vars from all modal-content elements
     const modals = document.querySelectorAll('.modal-content');
@@ -181,8 +199,20 @@ function applyAppScheme(schemeId) {
 // --- Preview board (static, no chessground) ---
 
 const PREVIEW_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
-const FEN_MAP = { r: 'bR', n: 'bN', b: 'bB', q: 'bQ', k: 'bK', p: 'bP',
-                  R: 'wR', N: 'wN', B: 'wB', Q: 'wQ', K: 'wK', P: 'wP' };
+const FEN_MAP = {
+    r: 'bR',
+    n: 'bN',
+    b: 'bB',
+    q: 'bQ',
+    k: 'bK',
+    p: 'bP',
+    R: 'wR',
+    N: 'wN',
+    B: 'wB',
+    Q: 'wQ',
+    K: 'wK',
+    P: 'wP',
+};
 
 function renderPreviewBoard(light, dark, theme) {
     const rows = PREVIEW_FEN.split('/');
@@ -211,7 +241,7 @@ function renderPreviewBoard(light, dark, theme) {
 // --- Custom dropdown ---
 
 function closeAllDropdowns() {
-    document.querySelectorAll('.style-dropdown.open').forEach(d => d.classList.remove('open', 'dropup'));
+    document.querySelectorAll('.style-dropdown.open').forEach((d) => d.classList.remove('open', 'dropup'));
 }
 
 function initDropdown(id, onSelect) {
@@ -242,8 +272,8 @@ function initDropdown(id, onSelect) {
 // --- Render helpers ---
 
 function piecePreviewHtml(themeId) {
-    return WHITE_PIECES.map(p =>
-        `<img src="${pieceSrc(themeId, p)}" alt="" class="style-piece-img" draggable="false">`
+    return WHITE_PIECES.map(
+        (p) => `<img src="${pieceSrc(themeId, p)}" alt="" class="style-piece-img" draggable="false">`,
     ).join('');
 }
 
@@ -261,34 +291,37 @@ function schemeSwatchHtml(scheme) {
 }
 
 function buildPieceMenu(currentId) {
-    return PIECE_THEMES.map(t =>
-        `<div class="style-dropdown-item${t.id === currentId ? ' active' : ''}" data-value="${t.id}">
+    return PIECE_THEMES.map(
+        (t) =>
+            `<div class="style-dropdown-item${t.id === currentId ? ' active' : ''}" data-value="${t.id}">
             <span class="style-dropdown-label">${t.name}</span>
             <span class="style-piece-row">${piecePreviewHtml(t.id)}</span>
-        </div>`
+        </div>`,
     ).join('');
 }
 
 function buildBoardMenu(currentLight, currentDark) {
-    return BOARD_PRESETS.map(p =>
-        `<div class="style-dropdown-item${p.light === currentLight && p.dark === currentDark ? ' active' : ''}" data-value="${p.id}">
+    return BOARD_PRESETS.map(
+        (p) =>
+            `<div class="style-dropdown-item${p.light === currentLight && p.dark === currentDark ? ' active' : ''}" data-value="${p.id}">
             ${boardSwatchHtml(p.light, p.dark)}
             <span class="style-dropdown-label">${p.name}</span>
-        </div>`
+        </div>`,
     ).join('');
 }
 
 function buildSchemeMenu(currentId) {
-    return APP_SCHEMES.map(s =>
-        `<div class="style-dropdown-item${s.id === currentId ? ' active' : ''}" data-value="${s.id}">
+    return APP_SCHEMES.map(
+        (s) =>
+            `<div class="style-dropdown-item${s.id === currentId ? ' active' : ''}" data-value="${s.id}">
             ${schemeSwatchHtml(s)}
             <span class="style-dropdown-label">${s.name}</span>
-        </div>`
+        </div>`,
     ).join('');
 }
 
 function updatePieceTrigger(themeId) {
-    const theme = PIECE_THEMES.find(t => t.id === themeId) || PIECE_THEMES[0];
+    const theme = PIECE_THEMES.find((t) => t.id === themeId) || PIECE_THEMES[0];
     document.querySelector('#style-pieces .style-dropdown-trigger').innerHTML =
         `<span class="style-piece-row">${piecePreviewHtml(themeId)}</span>
          <span class="style-dropdown-label">${theme.name}</span>
@@ -296,18 +329,16 @@ function updatePieceTrigger(themeId) {
 }
 
 function updateBoardTrigger(light, dark) {
-    const preset = BOARD_PRESETS.find(p => p.light === light && p.dark === dark);
+    const preset = BOARD_PRESETS.find((p) => p.light === light && p.dark === dark);
     const name = preset ? preset.name : 'Custom';
-    document.querySelector('#style-board .style-dropdown-trigger').innerHTML =
-        `${boardSwatchHtml(light, dark)}
+    document.querySelector('#style-board .style-dropdown-trigger').innerHTML = `${boardSwatchHtml(light, dark)}
          <span class="style-dropdown-label">${name}</span>
          <span class="style-dropdown-arrow">▾</span>`;
 }
 
 function updateSchemeTrigger(schemeId) {
-    const scheme = APP_SCHEMES.find(s => s.id === schemeId) || APP_SCHEMES[0];
-    document.querySelector('#style-theme .style-dropdown-trigger').innerHTML =
-        `${schemeSwatchHtml(scheme)}
+    const scheme = APP_SCHEMES.find((s) => s.id === schemeId) || APP_SCHEMES[0];
+    document.querySelector('#style-theme .style-dropdown-trigger').innerHTML = `${schemeSwatchHtml(scheme)}
          <span class="style-dropdown-label">${scheme.name}</span>
          <span class="style-dropdown-arrow">▾</span>`;
 }
@@ -380,7 +411,7 @@ export function initStyle(mount) {
 
     // Wire up board preset dropdown
     initDropdown('style-board', (presetId) => {
-        const preset = BOARD_PRESETS.find(p => p.id === presetId);
+        const preset = BOARD_PRESETS.find((p) => p.id === presetId);
         if (!preset) return;
         applyBoardColors(preset.light, preset.dark);
         updateBoardTrigger(preset.light, preset.dark);
@@ -428,9 +459,7 @@ export function initStyle(mount) {
 
 function initDarkMode() {
     const stored = localStorage.getItem('darkMode');
-    const dark = stored !== null
-        ? stored === '1'
-        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const dark = stored !== null ? stored === '1' : window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (dark) document.documentElement.classList.add('dark-mode');
 }
 
@@ -445,7 +474,10 @@ export function openStyle() {
 
     // Populate dropdown menus
     document.querySelector('#style-pieces .style-dropdown-menu').innerHTML = buildPieceMenu(stored.pieceTheme);
-    document.querySelector('#style-board .style-dropdown-menu').innerHTML = buildBoardMenu(stored.boardLight, stored.boardDark);
+    document.querySelector('#style-board .style-dropdown-menu').innerHTML = buildBoardMenu(
+        stored.boardLight,
+        stored.boardDark,
+    );
     document.querySelector('#style-theme .style-dropdown-menu').innerHTML = buildSchemeMenu(stored.appScheme);
 
     // Set triggers

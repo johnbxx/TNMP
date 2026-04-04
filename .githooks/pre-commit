@@ -1,0 +1,4 @@
+#!/bin/sh
+# Format check + lint before commit
+npx oxfmt --check src/ || { echo "\nRun 'npm run fmt' to fix formatting."; exit 1; }
+npx oxlint src/

@@ -19,6 +19,16 @@ import '../styles.css';
 // Inline piece images (no /pieces/ directory needed on embedding site)
 import { PIECE_URLS, injectPieces } from './embed-pieces.js';
 
+// Compile-time feature flags (injected by vite.config.embed.js).
+// In the main app build these are undefined — default to full features.
+const FEAT = {
+    playerProfiles: typeof __FEAT_PLAYER_PROFILES__ !== 'undefined' ? __FEAT_PLAYER_PROFILES__ : true,
+    globalPlayerSearch: typeof __FEAT_GLOBAL_PLAYER_SEARCH__ !== 'undefined' ? __FEAT_GLOBAL_PLAYER_SEARCH__ : true,
+    import: typeof __FEAT_IMPORT__ !== 'undefined' ? __FEAT_IMPORT__ : true,
+    localEngine: typeof __FEAT_LOCAL_ENGINE__ !== 'undefined' ? __FEAT_LOCAL_ENGINE__ : true,
+    explorer: typeof __FEAT_EXPLORER__ !== 'undefined' ? __FEAT_EXPLORER__ : true,
+};
+
 // Viewer + data layer (same modules as the main app)
 import { trapFocus } from './modal.js';
 import { openStyle, initStyle } from './style.js';
@@ -26,18 +36,50 @@ import { showToast } from './toast.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import {
-    openGamePanel, closeGamePanel, handlePanelKeydown,
+    openGamePanel,
+    closeGamePanel,
+    handlePanelKeydown,
     explorerBackToBrowser,
     resolveDirtyDialog,
-    explorerGoToStart, explorerGoBack, explorerGoForward,
-    goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode,
-    toggleEngine, confirmEngineChoice, toggleEnginePause, openEngineSettings, applyEngineSettings,
-    getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
-    toggleNag, showImportDialog, hideImportDialog, doImport, submitGame,
-    showHeaderEditor, saveHeaderEditor,
-    launchExplorer, initGamePanel,
+    explorerGoToStart,
+    explorerGoBack,
+    explorerGoForward,
+    goToStart,
+    goToPrev,
+    goToNext,
+    goToEnd,
+    flipBoard,
+    toggleAutoPlay,
+    toggleComments,
+    toggleBranchMode,
+    toggleEngine,
+    confirmEngineChoice,
+    toggleEnginePause,
+    openEngineSettings,
+    applyEngineSettings,
+    getGamePgn,
+    getGameMoves,
+    getCurrentNodeId,
+    getNodes,
+    toggleNag,
+    showImportDialog,
+    hideImportDialog,
+    doImport,
+    submitGame,
+    showHeaderEditor,
+    saveHeaderEditor,
+    launchExplorer,
+    initGamePanel,
 } from './game-panel.js';
-import { prefetchGames, getCachedGame, fetchGames, getPlayer, getGroupedGames, getFilter } from './games.js';
+import {
+    prefetchGames,
+    getCachedGame,
+    fetchGames,
+    getPlayer,
+    getPlayerUscfId,
+    getGroupedGames,
+    getFilter,
+} from './games.js';
 
 // --- PGN download helper ---
 
@@ -60,11 +102,21 @@ const ACTIONS = {
     'open-games': () => openGamePanel(),
     'open-profile': (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
-        if (btn?.dataset.name) openPlayerProfile(btn.dataset.name);
+        if (!btn?.dataset.name) return;
+        if (FEAT.playerProfiles) {
+            openPlayerProfile(btn.dataset.name);
+        } else {
+            const uscfId = getPlayerUscfId(btn.dataset.name);
+            if (uscfId) window.open(`https://ratings.uschess.org/player/${uscfId}`, '_blank', 'noopener');
+        }
     },
     // Viewer
-    'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
-    'viewer-next': goToNext, 'viewer-end': goToEnd, 'viewer-flip': flipBoard,
+    'viewer-start': goToStart,
+    'viewer-prev': goToPrev,
+    'viewer-play': toggleAutoPlay,
+    'viewer-next': goToNext,
+    'viewer-end': goToEnd,
+    'viewer-flip': flipBoard,
     'viewer-comments': (e) => {
         const btn = e.target.closest('[data-action]');
         btn.classList.toggle('active', !toggleComments());
@@ -85,14 +137,20 @@ const ACTIONS = {
         try {
             const res = await fetch('https://lichess.org/api/import', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
                 body: 'pgn=' + encodeURIComponent(pgn),
             });
             if (res.ok) {
                 const data = await res.json();
-                if (data.url) { if (tab) tab.location.href = data.url + hash; else window.open(data.url + hash, '_blank'); return; }
+                if (data.url) {
+                    if (tab) tab.location.href = data.url + hash;
+                    else window.open(data.url + hash, '_blank');
+                    return;
+                }
             }
-        } catch { /* network error */ }
+        } catch {
+            /* network error */
+        }
         if (tab) tab.location.href = 'https://lichess.org/paste';
         else window.open('https://lichess.org/paste', '_blank');
     },
@@ -107,8 +165,14 @@ const ACTIONS = {
         if (!stillHidden) {
             const commentsBtn = document.getElementById('viewer-comments');
             const branchBtn = document.getElementById('viewer-branch');
-            menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle('active', commentsBtn?.classList.contains('active'));
-            menu.querySelector('[data-action="overflow-branch"]')?.classList.toggle('active', branchBtn?.classList.contains('active'));
+            menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle(
+                'active',
+                commentsBtn?.classList.contains('active'),
+            );
+            menu.querySelector('[data-action="overflow-branch"]')?.classList.toggle(
+                'active',
+                branchBtn?.classList.contains('active'),
+            );
         }
     },
     'overflow-comments': (e) => {
@@ -121,34 +185,73 @@ const ACTIONS = {
         document.getElementById('viewer-branch')?.classList.toggle('active', showing);
         e.target.closest('.overflow-item')?.classList.toggle('active', showing);
     },
-    'viewer-engine': () => toggleEngine(),
+    'viewer-engine': () => {
+        if (FEAT.localEngine) toggleEngine();
+        else ACTIONS['viewer-analysis']();
+    },
     'overflow-engine': () => {
         document.getElementById('overflow-menu')?.classList.add('hidden');
-        toggleEngine();
+        if (FEAT.localEngine) toggleEngine();
+        else ACTIONS['viewer-analysis']();
     },
     'engine-confirm': () => {
-        const variant = document.querySelector('input[name="engine-variant"]:checked')?.value || 'lite';
-        confirmEngineChoice(variant);
+        if (FEAT.localEngine) {
+            const v = document.querySelector('input[name="engine-variant"]:checked')?.value || 'lite';
+            confirmEngineChoice(v);
+        }
     },
     'engine-cancel': () => document.getElementById('engine-choice-dialog')?.classList.add('hidden'),
-    'engine-pause': () => toggleEnginePause(),
-    'engine-settings': () => openEngineSettings(),
-    'engine-settings-save': () => applyEngineSettings(),
+    'engine-pause': () => {
+        if (FEAT.localEngine) toggleEnginePause();
+    },
+    'engine-settings': () => {
+        if (FEAT.localEngine) openEngineSettings();
+    },
+    'engine-settings-save': () => {
+        if (FEAT.localEngine) applyEngineSettings();
+    },
     'engine-settings-cancel': () => document.getElementById('engine-settings-dialog')?.classList.add('hidden'),
-    'overflow-analysis': () => { document.getElementById('overflow-menu')?.classList.add('hidden'); ACTIONS['viewer-analysis'](); },
-    'overflow-headers': () => { document.getElementById('overflow-menu')?.classList.add('hidden'); ACTIONS['editor-headers'](); },
+    'overflow-analysis': () => {
+        document.getElementById('overflow-menu')?.classList.add('hidden');
+        ACTIONS['viewer-analysis']();
+    },
+    'overflow-headers': () => {
+        document.getElementById('overflow-menu')?.classList.add('hidden');
+        ACTIONS['editor-headers']();
+    },
     // Explorer
-    'explorer-start': explorerGoToStart, 'explorer-prev': explorerGoBack,
-    'explorer-next': explorerGoForward, 'explorer-flip': flipBoard,
+    'explorer-start': explorerGoToStart,
+    'explorer-prev': explorerGoBack,
+    'explorer-next': explorerGoForward,
+    'explorer-flip': flipBoard,
     'explorer-back': explorerBackToBrowser,
     'explorer-view-games': explorerBackToBrowser,
     // Browser
-    'browser-explore': launchExplorer,
+    'browser-explore': () => {
+        if (FEAT.explorer) launchExplorer();
+    },
     // Editor
-    'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
-    'browser-import': () => showImportDialog(), 'submit-add-moves': () => showImportDialog(true), 'viewer-submit': submitGame,
-    'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': () => document.getElementById('editor-header-popup')?.classList.add('hidden'),
-    'dirty-copy-leave': () => resolveDirtyDialog('copy-leave'), 'dirty-discard': () => resolveDirtyDialog('discard'), 'dirty-cancel': () => resolveDirtyDialog('cancel'),
+    'editor-import-ok': () => {
+        if (FEAT.import) doImport();
+    },
+    'editor-import-cancel': () => {
+        if (FEAT.import) hideImportDialog();
+    },
+    'browser-import': () => {
+        if (FEAT.import) showImportDialog();
+    },
+    'submit-add-moves': () => {
+        if (FEAT.import) showImportDialog(true);
+    },
+    'viewer-submit': () => {
+        if (FEAT.import) submitGame();
+    },
+    'editor-headers': showHeaderEditor,
+    'header-save': saveHeaderEditor,
+    'header-cancel': () => document.getElementById('editor-header-popup')?.classList.add('hidden'),
+    'dirty-copy-leave': () => resolveDirtyDialog('copy-leave'),
+    'dirty-discard': () => resolveDirtyDialog('discard'),
+    'dirty-cancel': () => resolveDirtyDialog('cancel'),
     // Share
     'share-copy-pgn': () => handleShareAction('copy-pgn'),
     'share-copy-link': () => handleShareAction('copy-link'),
@@ -165,14 +268,14 @@ function handleShareAction(action) {
     if (action === 'copy-pgn') {
         navigator.clipboard.writeText(getGameMoves() || pgn).then(
             () => showToast('Moves copied!', 'success'),
-            () => showToast('Could not copy to clipboard', 'error')
+            () => showToast('Could not copy to clipboard', 'error'),
         );
     } else if (action === 'copy-link') {
         const gameId = getHeader(pgn, 'GameId');
         const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
         navigator.clipboard.writeText(url).then(
             () => showToast('Link copied!', 'success'),
-            () => showToast('Could not copy to clipboard', 'error')
+            () => showToast('Could not copy to clipboard', 'error'),
         );
     } else if (action === 'download') {
         const w = getHeader(pgn, 'White')?.split(',')[0] || 'White';
@@ -182,15 +285,29 @@ function handleShareAction(action) {
     } else if (action === 'share') {
         const gameId = getHeader(pgn, 'GameId');
         const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
-        navigator.share({ title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`, url }).catch(() => {});
+        navigator
+            .share({
+                title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`,
+                url,
+            })
+            .catch(() => {});
     }
 }
 
 function handleBrowserExport() {
-    const gameIds = getGroupedGames().flatMap(g => g.games).filter(g => g.gameId).map(g => g.gameId);
-    if (!gameIds.length) { showToast('No games to export', 'error'); return; }
-    const games = gameIds.map(id => getCachedGame(id)).filter(g => g?.pgn);
-    if (!games.length) { showToast('No PGN data available', 'error'); return; }
+    const gameIds = getGroupedGames()
+        .flatMap((g) => g.games)
+        .filter((g) => g.gameId)
+        .map((g) => g.gameId);
+    if (!gameIds.length) {
+        showToast('No games to export', 'error');
+        return;
+    }
+    const games = gameIds.map((id) => getCachedGame(id)).filter((g) => g?.pgn);
+    if (!games.length) {
+        showToast('No PGN data available', 'error');
+        return;
+    }
     const playerName = getPlayer();
     let filename;
     if (playerName) {
@@ -201,7 +318,7 @@ function handleBrowserExport() {
     } else {
         filename = `games-R${games[0]?.round || 'all'}.pgn`;
     }
-    downloadPgn(games.map(g => g.pgn).join('\n\n'), filename);
+    downloadPgn(games.map((g) => g.pgn).join('\n\n'), filename);
     showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`, 'success');
 }
 
@@ -212,10 +329,14 @@ document.addEventListener('click', (e) => {
     if (actionBtn) {
         if (actionBtn.hasAttribute('data-hold')) return;
         const handler = ACTIONS[actionBtn.dataset.action];
-        if (handler) { handler(e); return; }
+        if (handler) {
+            handler(e);
+            return;
+        }
     }
     if (e.target.classList.contains('modal-backdrop') && e.target.closest('#viewer-modal')) {
-        closeGamePanel(); return;
+        closeGamePanel();
+        return;
     }
     if (!e.target.closest('.share-btn-wrapper') && !e.target.closest('.overflow-btn-wrapper')) {
         document.getElementById('share-popover')?.classList.add('hidden');
@@ -223,15 +344,25 @@ document.addEventListener('click', (e) => {
     if (!e.target.closest('.overflow-btn-wrapper')) {
         document.getElementById('overflow-menu')?.classList.add('hidden');
     }
-    if (e.target.closest('#browser-export')) { handleBrowserExport(); return; }
+    if (e.target.closest('#browser-export')) {
+        handleBrowserExport();
+        return;
+    }
     const nagBtn = e.target.closest('.nag-btn');
-    if (nagBtn) { toggleNag(parseInt(nagBtn.dataset.nag, 10)); return; }
+    if (nagBtn) {
+        toggleNag(parseInt(nagBtn.dataset.nag, 10));
+        return;
+    }
 });
 
 // Hold-to-repeat for nav buttons
 {
     let timer = null;
-    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
+    const stop = () => {
+        clearTimeout(timer);
+        clearInterval(timer);
+        timer = null;
+    };
     document.addEventListener('pointerdown', (e) => {
         const btn = e.target.closest('[data-hold][data-action]');
         if (!btn) return;
@@ -239,7 +370,9 @@ document.addEventListener('click', (e) => {
         if (!action) return;
         e.preventDefault();
         action();
-        timer = setTimeout(() => { timer = setInterval(action, 80); }, 400);
+        timer = setTimeout(() => {
+            timer = setInterval(action, 80);
+        }, 400);
     });
     document.addEventListener('pointerup', stop);
     document.addEventListener('pointercancel', stop);
@@ -286,9 +419,9 @@ function init() {
     document.body.appendChild(profileMount);
 
     // Init modules
-    initGamePanel(gameMount);
+    initGamePanel(gameMount, { features: FEAT });
     initStyle(styleMount);
-    initPlayerProfile(profileMount);
+    if (FEAT.playerProfiles) initPlayerProfile(profileMount);
 
     // Embed branding
     const brand = document.createElement('a');
@@ -322,8 +455,22 @@ function init() {
         document.querySelector('[data-action="share-native"]')?.classList.add('hidden');
     }
 
+    // Hide UI for disabled features
+    if (!FEAT.import) {
+        document.getElementById('browser-import')?.classList.add('hidden');
+        document.querySelector('[data-action="viewer-submit"]')?.classList.add('hidden');
+        document.querySelector('[data-action="submit-add-moves"]')?.classList.add('hidden');
+    }
+    if (!FEAT.explorer) {
+        document.getElementById('browser-explore')?.classList.add('hidden');
+        document.querySelector('[data-action="browser-explore"]')?.classList.add('hidden');
+    }
+
     // Prefetch game data from API
-    prefetchGames(_scriptScope ? { tournamentScope: _scriptScope } : undefined);
+    prefetchGames({
+        ...(_scriptScope && { tournamentScope: _scriptScope }),
+        ...(!FEAT.globalPlayerSearch && { localPlayerSearch: true }),
+    });
 }
 
 // Capture script attributes at parse time (currentScript is null inside DOMContentLoaded)

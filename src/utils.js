@@ -7,7 +7,7 @@
  * Passes through names that don't have a comma.
  */
 export function formatName(name) {
-    const parts = name.split(',').map(s => s.trim());
+    const parts = name.split(',').map((s) => s.trim());
     return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
 }
 
@@ -44,7 +44,10 @@ export function resultSymbol(result, side) {
 const _headerRegexCache = {};
 export function getHeader(pgn, tag) {
     let re = _headerRegexCache[tag];
-    if (!re) { re = new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`); _headerRegexCache[tag] = re; }
+    if (!re) {
+        re = new RegExp(`\\[${tag}\\s+"([^"]*)"\\]`);
+        _headerRegexCache[tag] = re;
+    }
     return pgn.match(re)?.[1] || '';
 }
 
@@ -65,7 +68,8 @@ export function resultDisplay(code) {
     const c = code.trim();
     if (c === 'W' || c === '1' || c === '1 X') return { emoji: '\uD83C\uDF89', text: 'You won!', outcome: 'win' };
     if (c === 'L' || c === '0' || c === '0 F') return { emoji: '\uD83D\uDE1E', text: 'You lost', outcome: 'loss' };
-    if (c === 'D' || c === '\u00BD' || c === '½' || c === '&frac12;') return { emoji: '\uD83E\uDD1D', text: 'Draw', outcome: 'draw' };
+    if (c === 'D' || c === '\u00BD' || c === '½' || c === '&frac12;')
+        return { emoji: '\uD83E\uDD1D', text: 'Draw', outcome: 'draw' };
     return null;
 }
 

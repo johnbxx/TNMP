@@ -8,7 +8,7 @@ import { findOpeningByName } from './eco.js';
 let currentPlayer = null;
 let currentPlayerNorm = null;
 let currentUscfId = null;
-let _profileData = null;        // same shape as _playerData: { games, query }
+let _profileData = null; // same shape as _playerData: { games, query }
 let cachedStats = null;
 
 // --- Data fetching ---
@@ -54,8 +54,12 @@ function computeStats(games, norm) {
         const r = game.result;
         if (!r || r === '*') continue;
 
-        const outcome = (side === 'white' && r === '1-0') || (side === 'black' && r === '0-1') ? 'w'
-            : (side === 'white' && r === '0-1') || (side === 'black' && r === '1-0') ? 'l' : 'd';
+        const outcome =
+            (side === 'white' && r === '1-0') || (side === 'black' && r === '0-1')
+                ? 'w'
+                : (side === 'white' && r === '0-1') || (side === 'black' && r === '1-0')
+                  ? 'l'
+                  : 'd';
 
         tally(totals.all, outcome);
         tally(totals[side], outcome);
@@ -67,7 +71,8 @@ function computeStats(games, norm) {
 
         // ECO (by side)
         if (game.eco) {
-            if (!ecos.has(game.eco)) ecos.set(game.eco, { name: game.openingName || game.eco, white: wld(), black: wld() });
+            if (!ecos.has(game.eco))
+                ecos.set(game.eco, { name: game.openingName || game.eco, white: wld(), black: wld() });
             tally(ecos.get(game.eco)[side], outcome);
         }
 
@@ -82,10 +87,19 @@ function computeStats(games, norm) {
     return { totals, tournaments, ecos, opponents };
 }
 
-function wld() { return { w: 0, l: 0, d: 0 }; }
-function tally(s, outcome) { s[outcome]++; }
-function total(s) { return s.w + s.l + s.d; }
-function scorePct(s) { const t = total(s); return t === 0 ? '0.0' : ((s.w + 0.5 * s.d) / t * 100).toFixed(1); }
+function wld() {
+    return { w: 0, l: 0, d: 0 };
+}
+function tally(s, outcome) {
+    s[outcome]++;
+}
+function total(s) {
+    return s.w + s.l + s.d;
+}
+function scorePct(s) {
+    const t = total(s);
+    return t === 0 ? '0.0' : (((s.w + 0.5 * s.d) / t) * 100).toFixed(1);
+}
 
 // --- Shared row template ---
 
@@ -93,13 +107,18 @@ function winBar(s) {
     const t = total(s);
     if (t === 0) return '<div class="profile-bar"></div>';
     return `<div class="profile-bar">
-        <div class="profile-bar-win" style="width:${s.w / t * 100}%">${s.w > 0 ? `<span>${s.w}</span>` : ''}</div>
-        <div class="profile-bar-draw" style="width:${s.d / t * 100}%">${s.d > 0 ? `<span>${s.d}</span>` : ''}</div>
-        <div class="profile-bar-loss" style="width:${s.l / t * 100}%">${s.l > 0 ? `<span>${s.l}</span>` : ''}</div>
+        <div class="profile-bar-win" style="width:${(s.w / t) * 100}%">${s.w > 0 ? `<span>${s.w}</span>` : ''}</div>
+        <div class="profile-bar-draw" style="width:${(s.d / t) * 100}%">${s.d > 0 ? `<span>${s.d}</span>` : ''}</div>
+        <div class="profile-bar-loss" style="width:${(s.l / t) * 100}%">${s.l > 0 ? `<span>${s.l}</span>` : ''}</div>
     </div>`;
 }
 
-function profileRow(label, s, action, { icon, compact, noSummary, profileName, actionAttr = 'data-action-query' } = {}) {
+function profileRow(
+    label,
+    s,
+    action,
+    { icon, compact, noSummary, profileName, actionAttr = 'data-action-query' } = {},
+) {
     const t = total(s);
     const cls = compact ? 'profile-row profile-row-compact' : 'profile-row';
     const nameEl = profileName
@@ -122,18 +141,34 @@ function renderOverview(stats) {
     const slugOrder = [];
     const seen = new Set();
     for (const g of _profileData?.games || []) {
-        if (!seen.has(g.tournamentSlug)) { seen.add(g.tournamentSlug); slugOrder.push(g.tournamentSlug); }
+        if (!seen.has(g.tournamentSlug)) {
+            seen.add(g.tournamentSlug);
+            slugOrder.push(g.tournamentSlug);
+        }
     }
     const entries = [...stats.tournaments.entries()].sort((a, b) => slugOrder.indexOf(a[0]) - slugOrder.indexOf(b[0]));
 
     return {
-        header: profileRow('All Games', stats.totals.all, JSON.stringify({ player: currentPlayer, tournament: 'all' }))
-            + profileRow('As White', stats.totals.white, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'white' }), { icon: 'wK.webp' })
-            + profileRow('As Black', stats.totals.black, JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'black' }), { icon: 'bK.webp' })
-            + `<div class="profile-section-title">Tournaments</div>`,
-        content: entries.map(([slug, t]) =>
-            profileRow(t.name, t, JSON.stringify({ player: currentPlayer, tournament: slug }), { noSummary: true })
-        ).join(''),
+        header:
+            profileRow('All Games', stats.totals.all, JSON.stringify({ player: currentPlayer, tournament: 'all' })) +
+            profileRow(
+                'As White',
+                stats.totals.white,
+                JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'white' }),
+                { icon: 'wK.webp' },
+            ) +
+            profileRow(
+                'As Black',
+                stats.totals.black,
+                JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'black' }),
+                { icon: 'bK.webp' },
+            ) +
+            `<div class="profile-section-title">Tournaments</div>`,
+        content: entries
+            .map(([slug, t]) =>
+                profileRow(t.name, t, JSON.stringify({ player: currentPlayer, tournament: slug }), { noSummary: true }),
+            )
+            .join(''),
     };
 }
 
@@ -151,11 +186,11 @@ function groupByFamily(entries, side) {
         if (!families.has(family)) families.set(family, { codes: [], ...wld() });
         const f = families.get(family);
         f.codes.push(code);
-        f.w += s.w; f.l += s.l; f.d += s.d;
+        f.w += s.w;
+        f.l += s.l;
+        f.d += s.d;
     }
-    return [...families.entries()]
-        .map(([family, f]) => ({ family, ...f }))
-        .sort((a, b) => total(b) - total(a));
+    return [...families.entries()].map(([family, f]) => ({ family, ...f })).sort((a, b) => total(b) - total(a));
 }
 
 function renderOpenings(stats) {
@@ -165,9 +200,19 @@ function renderOpenings(stats) {
         const families = groupByFamily(entries, side);
         const title = `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/${icon}" alt=""> As ${side === 'white' ? 'White' : 'Black'}</div>`;
         if (!families.length) return title + '<p class="profile-empty-small">No games with ECO data.</p>';
-        return title + families.map(f =>
-            profileRow(f.family, f, JSON.stringify({ player: currentPlayer, tournament: 'all', color: side, ecoLabel: f.family }), { compact: true })
-        ).join('');
+        return (
+            title +
+            families
+                .map((f) =>
+                    profileRow(
+                        f.family,
+                        f,
+                        JSON.stringify({ player: currentPlayer, tournament: 'all', color: side, ecoLabel: f.family }),
+                        { compact: true },
+                    ),
+                )
+                .join('')
+        );
     }
 
     return { header: '', content: section('white', 'wK.webp') + section('black', 'bK.webp') };
@@ -176,12 +221,18 @@ function renderOpenings(stats) {
 function renderOpponentList(opponents, filter = '') {
     const f = filter.toLowerCase();
     const sorted = [...opponents.values()]
-        .filter(o => !f || o.name.toLowerCase().includes(f))
+        .filter((o) => !f || o.name.toLowerCase().includes(f))
         .sort((a, b) => total(b) - total(a));
-    if (!sorted.length) return `<p class="profile-empty-small">${f ? 'No matching opponents.' : 'No opponents found.'}</p>`;
-    return sorted.map(o =>
-        profileRow(o.name, o, JSON.stringify({ player: currentPlayer, opponent: o.name, opponentNorm: o.norm }), { compact: true, profileName: o.name })
-    ).join('');
+    if (!sorted.length)
+        return `<p class="profile-empty-small">${f ? 'No matching opponents.' : 'No opponents found.'}</p>`;
+    return sorted
+        .map((o) =>
+            profileRow(o.name, o, JSON.stringify({ player: currentPlayer, opponent: o.name, opponentNorm: o.norm }), {
+                compact: true,
+                profileName: o.name,
+            }),
+        )
+        .join('');
 }
 
 function renderOpponents(stats) {
@@ -271,7 +322,6 @@ export async function openPlayerProfile(playerName) {
     }
 }
 
-
 export function closePlayerProfile() {
     closeModal('profile-modal');
     currentPlayer = null;
@@ -344,7 +394,10 @@ export function initPlayerProfile(mount) {
             if (query.ecoLabel) {
                 const opening = findOpeningByName(query.ecoLabel);
                 if (opening?.pgn) {
-                    const moves = opening.pgn.replace(/\d+\.\s*/g, '').trim().split(/\s+/);
+                    const moves = opening.pgn
+                        .replace(/\d+\.\s*/g, '')
+                        .trim()
+                        .split(/\s+/);
                     setExplorerPosition(moves);
                 }
             }

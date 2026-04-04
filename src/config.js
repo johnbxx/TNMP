@@ -2,7 +2,8 @@
 export const WORKER_URL = 'https://api.tnmpairings.com';
 
 // VAPID public key for Web Push (base64url-encoded)
-export const VAPID_PUBLIC_KEY = 'BKdSGlB3e8V2mPw7Mmr3wchYnk6ySS5tWsEiqJwkRMvb3Z_ArLWvaV8ZOCqAzcaFdqLyo2LJU-qP17RQMPGRzS4';
+export const VAPID_PUBLIC_KEY =
+    'BKdSGlB3e8V2mPw7Mmr3wchYnk6ySS5tWsEiqJwkRMvb3Z_ArLWvaV8ZOCqAzcaFdqLyo2LJU-qP17RQMPGRzS4';
 
 // Configuration
 export const CONFIG = {
@@ -29,8 +30,10 @@ export const CONFIG = {
         try {
             if (value) localStorage.setItem('playerNorm', value);
             else localStorage.removeItem('playerNorm');
-        } catch { /* quota */ }
-    }
+        } catch {
+            /* quota */
+        }
+    },
 };
 
 // Tournament metadata (populated from worker response)
@@ -41,8 +44,12 @@ let _tournamentMeta = {
     roundDates: [],
 };
 
-export function getTournamentMeta() { return _tournamentMeta; }
-export function setTournamentMeta(meta) { _tournamentMeta = meta; }
+export function getTournamentMeta() {
+    return _tournamentMeta;
+}
+export function setTournamentMeta(meta) {
+    _tournamentMeta = meta;
+}
 
 // App states
 export const STATE = {
@@ -51,14 +58,18 @@ export const STATE = {
     YES: 'yes',
     IN_PROGRESS: 'in_progress',
     RESULTS: 'results',
-    OFF_SEASON: 'off_season'
+    OFF_SEASON: 'off_season',
 };
 
 // Runtime app state (written by app.js, read by ui/share/countdown)
 let _appState = { state: null, pairing: null, lastRoundNumber: 1, roundInfo: '' };
 
-export function getAppState() { return _appState; }
-export function updateAppState(partial) { _appState = { ..._appState, ...partial }; }
+export function getAppState() {
+    return _appState;
+}
+export function updateAppState(partial) {
+    _appState = { ..._appState, ...partial };
+}
 
 // Feature gates
 export const SUBMISSIONS_ENABLED = false;

@@ -14,11 +14,11 @@
 
 import { Chess } from 'chess.js';
 
-let _sf = null;             // stockfish-web instance
+let _sf = null; // stockfish-web instance
 let _ready = false;
 let _loading = false;
-let _variant = null;        // 'lite' | 'full'
-let _onLine = null;          // current line handler
+let _variant = null; // 'lite' | 'full'
+let _onLine = null; // current line handler
 let _onChange = null;
 
 // Current engine options (applied between uciok and isready)
@@ -29,14 +29,28 @@ const CACHE_MAX = 500;
 
 // ─── Public state ────────────────────────────────────────────────
 
-export function isReady() { return _ready; }
-export function isLoading() { return _loading; }
-export function isActive() { return _ready && _sf !== null; }
-export function getVariant() { return _variant; }
-export function getOptions() { return { ..._options }; }
-export function onChange(fn) { _onChange = fn; }
+export function isReady() {
+    return _ready;
+}
+export function isLoading() {
+    return _loading;
+}
+export function isActive() {
+    return _ready && _sf !== null;
+}
+export function getVariant() {
+    return _variant;
+}
+export function getOptions() {
+    return { ..._options };
+}
+export function onChange(fn) {
+    _onChange = fn;
+}
 
-function notify() { _onChange?.({ ready: _ready, loading: _loading, variant: _variant }); }
+function notify() {
+    _onChange?.({ ready: _ready, loading: _loading, variant: _variant });
+}
 
 export function getSavedVariant() {
     return localStorage.getItem('engine-variant'); // kept for settings UI compat
@@ -111,7 +125,6 @@ export async function initEngine(variant, options = {}) {
 
 let _initResolve = null;
 
-
 /**
  * Load NNUE network file required by the lichess-org stockfish-web build.
  * 'full' variant loads the big net (104MB, max strength).
@@ -162,7 +175,11 @@ function _resolveThreads() {
 
 export function destroyEngine() {
     if (_sf) {
-        try { _send('quit'); } catch { /* already dead */ }
+        try {
+            _send('quit');
+        } catch {
+            /* already dead */
+        }
         _sf = null;
     }
     _ready = false;
@@ -305,22 +322,57 @@ export function newGame() {
 
 export function parseInfoLine(line) {
     const tokens = line.split(' ');
-    const result = { depth: 0, seldepth: 0, score: 0, mate: null, wdl: null, pv: [], nodes: 0, nps: 0, time: 0, multiPvIndex: 1 };
+    const result = {
+        depth: 0,
+        seldepth: 0,
+        score: 0,
+        mate: null,
+        wdl: null,
+        pv: [],
+        nodes: 0,
+        nps: 0,
+        time: 0,
+        multiPvIndex: 1,
+    };
 
     for (let i = 0; i < tokens.length; i++) {
         switch (tokens[i]) {
-        case 'depth': result.depth = parseInt(tokens[++i]); break;
-        case 'seldepth': result.seldepth = parseInt(tokens[++i]); break;
-        case 'multipv': result.multiPvIndex = parseInt(tokens[++i]); break;
-        case 'nodes': result.nodes = parseInt(tokens[++i]); break;
-        case 'nps': result.nps = parseInt(tokens[++i]); break;
-        case 'time': result.time = parseInt(tokens[++i]); break;
-        case 'wdl': result.wdl = [parseInt(tokens[i+1]), parseInt(tokens[i+2]), parseInt(tokens[i+3])]; i += 3; break;
-        case 'score':
-            if (tokens[i + 1] === 'cp') { result.score = parseInt(tokens[i + 2]); i += 2; }
-            else if (tokens[i + 1] === 'mate') { result.mate = parseInt(tokens[i + 2]); result.score = 0; i += 2; }
-            break;
-        case 'pv': result.pv = tokens.slice(i + 1); i = tokens.length; break;
+            case 'depth':
+                result.depth = parseInt(tokens[++i]);
+                break;
+            case 'seldepth':
+                result.seldepth = parseInt(tokens[++i]);
+                break;
+            case 'multipv':
+                result.multiPvIndex = parseInt(tokens[++i]);
+                break;
+            case 'nodes':
+                result.nodes = parseInt(tokens[++i]);
+                break;
+            case 'nps':
+                result.nps = parseInt(tokens[++i]);
+                break;
+            case 'time':
+                result.time = parseInt(tokens[++i]);
+                break;
+            case 'wdl':
+                result.wdl = [parseInt(tokens[i + 1]), parseInt(tokens[i + 2]), parseInt(tokens[i + 3])];
+                i += 3;
+                break;
+            case 'score':
+                if (tokens[i + 1] === 'cp') {
+                    result.score = parseInt(tokens[i + 2]);
+                    i += 2;
+                } else if (tokens[i + 1] === 'mate') {
+                    result.mate = parseInt(tokens[i + 2]);
+                    result.score = 0;
+                    i += 2;
+                }
+                break;
+            case 'pv':
+                result.pv = tokens.slice(i + 1);
+                i = tokens.length;
+                break;
         }
     }
 
@@ -353,7 +405,9 @@ export function pvToSan(fen, uciMoves) {
             const move = chess.move({ from, to, promotion });
             if (!move) break;
             san.push(move.san);
-        } catch { break; }
+        } catch {
+            break;
+        }
     }
     return san;
 }

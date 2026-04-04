@@ -56,12 +56,17 @@ export function showLoading() {
 }
 
 const STATE_CONFIG = {
-    [STATE.YES]:         { className: 'yes',         answer: 'YES',      buttonText: 'View Pairings',        buttonHash: '#Pairings' },
-    [STATE.NO]:          { className: 'no',           answer: 'NO',       buttonText: 'Check Again',          buttonHash: null },
-    [STATE.TOO_EARLY]:   { className: 'too-early',    answer: 'CHILL',    buttonText: 'Check Again',          buttonHash: null },
-    [STATE.IN_PROGRESS]: { className: 'in-progress',  answer: () => `ROUND ${getAppState().lastRoundNumber}`, buttonText: 'Check Again', buttonHash: null },
-    [STATE.RESULTS]:     { className: 'results',      answer: 'COMPLETE', buttonText: 'View Results',         buttonHash: '#Standings' },
-    [STATE.OFF_SEASON]:  { className: 'off-season',   answer: 'REST',     buttonText: 'View Tournament Info', buttonHash: '' },
+    [STATE.YES]: { className: 'yes', answer: 'YES', buttonText: 'View Pairings', buttonHash: '#Pairings' },
+    [STATE.NO]: { className: 'no', answer: 'NO', buttonText: 'Check Again', buttonHash: null },
+    [STATE.TOO_EARLY]: { className: 'too-early', answer: 'CHILL', buttonText: 'Check Again', buttonHash: null },
+    [STATE.IN_PROGRESS]: {
+        className: 'in-progress',
+        answer: () => `ROUND ${getAppState().lastRoundNumber}`,
+        buttonText: 'Check Again',
+        buttonHash: null,
+    },
+    [STATE.RESULTS]: { className: 'results', answer: 'COMPLETE', buttonText: 'View Results', buttonHash: '#Standings' },
+    [STATE.OFF_SEASON]: { className: 'off-season', answer: 'REST', buttonText: 'View Tournament Info', buttonHash: '' },
 };
 
 export function showState(state, info, offSeasonData = null) {
@@ -95,7 +100,10 @@ export function showState(state, info, offSeasonData = null) {
             <p class="meme-text">${meme.text}</p>
         `;
         const img = memeEl.querySelector('img');
-        if (img) img.addEventListener('error', () => { img.style.display = 'none'; });
+        if (img)
+            img.addEventListener('error', () => {
+                img.style.display = 'none';
+            });
     }
     document.getElementById('round-info').textContent = info || '';
 
@@ -116,7 +124,14 @@ export function hideOfflineBanner() {
 
 // --- Round Tracker ---
 
-const RESULT_CLASS = { W: 'tracker-win', L: 'tracker-loss', D: 'tracker-draw', H: 'tracker-bye', B: 'tracker-bye', U: 'tracker-bye' };
+const RESULT_CLASS = {
+    W: 'tracker-win',
+    L: 'tracker-loss',
+    D: 'tracker-draw',
+    H: 'tracker-bye',
+    B: 'tracker-bye',
+    U: 'tracker-bye',
+};
 const PIECE_ICON = { White: 'wK', Black: 'bK' };
 
 export function renderRoundTracker(rounds, _totalRounds, currentRound, currentState, selectedRound = null) {
@@ -124,7 +139,10 @@ export function renderRoundTracker(rounds, _totalRounds, currentRound, currentSt
     const container = document.getElementById('round-tracker');
     if (!section || !container) return;
 
-    if (!rounds || !Object.keys(rounds).length) { section.classList.add('hidden'); return; }
+    if (!rounds || !Object.keys(rounds).length) {
+        section.classList.add('hidden');
+        return;
+    }
 
     section.classList.remove('hidden');
 
@@ -136,16 +154,23 @@ export function renderRoundTracker(rounds, _totalRounds, currentRound, currentSt
         const isLive = i === currentRound && (currentState === STATE.IN_PROGRESS || currentState === STATE.YES);
 
         // Tab: set class + icon
-        const resultCls = r?.result ? `tracker-completed ${RESULT_CLASS[r.result] || ''}`
-            : isLive ? 'tracker-active tracker-current' : 'tracker-future';
+        const resultCls = r?.result
+            ? `tracker-completed ${RESULT_CLASS[r.result] || ''}`
+            : isLive
+              ? 'tracker-active tracker-current'
+              : 'tracker-future';
         tab.className = `tracker-round ${resultCls}`;
         tab.toggleAttribute('data-clickable', !!(r?.result || i === currentRound));
         const icon = r?.isBye ? 'Duck' : PIECE_ICON[r?.color];
-        tab.innerHTML = icon ? `<img class="tracker-icon" src="pieces/${icon}.webp" alt="${r?.color || 'Bye'}">`
+        tab.innerHTML = icon
+            ? `<img class="tracker-icon" src="pieces/${icon}.webp" alt="${r?.color || 'Bye'}">`
             : `<span class="tracker-number">${i}</span>`;
 
         // Panel: fill in round data
-        if (!r) { panel.classList.add('hidden'); continue; }
+        if (!r) {
+            panel.classList.add('hidden');
+            continue;
+        }
         panel.classList.remove('hidden');
 
         const header = panel.querySelector('.pairing-history-label');

@@ -1,0 +1,76 @@
+name: Publish Embed
+
+# Promotes a tested embed artifact to the live /embed/ path on Cloudflare Pages.
+#
+# Usage (CLI):
+#   gh workflow run embed-publish.yml -f commit_sha=abc1234
+#
+# Usage (web):
+#   Actions tab → "Publish Embed" → Run workflow → paste the commit SHA
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Commit SHA of the embed build to publish (from a CI run on main)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Find CI run for commit
+        id: find-run
+        run: |
+          RUN_ID=$(gh run list --workflow=ci.yml --commit=${{ inputs.commit_sha }} --json databaseId --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::No CI run found for commit ${{ inputs.commit_sha }}"
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download embed artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: embed-${{ inputs.commit_sha }}
+          path: embed-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
+      - name: Deploy embed to Pages
+        run: |
+          npm run build:engine
+          npx vite build
+          mkdir -p dist/embed
+          cp embed-artifact/tnmp-viewer.js dist/embed/
+          npx wrangler pages deploy dist --project-name=tnmpairings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Tag the published commit
+        run: |
+          EMBED_VERSION=$(date +%Y%m%d-%H%M%S)
+          git tag "embed-v${EMBED_VERSION}" ${{ inputs.commit_sha }}
+          git push origin "embed-v${EMBED_VERSION}"
+
+      - name: Summary
+        run: |
+          echo "### Embed Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source commit:** \`${{ inputs.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Live at:** \`https://tnmpairings.com/embed/tnmp-viewer.js\`" >> $GITHUB_STEP_SUMMARY

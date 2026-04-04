@@ -6,8 +6,14 @@
 // ─── Piece Encoding ─────────────────────────────────────────────────
 // White: 1-6, Black: 9-14. p=1 n=2 b=3 r=4 q=5 k=6. Empty=0.
 
-const W = 0, B = 8;
-const P = 1, N = 2, _B = 3, R = 4, Q = 5, K = 6;
+const W = 0,
+    B = 8;
+const P = 1,
+    N = 2,
+    _B = 3,
+    R = 4,
+    Q = 5,
+    K = 6;
 const pieceColor = (p) => p >> 3;
 const pieceType = (p) => p & 7;
 
@@ -38,7 +44,7 @@ function splitmix64(seed) {
 const rand = splitmix64(0x12345678);
 
 const PIECE_KEYS = Array.from({ length: 2 }, () =>
-    Array.from({ length: 7 }, () => Array.from({ length: 128 }, () => rand()))
+    Array.from({ length: 7 }, () => Array.from({ length: 128 }, () => rand())),
 );
 const EP_KEYS = Array.from({ length: 8 }, () => rand());
 const CASTLING_KEYS = Array.from({ length: 16 }, () => rand());
@@ -52,8 +58,18 @@ function hashPiece(encoded, sq) {
 // Compute Zobrist hash directly from a FEN string (for position lookups).
 
 const FEN_CHAR_TO_ENCODED = {
-    P: W | P, N: W | N, B: W | _B, R: W | R, Q: W | Q, K: W | K,
-    p: B | P, n: B | N, b: B | _B, r: B | R, q: B | Q, k: B | K,
+    P: W | P,
+    N: W | N,
+    B: W | _B,
+    R: W | R,
+    Q: W | Q,
+    K: W | K,
+    p: B | P,
+    n: B | N,
+    b: B | _B,
+    r: B | R,
+    q: B | Q,
+    k: B | K,
 };
 
 export function hashFen(fen) {
@@ -108,8 +124,16 @@ export const START_HASH = hashFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w
 
 // Char code → piece type (supports N/B/R/Q/K in both cases)
 const CC = new Uint8Array(128);
-CC[78] = N; CC[66] = _B; CC[82] = R; CC[81] = Q; CC[75] = K;
-CC[110] = N; CC[98] = _B; CC[114] = R; CC[113] = Q; CC[107] = K;
+CC[78] = N;
+CC[66] = _B;
+CC[82] = R;
+CC[81] = Q;
+CC[75] = K;
+CC[110] = N;
+CC[98] = _B;
+CC[114] = R;
+CC[113] = Q;
+CC[107] = K;
 
 // Compute 0x88 square from two chars at position i in string s
 function sqAt(s, i) {
@@ -121,7 +145,7 @@ export class ReplayEngine {
         this.board = new Uint8Array(128);
         this.wKing = 0;
         this.bKing = 0;
-        this.us = W;        // 0 = white, 8 = black (matches color encoding)
+        this.us = W; // 0 = white, 8 = black (matches color encoding)
         this.castleW = 0;
         this.castleB = 0;
         this.epSquare = -1;
@@ -138,21 +162,31 @@ export class ReplayEngine {
         this.hash = 0n;
         const back = [R, N, _B, Q, K, _B, N, R];
         for (let f = 0; f < 8; f++) {
-            const wBack = W | back[f], wPawn = W | P;
-            const bBack = B | back[f], bPawn = B | P;
-            this.board[112 + f] = wBack; this.hash ^= hashPiece(wBack, 112 + f);
-            this.board[96 + f]  = wPawn; this.hash ^= hashPiece(wPawn, 96 + f);
-            this.board[f]       = bBack; this.hash ^= hashPiece(bBack, f);
-            this.board[16 + f]  = bPawn; this.hash ^= hashPiece(bPawn, 16 + f);
+            const wBack = W | back[f],
+                wPawn = W | P;
+            const bBack = B | back[f],
+                bPawn = B | P;
+            this.board[112 + f] = wBack;
+            this.hash ^= hashPiece(wBack, 112 + f);
+            this.board[96 + f] = wPawn;
+            this.hash ^= hashPiece(wPawn, 96 + f);
+            this.board[f] = bBack;
+            this.hash ^= hashPiece(bBack, f);
+            this.board[16 + f] = bPawn;
+            this.hash ^= hashPiece(bPawn, 16 + f);
         }
         this.wKing = 116; // e1
-        this.bKing = 4;   // e8
+        this.bKing = 4; // e8
         this.hash ^= CASTLING_KEYS[3 | (3 << 2)];
     }
 
     // Getter/setter for compatibility with code that reads .turn as 'w'/'b'
-    get turn() { return this.us === W ? 'w' : 'b'; }
-    set turn(v) { this.us = v === 'w' ? W : B; }
+    get turn() {
+        return this.us === W ? 'w' : 'b';
+    }
+    set turn(v) {
+        this.us = v === 'w' ? W : B;
+    }
 
     // Is the piece on `sq` pinned to our king? (i.e., moving it to `toSq` would expose king)
     // Only returns true if the move doesn't stay on the pin ray.
@@ -160,7 +194,7 @@ export class ReplayEngine {
         const kingSq = this.us === W ? this.wKing : this.bKing;
         const enemy = this.us ^ 8;
         // Find ray direction from king to piece
-        const dr = Math.sign((sq >> 4) - (kingSq >> 4));  // rank delta: -1, 0, 1
+        const dr = Math.sign((sq >> 4) - (kingSq >> 4)); // rank delta: -1, 0, 1
         const df = Math.sign((sq & 0xf) - (kingSq & 0xf)); // file delta: -1, 0, 1
         if (dr === 0 && df === 0) return false;
         const offset = dr * 16 + df;
@@ -173,15 +207,21 @@ export class ReplayEngine {
         if (s !== sq) return false; // sq not on this ray from king
         // Check if toSq is actually on the pin ray (walk it, don't approximate with signs)
         s = kingSq + offset;
-        while (!(s & 0x88)) { if (s === toSq) return false; s += offset; }
+        while (!(s & 0x88)) {
+            if (s === toSq) return false;
+            s += offset;
+        }
         s = kingSq - offset;
-        while (!(s & 0x88)) { if (s === toSq) return false; s -= offset; }
+        while (!(s & 0x88)) {
+            if (s === toSq) return false;
+            s -= offset;
+        }
         // Walk from sq away from king to find attacker
         s = sq + offset;
         while (!(s & 0x88)) {
             const p = this.board[s];
             if (p) {
-                if ((p >> 3) !== (enemy >> 3)) return false; // friendly piece, no pin
+                if (p >> 3 !== enemy >> 3) return false; // friendly piece, no pin
                 const ptype = p & 7;
                 // Rook/queen pin on rank/file, bishop/queen pin on diagonal
                 if (dr === 0 || df === 0) return ptype === R || ptype === Q;
@@ -200,7 +240,8 @@ export class ReplayEngine {
         const c0 = san.charCodeAt(0);
 
         // ── Castling ──────────────────────────────────────────────
-        if (c0 === 79) { // 'O'
+        if (c0 === 79) {
+            // 'O'
             const ks = len === 3; // O-O vs O-O-O
             const kFrom = this.us === W ? this.wKing : this.bKing;
             const kTo = ks ? kFrom + 2 : kFrom - 2;
@@ -213,13 +254,20 @@ export class ReplayEngine {
             this.hash ^= CASTLING_KEYS[oldCI];
             // Move king
             this.hash ^= hashPiece(kEnc, kFrom) ^ hashPiece(kEnc, kTo);
-            this.board[kTo] = kEnc; this.board[kFrom] = 0;
+            this.board[kTo] = kEnc;
+            this.board[kFrom] = 0;
             // Move rook
             this.hash ^= hashPiece(rEnc, rFrom) ^ hashPiece(rEnc, rTo);
-            this.board[rTo] = rEnc; this.board[rFrom] = 0;
+            this.board[rTo] = rEnc;
+            this.board[rFrom] = 0;
 
-            if (this.us === W) { this.wKing = kTo; this.castleW = 0; }
-            else { this.bKing = kTo; this.castleB = 0; }
+            if (this.us === W) {
+                this.wKing = kTo;
+                this.castleW = 0;
+            } else {
+                this.bKing = kTo;
+                this.castleB = 0;
+            }
             this.hash ^= CASTLING_KEYS[this.castleW | (this.castleB << 2)];
 
             if (this.epSquare !== -1) {
@@ -232,14 +280,19 @@ export class ReplayEngine {
         }
 
         // ── Parse SAN ─────────────────────────────────────────────
-        let pt, fromFile = -1, fromRank = -1, toSq, promotion = 0;
+        let pt,
+            fromFile = -1,
+            fromRank = -1,
+            toSq,
+            promotion = 0;
 
         if (c0 >= 97 && c0 <= 104) {
             // Pawn move (starts with a-h)
             pt = P;
             fromFile = c0 - 97;
             const c1 = san.charCodeAt(1);
-            if (c1 === 120) { // 'x' capture
+            if (c1 === 120) {
+                // 'x' capture
                 toSq = sqAt(san, 2);
                 if (len > 4 && san.charCodeAt(4) === 61) promotion = CC[san.charCodeAt(5)];
             } else {
@@ -253,8 +306,9 @@ export class ReplayEngine {
             toSq = sqAt(san, len - 2);
             for (let i = 1; i < len - 2; i++) {
                 const ch = san.charCodeAt(i);
-                if (ch >= 97 && ch <= 104) fromFile = ch - 97;      // a-h
-                else if (ch >= 49 && ch <= 56) fromRank = 56 - ch;   // 1-8 → 0x88 rank
+                if (ch >= 97 && ch <= 104)
+                    fromFile = ch - 97; // a-h
+                else if (ch >= 49 && ch <= 56) fromRank = 56 - ch; // 1-8 → 0x88 rank
             }
         }
 
@@ -266,7 +320,7 @@ export class ReplayEngine {
             const dir = this.us === W ? -16 : 16;
             if (fromFile !== (toSq & 0xf)) {
                 // Capture: pawn on fromFile, one rank behind target
-                const sq = ((toSq - dir) & 0xF0) | fromFile;
+                const sq = ((toSq - dir) & 0xf0) | fromFile;
                 if (!(sq & 0x88) && this.board[sq] === ourPiece) fromSq = sq;
             } else {
                 // Push: single, then double
@@ -287,7 +341,7 @@ export class ReplayEngine {
                 if (sq & 0x88) continue;
                 if (this.board[sq] !== ourPiece) continue;
                 if (fromFile !== -1 && (sq & 0xf) !== fromFile) continue;
-                if (fromRank !== -1 && (sq >> 4) !== fromRank) continue;
+                if (fromRank !== -1 && sq >> 4 !== fromRank) continue;
                 if (this._isPinned(sq, toSq)) continue;
                 fromSq = sq;
                 break;
@@ -301,10 +355,12 @@ export class ReplayEngine {
                 while (!(sq & 0x88)) {
                     const p = this.board[sq];
                     if (p) {
-                        if (p === ourPiece &&
+                        if (
+                            p === ourPiece &&
                             (fromFile === -1 || (sq & 0xf) === fromFile) &&
-                            (fromRank === -1 || (sq >> 4) === fromRank) &&
-                            !this._isPinned(sq, toSq)) {
+                            (fromRank === -1 || sq >> 4 === fromRank) &&
+                            !this._isPinned(sq, toSq)
+                        ) {
                             fromSq = sq;
                         }
                         break;
@@ -340,7 +396,8 @@ export class ReplayEngine {
 
         // Track king
         if (pt === K) {
-            if (this.us === W) this.wKing = toSq; else this.bKing = toSq;
+            if (this.us === W) this.wKing = toSq;
+            else this.bKing = toSq;
         }
 
         // Promotion
@@ -354,9 +411,12 @@ export class ReplayEngine {
         if (pt === P && Math.abs(fromSq - toSq) === 32) {
             const epSq = (fromSq + toSq) >> 1;
             const enemyPawn = (this.us ^ 8) | P;
-            const left = toSq - 1, right = toSq + 1;
-            if ((!(left & 0x88) && this.board[left] === enemyPawn) ||
-                (!(right & 0x88) && this.board[right] === enemyPawn)) {
+            const left = toSq - 1,
+                right = toSq + 1;
+            if (
+                (!(left & 0x88) && this.board[left] === enemyPawn) ||
+                (!(right & 0x88) && this.board[right] === enemyPawn)
+            ) {
                 this.epSquare = epSq;
                 this.hash ^= EP_KEYS[epSq & 0xf];
             } else {
@@ -368,16 +428,27 @@ export class ReplayEngine {
 
         // Castling rights — our piece
         if (pt === K) {
-            if (this.us === W) this.castleW = 0; else this.castleB = 0;
+            if (this.us === W) this.castleW = 0;
+            else this.castleB = 0;
         } else if (pt === R) {
             const homeRank = this.us === W ? 112 : 0;
-            if (fromSq === homeRank) { if (this.us === W) this.castleW &= ~2; else this.castleB &= ~2; }
-            else if (fromSq === homeRank + 7) { if (this.us === W) this.castleW &= ~1; else this.castleB &= ~1; }
+            if (fromSq === homeRank) {
+                if (this.us === W) this.castleW &= ~2;
+                else this.castleB &= ~2;
+            } else if (fromSq === homeRank + 7) {
+                if (this.us === W) this.castleW &= ~1;
+                else this.castleB &= ~1;
+            }
         }
         // Castling rights — opponent rook captured
         const theirRank = this.us === W ? 0 : 112;
-        if (toSq === theirRank) { if (this.us === W) this.castleB &= ~2; else this.castleW &= ~2; }
-        else if (toSq === theirRank + 7) { if (this.us === W) this.castleB &= ~1; else this.castleW &= ~1; }
+        if (toSq === theirRank) {
+            if (this.us === W) this.castleB &= ~2;
+            else this.castleW &= ~2;
+        } else if (toSq === theirRank + 7) {
+            if (this.us === W) this.castleB &= ~1;
+            else this.castleW &= ~1;
+        }
 
         const newCI = this.castleW | (this.castleB << 2);
         if (oldCI !== newCI) this.hash ^= CASTLING_KEYS[oldCI] ^ CASTLING_KEYS[newCI];

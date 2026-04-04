@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-undef": "error"
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "globals": {
+    "__EMBED__": "readonly",
+    "__FEAT_PLAYER_PROFILES__": "readonly",
+    "__FEAT_GLOBAL_PLAYER_SEARCH__": "readonly",
+    "__FEAT_IMPORT__": "readonly",
+    "__FEAT_LOCAL_ENGINE__": "readonly",
+    "__FEAT_EXPLORER__": "readonly"
+  },
+  "ignorePatterns": [
+    "dist/",
+    "dist-embed/",
+    "local/",
+    "node_modules/",
+    "worker/",
+    "public/",
+    "test/",
+    "scripts/",
+    ".wrangler/",
+    "src/palette-editor.js",
+    "seed-pgn-colors.mjs"
+  ]
+}

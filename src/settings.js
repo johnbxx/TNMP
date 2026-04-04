@@ -108,13 +108,15 @@ function initNameAutocomplete(input) {
         if (matches.length === 0) {
             dropdown.innerHTML = '<div class="browser-ac-empty">No players found</div>';
         } else {
-            dropdown.innerHTML = matches.map(p => {
-                const idx = p.name.toLowerCase().indexOf(query.toLowerCase());
-                const before = p.name.slice(0, idx);
-                const match = p.name.slice(idx, idx + query.length);
-                const after = p.name.slice(idx + query.length);
-                return `<button type="button" class="browser-ac-item" role="option" data-player="${p.name}" data-norm="${p.norm}">${before}<strong>${match}</strong>${after}</button>`;
-            }).join('');
+            dropdown.innerHTML = matches
+                .map((p) => {
+                    const idx = p.name.toLowerCase().indexOf(query.toLowerCase());
+                    const before = p.name.slice(0, idx);
+                    const match = p.name.slice(idx, idx + query.length);
+                    const after = p.name.slice(idx + query.length);
+                    return `<button type="button" class="browser-ac-item" role="option" data-player="${p.name}" data-norm="${p.norm}">${before}<strong>${match}</strong>${after}</button>`;
+                })
+                .join('');
         }
         dropdown.classList.remove('hidden');
         input.setAttribute('aria-expanded', 'true');

@@ -9,54 +9,53 @@ import { getHeader } from './utils.js';
 
 // NAG metadata: [symbol, description, category]
 export const NAG_INFO = {
-    1:   ['!',      'Good move',                    'move'],
-    2:   ['?',      'Poor move',                    'move'],
-    3:   ['\u203C\uFE0E', 'Brilliant move',               'move'],
-    4:   ['\u2047', 'Blunder',                      'move'],
-    5:   ['\u2049\uFE0E', 'Interesting move',             'move'],
-    6:   ['\u2048', 'Dubious move',                 'move'],
-    7:   ['\u25A1', 'Forced move',                  'move'],
-    8:   ['\u25A1', 'Only move',                    'move'],
-    9:   ['\u2612', 'Worst move',                   'move'],
-    10:  ['=',      'Equal position',               'position'],
-    11:  ['=',      'Equal chances, quiet position','position'],
-    12:  ['=',      'Equal chances, active position','position'],
-    13:  ['\u221E', 'Unclear position',             'position'],
-    14:  ['\u2A72', 'White has a slight advantage', 'position'],
-    15:  ['\u2A71', 'Black has a slight advantage', 'position'],
-    16:  ['\u00B1', 'White has a moderate advantage','position'],
-    17:  ['\u2213', 'Black has a moderate advantage','position'],
-    18:  ['+-',     'White has a decisive advantage','position'],
-    19:  ['-+',     'Black has a decisive advantage','position'],
-    20:  ['+\u2212\u2212', 'White has a crushing advantage', 'position'],
-    21:  ['\u2212\u2212+', 'Black has a crushing advantage', 'position'],
-    22:  ['\u2A00', 'White is in zugzwang',         'situation'],
-    23:  ['\u2A00', 'Black is in zugzwang',         'situation'],
-    32:  ['\u27F3', 'White has development advantage','situation'],
-    33:  ['\u27F3', 'Black has development advantage','situation'],
-    36:  ['\u2191', 'White has the initiative',     'situation'],
-    37:  ['\u2191', 'Black has the initiative',     'situation'],
-    40:  ['\u2192', 'White has the attack',         'situation'],
-    41:  ['\u2192', 'Black has the attack',         'situation'],
-    44:  ['\u2BD9', 'White has compensation',       'situation'],
-    45:  ['\u2BD9', 'Black has compensation',       'situation'],
-    132: ['\u21C6', 'White has counterplay',        'situation'],
-    133: ['\u21C6', 'Black has counterplay',        'situation'],
-    138: ['\u2A01', 'White has time pressure',      'situation'],
-    139: ['\u2A01', 'Black has time pressure',      'situation'],
-    140: ['\u2206', 'With the idea',                'other'],
-    141: ['\u2207', 'Aimed against',                'other'],
-    142: ['\u2313', 'Better is',                    'other'],
-    143: ['\u2264', 'Worse is',                     'other'],
-    145: ['RR',     'Editorial comment',            'other'],
-    146: ['N',      'Novelty',                      'other'],
+    1: ['!', 'Good move', 'move'],
+    2: ['?', 'Poor move', 'move'],
+    3: ['\u203C\uFE0E', 'Brilliant move', 'move'],
+    4: ['\u2047', 'Blunder', 'move'],
+    5: ['\u2049\uFE0E', 'Interesting move', 'move'],
+    6: ['\u2048', 'Dubious move', 'move'],
+    7: ['\u25A1', 'Forced move', 'move'],
+    8: ['\u25A1', 'Only move', 'move'],
+    9: ['\u2612', 'Worst move', 'move'],
+    10: ['=', 'Equal position', 'position'],
+    11: ['=', 'Equal chances, quiet position', 'position'],
+    12: ['=', 'Equal chances, active position', 'position'],
+    13: ['\u221E', 'Unclear position', 'position'],
+    14: ['\u2A72', 'White has a slight advantage', 'position'],
+    15: ['\u2A71', 'Black has a slight advantage', 'position'],
+    16: ['\u00B1', 'White has a moderate advantage', 'position'],
+    17: ['\u2213', 'Black has a moderate advantage', 'position'],
+    18: ['+-', 'White has a decisive advantage', 'position'],
+    19: ['-+', 'Black has a decisive advantage', 'position'],
+    20: ['+\u2212\u2212', 'White has a crushing advantage', 'position'],
+    21: ['\u2212\u2212+', 'Black has a crushing advantage', 'position'],
+    22: ['\u2A00', 'White is in zugzwang', 'situation'],
+    23: ['\u2A00', 'Black is in zugzwang', 'situation'],
+    32: ['\u27F3', 'White has development advantage', 'situation'],
+    33: ['\u27F3', 'Black has development advantage', 'situation'],
+    36: ['\u2191', 'White has the initiative', 'situation'],
+    37: ['\u2191', 'Black has the initiative', 'situation'],
+    40: ['\u2192', 'White has the attack', 'situation'],
+    41: ['\u2192', 'Black has the attack', 'situation'],
+    44: ['\u2BD9', 'White has compensation', 'situation'],
+    45: ['\u2BD9', 'Black has compensation', 'situation'],
+    132: ['\u21C6', 'White has counterplay', 'situation'],
+    133: ['\u21C6', 'Black has counterplay', 'situation'],
+    138: ['\u2A01', 'White has time pressure', 'situation'],
+    139: ['\u2A01', 'Black has time pressure', 'situation'],
+    140: ['\u2206', 'With the idea', 'other'],
+    141: ['\u2207', 'Aimed against', 'other'],
+    142: ['\u2313', 'Better is', 'other'],
+    143: ['\u2264', 'Worse is', 'other'],
+    145: ['RR', 'Editorial comment', 'other'],
+    146: ['N', 'Novelty', 'other'],
 };
 
 export function nagToHtml(nag) {
     const sym = NAG_INFO[nag]?.[0] || `$${nag}`;
     return `<span data-nag="${nag}">${sym}</span>`;
 }
-
 
 function appendComment(existing, added) {
     return existing ? existing + ' ' + added : added;
@@ -65,14 +64,16 @@ function appendComment(existing, added) {
 function parseComment(raw) {
     const annotations = {};
     // Extract [%clk h:mm:ss], [%eval ±n.n], [%cal ...], [%csl ...] etc.
-    const text = raw.replace(/\[%(\w+)\s+([^\]]*)\]/g, (_, key, val) => {
-        if (key === 'clk') annotations.clk = val.trim();
-        else if (key === 'eval') annotations.eval = parseFloat(val) || val.trim();
-        else if (key === 'cal') annotations.arrows = val.trim().split(',');
-        else if (key === 'csl') annotations.squares = val.trim().split(',');
-        else annotations[key] = val.trim();
-        return '';
-    }).trim();
+    const text = raw
+        .replace(/\[%(\w+)\s+([^\]]*)\]/g, (_, key, val) => {
+            if (key === 'clk') annotations.clk = val.trim();
+            else if (key === 'eval') annotations.eval = parseFloat(val) || val.trim();
+            else if (key === 'cal') annotations.arrows = val.trim().split(',');
+            else if (key === 'csl') annotations.squares = val.trim().split(',');
+            else annotations[key] = val.trim();
+            return '';
+        })
+        .trim();
     const tok = { type: 'comment', value: text };
     if (Object.keys(annotations).length > 0) tok.annotations = annotations;
     return tok;
@@ -93,9 +94,13 @@ function tokenizeMoveText(text) {
     while (i < len) {
         const ch = text.charCodeAt(i);
         // Whitespace (space, \t, \n, \r)
-        if (ch <= 32) { i++; continue; }
+        if (ch <= 32) {
+            i++;
+            continue;
+        }
         // Brace comment (extracts structured annotations like [%clk], [%eval], [%cal], [%csl])
-        if (ch === 123) { // {
+        if (ch === 123) {
+            // {
             const end = text.indexOf('}', i + 1);
             const raw = end === -1 ? text.substring(i + 1) : text.substring(i + 1, end);
             const tok = parseComment(raw);
@@ -105,16 +110,26 @@ function tokenizeMoveText(text) {
             continue;
         }
         // Line comment
-        if (ch === 59) { // ;
+        if (ch === 59) {
+            // ;
             const end = text.indexOf('\n', i + 1);
             i = end === -1 ? len : end + 1;
             continue;
         }
         // Variation start/end
-        if (ch === 40) { tokens.push({ type: 'var_start' }); i++; continue; } // (
-        if (ch === 41) { tokens.push({ type: 'var_end' }); i++; continue; } // )
+        if (ch === 40) {
+            tokens.push({ type: 'var_start' });
+            i++;
+            continue;
+        } // (
+        if (ch === 41) {
+            tokens.push({ type: 'var_end' });
+            i++;
+            continue;
+        } // )
         // NAG ($14) or inline NAG symbols (! ? !! ?? !? ?!)
-        if (ch === 36) { // $
+        if (ch === 36) {
+            // $
             i++;
             let nag = 0;
             while (i < len && text.charCodeAt(i) >= 48 && text.charCodeAt(i) <= 57) {
@@ -124,36 +139,74 @@ function tokenizeMoveText(text) {
             tokens.push({ type: 'nag', value: nag });
             continue;
         }
-        if (ch === 33 || ch === 63) { // ! ?
+        if (ch === 33 || ch === 63) {
+            // ! ?
             const next = i + 1 < len ? text.charCodeAt(i + 1) : 0;
-            if (ch === 33 && next === 33) { tokens.push({ type: 'nag', value: 3 }); i += 2; continue; }
-            if (ch === 63 && next === 63) { tokens.push({ type: 'nag', value: 4 }); i += 2; continue; }
-            if (ch === 33 && next === 63) { tokens.push({ type: 'nag', value: 5 }); i += 2; continue; }
-            if (ch === 63 && next === 33) { tokens.push({ type: 'nag', value: 6 }); i += 2; continue; }
-            tokens.push({ type: 'nag', value: ch === 33 ? 1 : 2 }); i++; continue;
+            if (ch === 33 && next === 33) {
+                tokens.push({ type: 'nag', value: 3 });
+                i += 2;
+                continue;
+            }
+            if (ch === 63 && next === 63) {
+                tokens.push({ type: 'nag', value: 4 });
+                i += 2;
+                continue;
+            }
+            if (ch === 33 && next === 63) {
+                tokens.push({ type: 'nag', value: 5 });
+                i += 2;
+                continue;
+            }
+            if (ch === 63 && next === 33) {
+                tokens.push({ type: 'nag', value: 6 });
+                i += 2;
+                continue;
+            }
+            tokens.push({ type: 'nag', value: ch === 33 ? 1 : 2 });
+            i++;
+            continue;
         }
         // Result * (standalone)
-        if (ch === 42) { // *
-            tokens.push({ type: 'result', value: '*' }); i++; continue;
+        if (ch === 42) {
+            // *
+            tokens.push({ type: 'result', value: '*' });
+            i++;
+            continue;
         }
         // Digit: result (1-0, 0-1, 1/2-1/2) or move number
         if (ch >= 48 && ch <= 57) {
             // Check for results: 1-0, 0-1, 1/2-1/2 (including en-dash variants)
-            if (ch === 49 && i + 2 < len) { // 1
+            if (ch === 49 && i + 2 < len) {
+                // 1
                 const c1 = text.charCodeAt(i + 1);
-                if ((c1 === 45 || c1 === 8211) && text.charCodeAt(i + 2) === 48) { // 1-0 or 1–0
-                    tokens.push({ type: 'result', value: '1-0' }); i += 3; continue;
+                if ((c1 === 45 || c1 === 8211) && text.charCodeAt(i + 2) === 48) {
+                    // 1-0 or 1–0
+                    tokens.push({ type: 'result', value: '1-0' });
+                    i += 3;
+                    continue;
                 }
-                if (c1 === 47 && i + 6 < len && text.charCodeAt(i + 2) === 50 && // 1/2-1/2
+                if (
+                    c1 === 47 &&
+                    i + 6 < len &&
+                    text.charCodeAt(i + 2) === 50 && // 1/2-1/2
                     (text.charCodeAt(i + 3) === 45 || text.charCodeAt(i + 3) === 8211) &&
-                    text.charCodeAt(i + 4) === 49 && text.charCodeAt(i + 5) === 47 && text.charCodeAt(i + 6) === 50) {
-                    tokens.push({ type: 'result', value: '1/2-1/2' }); i += 7; continue;
+                    text.charCodeAt(i + 4) === 49 &&
+                    text.charCodeAt(i + 5) === 47 &&
+                    text.charCodeAt(i + 6) === 50
+                ) {
+                    tokens.push({ type: 'result', value: '1/2-1/2' });
+                    i += 7;
+                    continue;
                 }
             }
-            if (ch === 48 && i + 2 < len) { // 0
+            if (ch === 48 && i + 2 < len) {
+                // 0
                 const c1 = text.charCodeAt(i + 1);
-                if ((c1 === 45 || c1 === 8211) && text.charCodeAt(i + 2) === 49) { // 0-1 or 0–1
-                    tokens.push({ type: 'result', value: '0-1' }); i += 3; continue;
+                if ((c1 === 45 || c1 === 8211) && text.charCodeAt(i + 2) === 49) {
+                    // 0-1 or 0–1
+                    tokens.push({ type: 'result', value: '0-1' });
+                    i += 3;
+                    continue;
                 }
             }
             // Move number: digits followed by dots
@@ -163,7 +216,8 @@ function tokenizeMoveText(text) {
                 num = num * 10 + text.charCodeAt(j) - 48;
                 j++;
             }
-            if (j < len && text.charCodeAt(j) === 46) { // has dot(s)
+            if (j < len && text.charCodeAt(j) === 46) {
+                // has dot(s)
                 while (j < len && text.charCodeAt(j) === 46) j++;
                 tokens.push({ type: 'move_number', value: num });
                 i = j;
@@ -172,12 +226,21 @@ function tokenizeMoveText(text) {
             // Bare number without dots — fall through to SAN match
         }
         // Null move (analysis placeholder)
-        if (ch === 90 && i + 1 < len && text.charCodeAt(i + 1) === 48) { // Z0
-            tokens.push({ type: 'move', value: '--' }); i += 2; continue;
+        if (ch === 90 && i + 1 < len && text.charCodeAt(i + 1) === 48) {
+            // Z0
+            tokens.push({ type: 'move', value: '--' });
+            i += 2;
+            continue;
         }
-        if (ch === 45 && i + 1 < len && text.charCodeAt(i + 1) === 45 && // --
-            (i + 2 >= len || (text.charCodeAt(i + 2) !== 45 && text.charCodeAt(i + 2) !== 43))) {
-            tokens.push({ type: 'move', value: '--' }); i += 2; continue;
+        if (
+            ch === 45 &&
+            i + 1 < len &&
+            text.charCodeAt(i + 1) === 45 && // --
+            (i + 2 >= len || (text.charCodeAt(i + 2) !== 45 && text.charCodeAt(i + 2) !== 43))
+        ) {
+            tokens.push({ type: 'move', value: '--' });
+            i += 2;
+            continue;
         }
         // SAN move (includes standard piece moves, castling, pawn moves)
         // Zero-castling (0-0, 0-0-0) normalized to O-O, O-O-O
@@ -222,8 +285,14 @@ function parseTokens(tokens, startIdx) {
             }
             return { moves, nextIdx: i + 1 };
         }
-        if (tok.type === 'result') { i++; continue; }
-        if (tok.type === 'move_number') { i++; continue; }
+        if (tok.type === 'result') {
+            i++;
+            continue;
+        }
+        if (tok.type === 'move_number') {
+            i++;
+            continue;
+        }
         if (tok.type === 'comment') {
             pendingComment = tok.value;
             pendingAnnotations = tok.annotations || null;
@@ -306,7 +375,7 @@ export function extractMoveText(pgn) {
 export function buildCleanPgn(pgn, mainLineMoves) {
     const i = findHeaderEnd(pgn);
     const headers = i >= 0 ? pgn.substring(0, i) : '';
-    const moveStr = mainLineMoves.map(m => m.san).join(' ');
+    const moveStr = mainLineMoves.map((m) => m.san).join(' ');
     return headers + '\n' + moveStr;
 }
 
@@ -317,7 +386,8 @@ function findHeaderEnd(pgn) {
     let pos = 0;
     while (pos < pgn.length) {
         // Skip whitespace/blank lines
-        while (pos < pgn.length && (pgn[pos] === ' ' || pgn[pos] === '\t' || pgn[pos] === '\r' || pgn[pos] === '\n')) pos++;
+        while (pos < pgn.length && (pgn[pos] === ' ' || pgn[pos] === '\t' || pgn[pos] === '\r' || pgn[pos] === '\n'))
+            pos++;
         if (pos >= pgn.length || pgn[pos] !== '[') break;
         // Find end of line
         let eol = pgn.indexOf('\n', pos);
@@ -335,7 +405,7 @@ export function serializePgn(moves, headers = {}, result) {
     const lines = [];
 
     // Write headers (strip double quotes to prevent PGN injection)
-    const sanitize = v => String(v).replace(/"/g, '');
+    const sanitize = (v) => String(v).replace(/"/g, '');
     const headerOrder = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
     const written = new Set();
     for (const key of headerOrder) {
@@ -417,7 +487,7 @@ function wordWrap(text, width) {
     let line = '';
 
     for (const word of words) {
-        if (line && (line.length + 1 + word.length) > width) {
+        if (line && line.length + 1 + word.length > width) {
             lines.push(line);
             line = word;
         } else {
@@ -430,8 +500,8 @@ function wordWrap(text, width) {
 
 export function splitPgn(text) {
     const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const games = normalized.split(/\n\n+(?=\[)/).filter(s => s.trim());
-    return games.map(pgn => {
+    const games = normalized.split(/\n\n+(?=\[)/).filter((s) => s.trim());
+    return games.map((pgn) => {
         const trimmed = pgn.trim();
         if (/(?:1-0|0-1|1\/2-1\/2|\*)\s*$/.test(trimmed)) return trimmed;
         return trimmed + '\n*';

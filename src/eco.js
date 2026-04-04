@@ -16,7 +16,11 @@ let _ecoData = null;
 export async function loadEcoData() {
     if (_ecoData) return;
 
-    try { localStorage.removeItem('eco-epd-data'); } catch { /* */ }
+    try {
+        localStorage.removeItem('eco-epd-data');
+    } catch {
+        /* */
+    }
 
     try {
         const cached = localStorage.getItem(STORAGE_KEY);
@@ -24,7 +28,9 @@ export async function loadEcoData() {
             _ecoData = JSON.parse(cached);
             return;
         }
-    } catch { /* localStorage unavailable or corrupt */ }
+    } catch {
+        /* localStorage unavailable or corrupt */
+    }
 
     try {
         const response = await fetch(`${WORKER_URL}/eco-data`);
@@ -32,8 +38,12 @@ export async function loadEcoData() {
         _ecoData = await response.json();
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(_ecoData));
-        } catch { /* quota exceeded — fine, memory cache still works */ }
-    } catch { /* network error — ECO will be unavailable */ }
+        } catch {
+            /* quota exceeded — fine, memory cache still works */
+        }
+    } catch {
+        /* network error — ECO will be unavailable */
+    }
 }
 
 export function classifyFen(fen) {

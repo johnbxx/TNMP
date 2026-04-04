@@ -1,5 +1,12 @@
 import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState } from './config.js';
-import { showLoading, showState, showError, updateTournamentLink, hideOfflineBanner, renderRoundTracker } from './ui.js';
+import {
+    showLoading,
+    showState,
+    showError,
+    updateTournamentLink,
+    hideOfflineBanner,
+    renderRoundTracker,
+} from './ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './countdown.js';
 import { shareStatus } from './share.js';
 import { openSettings, saveSettings, initSettings } from './settings.js';
@@ -7,19 +14,52 @@ import { openStyle, initStyle } from './style.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
-    openGamePanel as openGameViewer, openGameFromBrowser, closeGamePanel, handlePanelKeydown,
+    openGamePanel as openGameViewer,
+    openGameFromBrowser,
+    closeGamePanel,
+    handlePanelKeydown,
     explorerBackToBrowser,
     resolveDirtyDialog,
-    explorerGoToStart, explorerGoBack, explorerGoForward,
-    goToStart, goToPrev, goToNext, goToEnd, flipBoard, toggleAutoPlay, toggleComments, toggleBranchMode,
-    toggleEngine, confirmEngineChoice, toggleEnginePause, openEngineSettings, applyEngineSettings,
-    getGamePgn, getGameMoves, getCurrentNodeId, getNodes,
-    toggleNag, showImportDialog, hideImportDialog, doImport, submitGame,
-    showHeaderEditor, saveHeaderEditor,
-    launchExplorer, initGamePanel,
+    explorerGoToStart,
+    explorerGoBack,
+    explorerGoForward,
+    goToStart,
+    goToPrev,
+    goToNext,
+    goToEnd,
+    flipBoard,
+    toggleAutoPlay,
+    toggleComments,
+    toggleBranchMode,
+    toggleEngine,
+    confirmEngineChoice,
+    toggleEnginePause,
+    openEngineSettings,
+    applyEngineSettings,
+    getGamePgn,
+    getGameMoves,
+    getCurrentNodeId,
+    getNodes,
+    toggleNag,
+    showImportDialog,
+    hideImportDialog,
+    doImport,
+    submitGame,
+    showHeaderEditor,
+    saveHeaderEditor,
+    launchExplorer,
+    initGamePanel,
 } from './game-panel.js';
 import { showToast } from './toast.js';
-import { prefetchGames, getCachedGame, fetchGames, selectPlayer, getPlayer, getGroupedGames, getFilter } from './games.js';
+import {
+    prefetchGames,
+    getCachedGame,
+    fetchGames,
+    selectPlayer,
+    getPlayer,
+    getGroupedGames,
+    getFilter,
+} from './games.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
@@ -40,27 +80,36 @@ function downloadPgn(pgnText, filename) {
 function getInfoText(state, round, tournamentName, roundDates) {
     const totalRounds = roundDates?.length || 0;
     switch (state) {
-        case 'yes': return `Round ${round} pairings are up!`;
-        case 'no': return 'Waiting for pairings to be posted...';
-        case 'too_early': return 'Pairings are posted Monday at 8PM Pacific. Check back then!';
-        case 'in_progress': return `Round ${round} is being played right now!`;
+        case 'yes':
+            return `Round ${round} pairings are up!`;
+        case 'no':
+            return 'Waiting for pairings to be posted...';
+        case 'too_early':
+            return 'Pairings are posted Monday at 8PM Pacific. Check back then!';
+        case 'in_progress':
+            return `Round ${round} is being played right now!`;
         case 'results': {
             const isFinal = totalRounds > 0 && round >= totalRounds;
             if (isFinal) return `${tournamentName} is complete! Final standings are posted.`;
             return round
                 ? `Round ${round} is complete. Check back Monday for next week's pairings!`
-                : 'The round is complete. Check back Monday for next week\'s pairings!';
+                : "The round is complete. Check back Monday for next week's pairings!";
         }
         case 'off_season': {
             const r1 = roundDates?.[0];
             const r1Date = r1 ? new Date(r1) : null;
             if (r1Date && r1Date.getTime() > Date.now()) {
-                const dateStr = r1Date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+                const dateStr = r1Date.toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    timeZone: 'America/Los_Angeles',
+                });
                 return `${tournamentName || 'The next TNM'} starts ${dateStr}. Round 1 pairings will be posted onsite.`;
             }
             return 'Check back for the next TNM schedule.';
         }
-        default: return '';
+        default:
+            return '';
     }
 }
 
@@ -93,7 +142,11 @@ function buildTrackerRounds(games, byes, playerNorm) {
                 isBye: true,
                 byeType: b.type,
                 result: byeResults[b.type] || null,
-                color: null, opponent: null, opponentRating: null, board: null, gameId: null,
+                color: null,
+                opponent: null,
+                opponentRating: null,
+                board: null,
+                gameId: null,
             };
         }
     }
@@ -105,8 +158,10 @@ function buildTrackerRounds(games, byes, playerNorm) {
 function renderTracker(trackerRounds, totalRounds, roundNumber, state) {
     if (state === 'off_season' || !CONFIG.playerName || !Object.keys(trackerRounds).length) return;
     const isLive = state === STATE.YES || state === STATE.IN_PROGRESS;
-    const activeRounds = Object.entries(trackerRounds).filter(([, r]) => r.result || r.color || r.opponent).map(([n]) => Number(n));
-    const autoSelect = isLive && roundNumber ? roundNumber : (activeRounds.length ? Math.max(...activeRounds) : null);
+    const activeRounds = Object.entries(trackerRounds)
+        .filter(([, r]) => r.result || r.color || r.opponent)
+        .map(([n]) => Number(n));
+    const autoSelect = isLive && roundNumber ? roundNumber : activeRounds.length ? Math.max(...activeRounds) : null;
     renderRoundTracker(trackerRounds, totalRounds || 7, roundNumber, state, autoSelect);
 }
 
@@ -136,7 +191,14 @@ function renderState(stateData, trackerRounds) {
     if (currentRound && !currentRound.isBye) {
         updateAppState({
             lastRoundNumber: roundNumber || 1,
-            pairing: { board: currentRound.board, color: currentRound.color, opponent: currentRound.opponent, opponentRating: currentRound.opponentRating, round: roundNumber, playerResult: currentRound.result || null },
+            pairing: {
+                board: currentRound.board,
+                color: currentRound.color,
+                opponent: currentRound.opponent,
+                opponentRating: currentRound.opponentRating,
+                round: roundNumber,
+                playerResult: currentRound.result || null,
+            },
         });
     } else if (currentRound?.isBye) {
         updateAppState({ pairing: { isBye: true, byeType: currentRound.byeType, round: roundNumber } });
@@ -175,13 +237,17 @@ async function checkPairings() {
     try {
         const raw = localStorage.getItem('lastTournamentState');
         if (raw) cachedState = JSON.parse(raw);
-    } catch { /* corrupt */ }
+    } catch {
+        /* corrupt */
+    }
 
     let cachedTracker = {};
     try {
         const raw = localStorage.getItem('lastTrackerRounds');
         if (raw) cachedTracker = JSON.parse(raw);
-    } catch { /* corrupt */ }
+    } catch {
+        /* corrupt */
+    }
 
     if (cachedState) {
         renderState(cachedState, cachedTracker);
@@ -197,7 +263,9 @@ async function checkPairings() {
             serverState = data;
             localStorage.setItem('lastTournamentState', JSON.stringify(data));
         }
-    } catch { /* network failure */ }
+    } catch {
+        /* network failure */
+    }
 
     if (!serverState) {
         if (!cachedState) showError('Could not reach the server. Please try again later.');
@@ -216,7 +284,9 @@ async function checkPairings() {
             if (qData.playerNorm) CONFIG.playerNorm = qData.playerNorm;
             trackerRounds = buildTrackerRounds(qData.games || [], qData.byes || [], qData.playerNorm);
             localStorage.setItem('lastTrackerRounds', JSON.stringify(trackerRounds));
-        } catch { /* network failure */ }
+        } catch {
+            /* network failure */
+        }
     }
 
     if (stateChanged(cachedState, serverState)) {
@@ -227,7 +297,7 @@ async function checkPairings() {
 }
 
 // Wrap checkPairings to reset countdown when manually triggered
-const wrappedCheckPairings = async function() {
+const wrappedCheckPairings = async function () {
     resetCountdown();
     await checkPairings();
 };
@@ -243,7 +313,9 @@ document.addEventListener('keydown', (e) => {
     if (!viewerModal.classList.contains('hidden')) {
         trapFocus(e, 'viewer-modal');
         handlePanelKeydown(e);
-        if (e.key === 'Escape') { closeGamePanel(); }
+        if (e.key === 'Escape') {
+            closeGamePanel();
+        }
     } else if (!settingsModal.classList.contains('hidden')) {
         trapFocus(e, 'settings-modal');
         if (e.key === 'Enter' && !['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
@@ -257,7 +329,10 @@ document.addEventListener('keydown', (e) => {
             const modal = document.getElementById(id);
             if (!modal.classList.contains('hidden')) {
                 trapFocus(e, id);
-                if (e.key === 'Escape' || (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))) {
+                if (
+                    e.key === 'Escape' ||
+                    (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))
+                ) {
                     closeModal(id);
                 }
                 break;
@@ -292,8 +367,12 @@ const ACTIONS = {
         }
     },
     // Viewer
-    'viewer-start': goToStart, 'viewer-prev': goToPrev, 'viewer-play': toggleAutoPlay,
-    'viewer-next': goToNext, 'viewer-end': goToEnd, 'viewer-flip': flipBoard,
+    'viewer-start': goToStart,
+    'viewer-prev': goToPrev,
+    'viewer-play': toggleAutoPlay,
+    'viewer-next': goToNext,
+    'viewer-end': goToEnd,
+    'viewer-flip': flipBoard,
     'viewer-comments': (e) => {
         const btn = e.target.closest('[data-action]');
         btn.classList.toggle('active', !toggleComments());
@@ -314,14 +393,20 @@ const ACTIONS = {
         try {
             const res = await fetch('https://lichess.org/api/import', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
                 body: 'pgn=' + encodeURIComponent(pgn),
             });
             if (res.ok) {
                 const data = await res.json();
-                if (data.url) { if (tab) tab.location.href = data.url + hash; else window.open(data.url + hash, '_blank'); return; }
+                if (data.url) {
+                    if (tab) tab.location.href = data.url + hash;
+                    else window.open(data.url + hash, '_blank');
+                    return;
+                }
             }
-        } catch { /* network error */ }
+        } catch {
+            /* network error */
+        }
         if (tab) tab.location.href = 'https://lichess.org/paste';
         else window.open('https://lichess.org/paste', '_blank');
     },
@@ -337,8 +422,14 @@ const ACTIONS = {
             // Sync toggle states when opening
             const commentsBtn = document.getElementById('viewer-comments');
             const branchBtn = document.getElementById('viewer-branch');
-            menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle('active', commentsBtn?.classList.contains('active'));
-            menu.querySelector('[data-action="overflow-branch"]')?.classList.toggle('active', branchBtn?.classList.contains('active'));
+            menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle(
+                'active',
+                commentsBtn?.classList.contains('active'),
+            );
+            menu.querySelector('[data-action="overflow-branch"]')?.classList.toggle(
+                'active',
+                branchBtn?.classList.contains('active'),
+            );
         }
     },
     'overflow-comments': (e) => {
@@ -378,17 +469,26 @@ const ACTIONS = {
         ACTIONS['editor-headers']();
     },
     // Explorer
-    'explorer-start': explorerGoToStart, 'explorer-prev': explorerGoBack,
-    'explorer-next': explorerGoForward, 'explorer-flip': flipBoard,
+    'explorer-start': explorerGoToStart,
+    'explorer-prev': explorerGoBack,
+    'explorer-next': explorerGoForward,
+    'explorer-flip': flipBoard,
     'explorer-back': explorerBackToBrowser,
     'explorer-view-games': explorerBackToBrowser,
     // Browser
     'browser-explore': launchExplorer,
     // Editor
-    'editor-import-ok': doImport, 'editor-import-cancel': hideImportDialog,
-    'browser-import': () => showImportDialog(), 'submit-add-moves': () => showImportDialog(true), 'viewer-submit': submitGame,
-    'editor-headers': showHeaderEditor, 'header-save': saveHeaderEditor, 'header-cancel': () => document.getElementById('editor-header-popup')?.classList.add('hidden'),
-    'dirty-copy-leave': () => resolveDirtyDialog('copy-leave'), 'dirty-discard': () => resolveDirtyDialog('discard'), 'dirty-cancel': () => resolveDirtyDialog('cancel'),
+    'editor-import-ok': doImport,
+    'editor-import-cancel': hideImportDialog,
+    'browser-import': () => showImportDialog(),
+    'submit-add-moves': () => showImportDialog(true),
+    'viewer-submit': submitGame,
+    'editor-headers': showHeaderEditor,
+    'header-save': saveHeaderEditor,
+    'header-cancel': () => document.getElementById('editor-header-popup')?.classList.add('hidden'),
+    'dirty-copy-leave': () => resolveDirtyDialog('copy-leave'),
+    'dirty-discard': () => resolveDirtyDialog('discard'),
+    'dirty-cancel': () => resolveDirtyDialog('cancel'),
     // Share popover
     'share-copy-pgn': () => handleShareAction('copy-pgn'),
     'share-copy-link': () => handleShareAction('copy-link'),
@@ -403,7 +503,10 @@ document.addEventListener('click', (e) => {
     if (actionBtn) {
         if (actionBtn.hasAttribute('data-hold')) return; // handled by holdToRepeat
         const handler = ACTIONS[actionBtn.dataset.action];
-        if (handler) { handler(e); return; }
+        if (handler) {
+            handler(e);
+            return;
+        }
     }
 
     // Viewer-modal backdrop → route through closeGamePanel for dirty-state check
@@ -425,18 +528,27 @@ document.addEventListener('click', (e) => {
     }
 
     // Browser export
-    if (e.target.closest('#browser-export')) { handleBrowserExport(); return; }
+    if (e.target.closest('#browser-export')) {
+        handleBrowserExport();
+        return;
+    }
 
     // NAG picker
     const nagBtn = e.target.closest('.nag-btn');
-    if (nagBtn) { toggleNag(parseInt(nagBtn.dataset.nag, 10)); return; }
-
+    if (nagBtn) {
+        toggleNag(parseInt(nagBtn.dataset.nag, 10));
+        return;
+    }
 });
 
 // Delegated hold-to-repeat for [data-hold] buttons (survives innerHTML rebuilds)
 {
     let timer = null;
-    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
+    const stop = () => {
+        clearTimeout(timer);
+        clearInterval(timer);
+        timer = null;
+    };
     document.addEventListener('pointerdown', (e) => {
         const btn = e.target.closest('[data-hold][data-action]');
         if (!btn) return;
@@ -444,7 +556,9 @@ document.addEventListener('click', (e) => {
         if (!action) return;
         e.preventDefault();
         action();
-        timer = setTimeout(() => { timer = setInterval(action, 80); }, 400);
+        timer = setTimeout(() => {
+            timer = setInterval(action, 80);
+        }, 400);
     });
     document.addEventListener('pointerup', stop);
     document.addEventListener('pointercancel', stop);
@@ -456,13 +570,21 @@ async function handleShareAction(action) {
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {
-        try { await navigator.clipboard.writeText(getGameMoves() || pgn); showToast('Moves copied!', 'success'); }
-        catch { showToast('Could not copy to clipboard', 'error'); }
+        try {
+            await navigator.clipboard.writeText(getGameMoves() || pgn);
+            showToast('Moves copied!', 'success');
+        } catch {
+            showToast('Could not copy to clipboard', 'error');
+        }
     } else if (action === 'copy-link') {
         const gameId = getHeader(pgn, 'GameId');
         const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
-        try { await navigator.clipboard.writeText(url); showToast('Link copied!', 'success'); }
-        catch { showToast('Could not copy to clipboard', 'error'); }
+        try {
+            await navigator.clipboard.writeText(url);
+            showToast('Link copied!', 'success');
+        } catch {
+            showToast('Could not copy to clipboard', 'error');
+        }
     } else if (action === 'download') {
         const slug = getTournamentMeta().slug;
         const w = getHeader(pgn, 'White')?.split(',')[0] || 'White';
@@ -470,20 +592,39 @@ async function handleShareAction(action) {
         const r = getHeader(pgn, 'Round')?.split('.')[0];
         let fn;
         if (slug && r) fn = `${slug}-R${r}-${w}-${b}.pgn`;
-        else { const d = (getHeader(pgn, 'Date') || '').replace(/\./g, ''); fn = d ? `${w}-${b}-${d}.pgn` : `${w}-${b}.pgn`; }
+        else {
+            const d = (getHeader(pgn, 'Date') || '').replace(/\./g, '');
+            fn = d ? `${w}-${b}-${d}.pgn` : `${w}-${b}.pgn`;
+        }
         downloadPgn(pgn, fn);
     } else if (action === 'share') {
         const gameId = getHeader(pgn, 'GameId');
         const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
-        try { await navigator.share({ title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`, url }); } catch { /* cancelled */ }
+        try {
+            await navigator.share({
+                title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`,
+                url,
+            });
+        } catch {
+            /* cancelled */
+        }
     }
 }
 
 function handleBrowserExport() {
-    const gameIds = getGroupedGames().flatMap(g => g.games).filter(g => g.gameId).map(g => g.gameId);
-    if (!gameIds.length) { showToast('No games to export', 'error'); return; }
-    const games = gameIds.map(id => getCachedGame(id)).filter(g => g?.pgn);
-    if (!games.length) { showToast('No PGN data available', 'error'); return; }
+    const gameIds = getGroupedGames()
+        .flatMap((g) => g.games)
+        .filter((g) => g.gameId)
+        .map((g) => g.gameId);
+    if (!gameIds.length) {
+        showToast('No games to export', 'error');
+        return;
+    }
+    const games = gameIds.map((id) => getCachedGame(id)).filter((g) => g?.pgn);
+    if (!games.length) {
+        showToast('No PGN data available', 'error');
+        return;
+    }
     const slug = getTournamentMeta().slug;
     const prefix = slug || 'games';
     let filename;
@@ -498,7 +639,7 @@ function handleBrowserExport() {
     } else {
         filename = `${prefix}-R${games[0]?.round || 'all'}.pgn`;
     }
-    downloadPgn(games.map(g => g.pgn).join('\n\n'), filename);
+    downloadPgn(games.map((g) => g.pgn).join('\n\n'), filename);
     showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`, 'success');
 }
 
@@ -535,7 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Dev-only palette editor (Cmd+Shift+P to toggle)
     if (import.meta.env.DEV) {
-        import('./palette-editor.js').then(m => m.initPaletteEditor());
+        import('./palette-editor.js').then((m) => m.initPaletteEditor());
     }
 
     // App bootstrap
@@ -548,14 +689,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameId = urlParams.get('game');
     if (gameId && /^\d{10,20}$/.test(gameId)) {
-        fetchGames({ gameId, include: 'pgn' }).then(() => {
-            const game = getCachedGame(gameId);
-            if (game) {
-                const pNorm = CONFIG.playerNorm || null;
-                const orientation = pNorm && game.blackNorm === pNorm ? 'Black' : 'White';
-                openGameViewer({ game, orientation });
-            }
-            window.history.replaceState({}, '', window.location.pathname);
-        }).catch(() => {});
+        fetchGames({ gameId, include: 'pgn' })
+            .then(() => {
+                const game = getCachedGame(gameId);
+                if (game) {
+                    const pNorm = CONFIG.playerNorm || null;
+                    const orientation = pNorm && game.blackNorm === pNorm ? 'Black' : 'White';
+                    openGameViewer({ game, orientation });
+                }
+                window.history.replaceState({}, '', window.location.pathname);
+            })
+            .catch(() => {});
     }
 });
