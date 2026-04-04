@@ -31,12 +31,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve full commit SHA
+        id: resolve-sha
+        run: |
+          FULL_SHA=$(git rev-parse "${{ inputs.commit_sha }}")
+          echo "full_sha=$FULL_SHA" >> $GITHUB_OUTPUT
+
       - name: Find CI run for commit
         id: find-run
         run: |
-          RUN_ID=$(gh run list --workflow=ci.yml --commit=${{ inputs.commit_sha }} --json databaseId --jq '.[0].databaseId')
+          RUN_ID=$(gh run list --workflow=ci.yml --commit=${{ steps.resolve-sha.outputs.full_sha }} --json databaseId --jq '.[0].databaseId')
           if [ -z "$RUN_ID" ]; then
-            echo "::error::No CI run found for commit ${{ inputs.commit_sha }}"
+            echo "::error::No CI run found for commit ${{ steps.resolve-sha.outputs.full_sha }}"
             exit 1
           fi
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
@@ -46,7 +52,7 @@ jobs:
       - name: Download embed artifact
         uses: actions/download-artifact@v4
         with:
-          name: embed-${{ inputs.commit_sha }}
+          name: embed-${{ steps.resolve-sha.outputs.full_sha }}
           path: embed-artifact
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-run.outputs.run_id }}
@@ -65,7 +71,7 @@ jobs:
       - name: Tag the published commit
         run: |
           EMBED_VERSION=$(date +%Y%m%d-%H%M%S)
-          git tag "embed-v${EMBED_VERSION}" ${{ inputs.commit_sha }}
+          git tag "embed-v${EMBED_VERSION}" ${{ steps.resolve-sha.outputs.full_sha }}
           git push origin "embed-v${EMBED_VERSION}"
 
       - name: Summary
