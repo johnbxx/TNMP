@@ -14,6 +14,7 @@ let _cg = null;
 let _onMove = null; // callback: (san, from, to) => void
 let _currentFen = null;
 let _orientation = 'white';
+let _dismissPromotion = null;
 
 function computeDests(fen) {
     const engine = new Chess(fen);
@@ -51,12 +52,20 @@ function showPromotionPicker(from, to, color) {
 
     const handler = (e) => {
         const btn = e.target.closest('.promo-btn');
-        if (!btn) return;
-        picker.classList.add('hidden');
-        picker.removeEventListener('click', handler);
-        makeMove(from, to, btn.dataset.piece);
+        if (btn) {
+            dismiss();
+            makeMove(from, to, btn.dataset.piece);
+        } else if (!picker.contains(e.target)) {
+            dismiss();
+        }
     };
-    picker.addEventListener('click', handler);
+    const dismiss = () => {
+        picker.classList.add('hidden');
+        document.removeEventListener('click', handler, true);
+    };
+    _dismissPromotion = dismiss;
+    // Use capture so we intercept clicks before anything else (e.g. PGN nav)
+    document.addEventListener('click', handler, true);
 }
 
 function makeMove(from, to, promotion) {
@@ -129,6 +138,7 @@ export function setCoordinates(show) {
 }
 
 export function setPosition(fen, animate = true) {
+    _dismissPromotion?.();
     _currentFen = fen;
     const turn = turnColor(fen);
     const dests = computeDests(fen);
