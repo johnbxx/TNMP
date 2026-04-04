@@ -35,15 +35,16 @@ function showPromotionPicker(from, to, color) {
     if (!picker) return;
 
     const pieces = ['q', 'r', 'b', 'n'];
-    const names = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
+    const fileChar = { q: 'Q', r: 'R', b: 'B', n: 'N' };
+    const altText = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
     const prefix = color === 'w' ? 'w' : 'b';
     const btns = picker.querySelectorAll('.promo-btn');
     btns.forEach((btn, i) => {
         const p = pieces[i];
         btn.dataset.piece = p;
         const img = btn.querySelector('img');
-        img.src = `/pieces/${prefix}${names[p].charAt(0)}.webp`;
-        img.alt = names[p];
+        img.src = `/pieces/${prefix}${fileChar[p]}.webp`;
+        img.alt = altText[p];
     });
 
     picker.classList.remove('hidden');
