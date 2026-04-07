@@ -538,7 +538,7 @@ function buildPlayerListFromGames() {
 let _trie = null;
 
 function allocTrie(gameCount) {
-    // Size estimates: ~80 positions/game, ~1.01 edges/position, 20% headroom
+    // ~75 unique positions/game with diverse openings, 100× for headroom
     const maxNodes = Math.max(gameCount * 100, 4096);
     const maxEdges = Math.max((maxNodes + maxNodes / 4) | 0, 4096);
     const htBits = Math.max(12, 32 - Math.clz32(maxNodes * 2 - 1)); // next power of 2, ≥2× nodes
@@ -744,8 +744,8 @@ function buildExplorerTree() {
     const t0 = performance.now();
     const games = (getSourceGames()?.games || []).filter((g) => g.pgn && g.gameId && passesUserFilters(g));
 
-    // Allocate or reset trie
-    if (!_trie || _trie.nTotal.length < games.length * 70) {
+    // Allocate or reset trie (threshold must match allocTrie's gameCount * 100)
+    if (!_trie || _trie.nTotal.length < Math.max(games.length * 100, 4096)) {
         _trie = allocTrie(games.length);
     } else {
         resetTrie(_trie);
