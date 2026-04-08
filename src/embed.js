@@ -405,17 +405,20 @@ function patchPieceImages(root) {
 // --- Init & public API ---
 
 function init() {
-    // Create mount points
+    // Create mount points (tnmp class scopes the CSS reset)
     const gameMount = document.createElement('div');
     gameMount.id = 'game-panel-mount';
+    gameMount.className = 'tnmp';
     document.body.appendChild(gameMount);
 
     const styleMount = document.createElement('div');
     styleMount.id = 'style-mount';
+    styleMount.className = 'tnmp';
     document.body.appendChild(styleMount);
 
     const profileMount = document.createElement('div');
     profileMount.id = 'profile-mount';
+    profileMount.className = 'tnmp';
     document.body.appendChild(profileMount);
 
     // Init modules

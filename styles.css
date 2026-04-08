@@ -122,7 +122,9 @@
 
 }
 
-* {
+.tnmp *,
+.tnmp *::before,
+.tnmp *::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -170,12 +172,12 @@
     letter-spacing: 0.08em;
 }
 
-html {
+html.tnmp {
     min-height: 100%;
     transition: background var(--transition-slow);
 }
 
-body {
+body.tnmp {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     min-height: 100vh;
     display: flex;
@@ -184,7 +186,7 @@ body {
     position: relative;
 }
 
-body::before {
+body.tnmp::before {
     content: '';
     position: fixed;
     top: 0;
@@ -3164,8 +3166,10 @@ cg-board piece.dragging { z-index: 10000 !important; }
     cursor: pointer;
 }
 
-.browser-game-row:hover {
-    background: var(--overlay-light);
+@media (hover: hover) {
+    .browser-game-row:hover {
+        background: var(--overlay-light);
+    }
 }
 
 .browser-board {

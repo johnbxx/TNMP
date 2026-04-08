@@ -3,10 +3,10 @@ import { getRandomMeme } from './memes.js';
 import { stopOffSeasonCountdown, startOffSeasonCountdown, updateCountdownDisplay } from './countdown.js';
 import { resultDisplay } from './utils.js';
 
-/** Set the state class on <html>, preserving the dark-mode class if present. */
+/** Set the state class on <html>, preserving the tnmp and dark-mode classes. */
 function setHtmlClass(stateClass) {
     const dark = document.documentElement.classList.contains('dark-mode');
-    document.documentElement.className = dark ? `${stateClass} dark-mode` : stateClass;
+    document.documentElement.className = `tnmp${dark ? ' dark-mode' : ''} ${stateClass}`;
 }
 
 // --- Answer text fitting ---
