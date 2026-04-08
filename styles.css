@@ -4006,7 +4006,7 @@ input.browser-search-input {
 /* Embed branding */
 .embed-brand {
     position: absolute;
-    bottom: 0;
+    bottom: 0.35rem;
     left: 50%;
     transform: translateX(-50%);
     font-size: 0.65rem;
