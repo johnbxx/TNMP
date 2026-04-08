@@ -126,7 +126,7 @@ function profileRow(
         : `<span class="profile-row-name">${label}</span>`;
     return `<button class="${cls}" ${actionAttr}='${action}'>
         <div class="profile-row-label">
-            ${icon ? `<img class="profile-color-icon" src="pieces/${icon}" alt="">` : ''}
+            ${icon ? `<img class="profile-color-icon" src="/pieces/${icon}" alt="">` : ''}
             ${nameEl}
         </div>
         ${winBar(s)}
@@ -198,7 +198,7 @@ function renderOpenings(stats) {
 
     function section(side, icon) {
         const families = groupByFamily(entries, side);
-        const title = `<div class="profile-section-title"><img class="profile-color-icon" src="pieces/${icon}" alt=""> As ${side === 'white' ? 'White' : 'Black'}</div>`;
+        const title = `<div class="profile-section-title"><img class="profile-color-icon" src="/pieces/${icon}" alt=""> As ${side === 'white' ? 'White' : 'Black'}</div>`;
         if (!families.length) return title + '<p class="profile-empty-small">No games with ECO data.</p>';
         return (
             title +

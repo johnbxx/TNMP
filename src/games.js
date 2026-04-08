@@ -794,10 +794,4 @@ function buildExplorerTree() {
             curId = nextId;
         }
     }
-    if (games.length > 0) {
-        const elapsed = (performance.now() - t0).toFixed(1);
-        console.log(
-            `Explorer: ${games.length} games → ${t.nodeCount.toLocaleString()} positions in ${elapsed}ms (${(((games.length / (performance.now() - t0)) * 1000) | 0).toLocaleString()} games/sec)`,
-        );
-    }
 }

@@ -75,7 +75,8 @@ export async function initEngine(variant, options = {}) {
         // Dynamic import at runtime — path must bypass Vite's static analysis
         // 'lite' uses sf_18_smallnet (single small NNUE), 'full' uses sf_18 (dual NNUE)
         const jsFile = _variant === 'lite' ? 'sf_18_smallnet.js' : 'sf_18.js';
-        const engineUrl = new URL(`/engine/${jsFile}`, window.location.origin).href;
+        const engineOrigin = typeof __EMBED__ !== 'undefined' ? 'https://tnmpairings.com' : window.location.origin;
+        const engineUrl = new URL(`/engine/${jsFile}`, engineOrigin).href;
         const mod = await import(/* @vite-ignore */ engineUrl);
         const Sf_18_Web = mod.default;
         _sf = await Sf_18_Web();
