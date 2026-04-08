@@ -137,6 +137,14 @@
     line-height: normal;
 }
 
+/* Headings are prone to host-page font shorthand overrides */
+.tnmp h1, .tnmp h2, .tnmp h3, .tnmp h4, .tnmp h5, .tnmp h6 {
+    font-family: inherit;
+    letter-spacing: normal;
+    line-height: normal;
+    color: inherit;
+}
+
 .tnmp *,
 .tnmp *::before,
 .tnmp *::after {
