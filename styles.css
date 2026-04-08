@@ -122,6 +122,19 @@
 
 }
 
+.tnmp {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: normal;
+}
+
+/* Form elements don't inherit font by default — force it */
+.tnmp button,
+.tnmp input,
+.tnmp select,
+.tnmp textarea {
+    font-family: inherit;
+}
+
 .tnmp *,
 .tnmp *::before,
 .tnmp *::after {
@@ -2904,7 +2917,7 @@ cg-board piece.dragging { z-index: 10000 !important; }
     min-width: 0;
 }
 
-.browser-search-input {
+input.browser-search-input {
     width: 100%;
     padding: 0.5rem 2rem 0.5rem 0.75rem;
     font-size: 1rem;
@@ -2916,6 +2929,7 @@ cg-board piece.dragging { z-index: 10000 !important; }
     outline: none;
     transition: border-color var(--transition-fast), background var(--transition-fast);
     box-sizing: border-box;
+    margin: 0;
 }
 
 .browser-search-input::placeholder {

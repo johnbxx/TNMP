@@ -115,6 +115,8 @@ jobs:
         run: |
           npm run build:engine
           npx vite build
+          mkdir -p dist/embed
+          curl -sSf https://tnmpairings.com/embed/tnmp-viewer.js -o dist/embed/tnmp-viewer.js || echo "No live embed found — skipping"
           npx wrangler pages deploy dist --project-name=tnmpairings
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
