@@ -741,7 +741,6 @@ const RESULT = {
 function buildExplorerTree() {
     if (!_treeDirty) return;
     _treeDirty = false;
-    const t0 = performance.now();
     const games = (getSourceGames()?.games || []).filter((g) => g.pgn && g.gameId && passesUserFilters(g));
 
     // Allocate or reset trie (threshold must match allocTrie's gameCount * 100)
