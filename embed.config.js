@@ -18,8 +18,9 @@ export default {
     /** Show the PGN import / game submission UI */
     import: true,
 
-    /** In-browser Stockfish engine (true) or redirect to Lichess analysis (false) */
-    localEngine: true,
+    /** In-browser Stockfish engine (true) or redirect to Lichess analysis (false).
+     *  Disabled: requires COEP/COOP headers on the host page for SharedArrayBuffer. */
+    localEngine: false,
 
     /** Opening explorer button in the game browser */
     explorer: true,
