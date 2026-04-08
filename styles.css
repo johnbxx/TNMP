@@ -137,8 +137,9 @@
     line-height: normal;
 }
 
-/* Headings are prone to host-page font shorthand overrides */
-.tnmp h1, .tnmp h2, .tnmp h3, .tnmp h4, .tnmp h5, .tnmp h6 {
+/* Block host-page overrides on common elements */
+.tnmp h1, .tnmp h2, .tnmp h3, .tnmp h4, .tnmp h5, .tnmp h6,
+.tnmp p, .tnmp label, .tnmp a {
     font-family: inherit;
     letter-spacing: normal;
     line-height: normal;
@@ -2779,6 +2780,7 @@ button.viewer-close {
     background: rgba(74, 144, 226, 0.1);
 }
 .editor-file-btn { cursor: pointer; }
+.editor-file-btn input { display: none; }
 .editor-import-spacer { flex: 1; }
 .editor-import-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
 .editor-dirty-content { max-width: 400px; }
@@ -2823,12 +2825,14 @@ button.viewer-close {
     text-align: right;
     white-space: nowrap;
 }
-.editor-header-input {
+input.editor-header-input,
+select.editor-header-input {
     width: 100%;
     min-width: 0;
     background: var(--surface-subtle);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xs);
+    margin: 0;
     padding: 5px 8px;
     color: var(--text-primary);
     font-size: 0.8rem;
@@ -3373,6 +3377,10 @@ input.browser-search-input {
     text-align: center;
     margin-bottom: 0.5rem;
     flex-shrink: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-weight: 700;
+    line-height: normal;
+    letter-spacing: normal;
 }
 
 .profile-uscf-link {
