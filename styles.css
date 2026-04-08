@@ -130,6 +130,13 @@
     box-sizing: border-box;
 }
 
+/* Prevent host-page pseudo-element decorations from bleeding in */
+.tnmp button::before, .tnmp button::after,
+.tnmp a::before, .tnmp a::after,
+.tnmp input::before, .tnmp input::after {
+    content: none;
+}
+
 /* Shared patterns */
 .viewer-player-name,
 .editor-eco,
