@@ -45,6 +45,7 @@ const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none
 <symbol id="i-search" viewBox="0 0 24 24" fill="currentColor"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></symbol>
 <symbol id="i-link" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></symbol>
 </svg>`;
 
 function icon(name, size) {
@@ -62,7 +63,7 @@ export function initGamePanel(mount, { features } = {}) {
         <div class="modal-backdrop"></div>
         ${ICON_SPRITE}
         <div class="modal-content modal-content-viewer">
-            <button class="viewer-close" data-action="close-panel" aria-label="Close">&times;</button>
+            <button class="viewer-close" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
             <div id="viewer-browser-panel" class="viewer-browser-panel hidden">
                 <h2 id="browser-title-panel"></h2>
                 <div class="browser-content">
@@ -83,7 +84,7 @@ export function initGamePanel(mount, { features } = {}) {
             </div>
             <div class="viewer-main">
                 <div id="viewer-header" class="viewer-header">
-                    <div id="game-header">
+                    <div id="viewer-game-header">
                         <div class="viewer-browser-nav" id="viewer-nav-row">
                             <button class="viewer-browse-arrow" id="viewer-browse-prev" aria-label="Previous game">&#8249;</button>
                             <button class="viewer-browse-back" id="viewer-back-to-browser"><span id="viewer-round-label"></span></button>
@@ -1007,7 +1008,7 @@ function loadGame(pgnText, orientation = 'white') {
     showViewer();
     updateLayout();
     setToolbarButtons();
-    document.getElementById('game-header')?.classList.remove('hidden');
+    document.getElementById('viewer-game-header')?.classList.remove('hidden');
     document.getElementById('explorer-header')?.classList.add('hidden');
 
     pgn.initGame(pgnText, { onPositionChange });
@@ -1026,7 +1027,7 @@ function loadExplorer({ restoreMoves } = {}) {
     showViewer();
     updateLayout();
     setToolbarButtons();
-    document.getElementById('game-header')?.classList.add('hidden');
+    document.getElementById('viewer-game-header')?.classList.add('hidden');
     document.getElementById('explorer-header')?.classList.remove('hidden');
     document.getElementById('editor-comment-input')?.classList.add('hidden');
 

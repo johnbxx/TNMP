@@ -133,6 +133,8 @@
 .tnmp select,
 .tnmp textarea {
     font-family: inherit;
+    letter-spacing: normal;
+    line-height: normal;
 }
 
 .tnmp *,
@@ -1208,7 +1210,7 @@ select.editor-header-input option {
     flex: 1;
 }
 
-.viewer-close {
+button.viewer-close {
     position: absolute;
     top: 0.4rem;
     right: 0.4rem;
@@ -1216,8 +1218,8 @@ select.editor-header-input option {
     background: var(--close-btn-bg);
     border: none;
     color: var(--toolbar-icon);
-    font-size: 1.5rem;
-    line-height: 1;
+    padding: 0;
+    margin: 0;
     width: 2.75rem;
     height: 2.75rem;
     border-radius: 50%;
@@ -3988,7 +3990,7 @@ input.browser-search-input {
 /* Embed branding */
 .embed-brand {
     position: absolute;
-    bottom: 0.35rem;
+    bottom: 0;
     left: 50%;
     transform: translateX(-50%);
     font-size: 0.65rem;
