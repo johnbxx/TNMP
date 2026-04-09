@@ -124,7 +124,7 @@ export function initGamePanel(mount, { features } = {}) {
                         <div id="engine-panel" class="engine-panel hidden">
                             <div class="engine-panel-header">
                                 <div class="engine-panel-title">
-                                    <button data-action="engine-pause" id="engine-pause-btn" class="engine-pause-btn" aria-label="Pause/resume analysis">${icon('play', 14)}</button>
+                                    <button data-action="engine-pause" id="engine-pause-btn" class="engine-pause-btn" aria-label="Pause/resume analysis" data-tooltip="Pause/Resume">${icon('play', 14)}</button>
                                     <span class="engine-name">Stockfish 18</span>
                                     <span class="engine-variant-badge" id="engine-variant-badge"></span>
                                     <span class="engine-nps" id="engine-nps"></span>
@@ -141,7 +141,7 @@ export function initGamePanel(mount, { features } = {}) {
                                             <option value="5">5</option>
                                         </select>
                                     </label>
-                                    <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings">${icon('settings', 14)}</button>
+                                    <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings" data-tooltip="Settings">${icon('settings', 14)}</button>
                                 </div>
                             </div>
                             <div class="engine-pv-lines" id="engine-pv-lines"></div>
@@ -178,7 +178,7 @@ export function initGamePanel(mount, { features } = {}) {
                     <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info">${icon('headers')}</button>
                 </div>
                 <div class="overflow-btn-wrapper">
-                    <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options">${icon('overflow')}</button>
+                    <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options" data-tooltip="More">${icon('overflow')}</button>
                     <div id="overflow-menu" class="overflow-menu hidden">
                         <button class="overflow-item" data-action="overflow-comments">${icon('comments')}Comments</button>
                         <button class="overflow-item" data-action="overflow-branch">${icon('branch')}Variations</button>
@@ -1540,9 +1540,9 @@ function renderExplorerMoveListHtml(stats, moveHistory) {
     const atStart = !moveHistory || moveHistory.length === 0;
     const dis = atStart ? ' disabled' : '';
     html += '<div class="explorer-toolbar">';
-    html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset"${dis}>${icon('start', 16)}</button>`;
-    html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back"${dis}>${icon('prev', 16)}</button>`;
-    html += `<button class="explorer-tb-btn" data-action="explorer-flip" aria-label="Flip board">${icon('flip', 16)}</button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset" data-tooltip="Reset"${dis}>${icon('start', 16)}</button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back" data-tooltip="Back"${dis}>${icon('prev', 16)}</button>`;
+    html += `<button class="explorer-tb-btn" data-action="explorer-flip" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip', 16)}</button>`;
     if (total > 0) {
         html += `<button class="explorer-tb-btn explorer-tb-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
     }
@@ -1743,8 +1743,8 @@ function renderGameRow(game, boardLabel = null) {
                 </div>
             </div>
             <div class="browser-player browser-player-black">
-                <span class="browser-name">${game.black}</span>
                 <span class="browser-elo">${game.blackElo || ''}</span>
+                <span class="browser-name">${game.black}</span>
             </div>
         </div>`;
 }
@@ -1795,7 +1795,6 @@ function renderExplorerHeader(state) {
     el.innerHTML = `
         <div class="explorer-header">
             <div class="explorer-title">${ecoPrefix}${title}</div>
-            <div class="explorer-count">${total} ${gameLabel}</div>
         </div>
     `;
 }
@@ -2102,6 +2101,10 @@ function renderVisibleRows() {
     if (viewport) {
         viewport.style.top = startIdx * rowH + 'px';
         viewport.innerHTML = html;
+        if (_panel.gameId) {
+            const row = viewport.querySelector(`[data-game-id="${_panel.gameId}"]`);
+            if (row) row.classList.add('active');
+        }
     }
 }
 

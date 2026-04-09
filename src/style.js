@@ -58,43 +58,15 @@ const BOARD_PRESETS = [
 
 const APP_SCHEMES = [
     // --- Dark themes ---
-    { id: 'default', name: 'Default', accent: '#00c853', bg: '#2d2d2d', bgEnd: '#1a1a1a' },
-    { id: 'midnight', name: 'Midnight', accent: '#5c6bc0', bg: '#1a1a2e', bgEnd: '#0d0d1a' },
-    { id: 'forest', name: 'Forest', accent: '#66bb6a', bg: '#1b2d1b', bgEnd: '#0f1a0f' },
-    { id: 'mocha', name: 'Mocha', accent: '#d4a373', bg: '#2d2420', bgEnd: '#1a1210' },
-    { id: 'slate', name: 'Slate', accent: '#74b9ff', bg: '#2d3436', bgEnd: '#1a1e20' },
-    { id: 'charcoal', name: 'Charcoal', accent: '#e0e0e0', bg: '#333333', bgEnd: '#1a1a1a' },
+    { id: 'default', name: 'Default', accent: '#00c853', bg: '#2d2d2d', vars: { 'color-scheme': 'dark' } },
+    { id: 'midnight', name: 'Midnight', accent: '#5c6bc0', bg: '#1a1a2e', vars: { 'color-scheme': 'dark' } },
+    { id: 'forest', name: 'Forest', accent: '#66bb6a', bg: '#1b2d1b', vars: { 'color-scheme': 'dark' } },
+    { id: 'mocha', name: 'Mocha', accent: '#d4a373', bg: '#2d2420', vars: { 'color-scheme': 'dark' } },
+    { id: 'slate', name: 'Slate', accent: '#74b9ff', bg: '#2d3436', vars: { 'color-scheme': 'dark' } },
+    { id: 'charcoal', name: 'Charcoal', accent: '#e0e0e0', bg: '#333333', vars: { 'color-scheme': 'dark' } },
+
     // --- Light themes ---
-    {
-        id: 'mi-light',
-        name: 'MI Light',
-        accent: '#00421c',
-        bg: '#fcfcfc',
-        bgEnd: '#fcfcfc',
-        vars: {
-            '--text-primary': '#4f4f4f',
-            '--text-muted': '#000000',
-            '--text-secondary': '#5c5c5c',
-            '--text-subtle': '#545454',
-            '--text-faint': '#545454',
-            '--text-link-hover': '#007523',
-            '--raised-panel-bg': '#f4f4f4',
-            '--shadow-color': '#c2c2c2',
-            '--surface-subtle': '#ebebeb',
-            '--surface': 'rgba(0, 0, 0, 0.04)',
-            '--surface-primary': '#fcfcfc',
-            '--border-color': 'rgba(0, 0, 0, 0.12)',
-            '--overlay-light': 'rgba(0, 0, 0, 0.06)',
-            '--overlay-light-hover': 'rgba(0, 0, 0, 0.1)',
-            '--input-bg': 'rgba(0, 0, 0, 0.05)',
-            '--toolbar-icon': '#666',
-            '--toolbar-icon-hover': '#333',
-            '--close-btn-bg': 'rgba(0, 0, 0, 0.08)',
-            '--close-btn-bg-hover': 'rgba(0, 0, 0, 0.15)',
-            '--search-bg': 'rgba(0, 0, 0, 0.05)',
-            '--popup-bg': 'rgba(252, 252, 252, 0.97)',
-        },
-    },
+    { id: 'mi-light', name: 'MI Light', accent: '#5e8048', bg: '#fcfcfc', vars: { 'color-scheme': 'light' } },
 ];
 
 // --- State ---
@@ -168,6 +140,17 @@ function applyBoardColors(light, dark) {
 // Track which vars were set so we can clear them on theme switch
 let _lastSchemeVars = [];
 
+export function getSchemeVars() {
+    const schemeId = localStorage.getItem('appScheme') || 'default';
+    const scheme = APP_SCHEMES.find((s) => s.id === schemeId) || APP_SCHEMES[0];
+    if (schemeId === 'default') return {};
+    return {
+        '--accent': scheme.accent,
+        '--modal-bg': scheme.bg,
+        ...scheme.vars,
+    };
+}
+
 function applyAppScheme(schemeId) {
     const scheme = APP_SCHEMES.find((s) => s.id === schemeId) || APP_SCHEMES[0];
 
@@ -178,16 +161,18 @@ function applyAppScheme(schemeId) {
     }
     _lastSchemeVars = [];
 
+    // Always set color-scheme so light-dark() resolves correctly
+    for (const m of modals) m.style.setProperty('color-scheme', scheme.vars['color-scheme']);
+    _lastSchemeVars.push('color-scheme');
+
     if (schemeId !== 'default') {
-        // Base vars every scheme sets
         const allVars = {
             '--accent': scheme.accent,
-            '--modal-bg-start': scheme.bg,
-            '--modal-bg-end': scheme.bgEnd,
-            '--surface-primary': scheme.bgEnd,
+            '--modal-bg': scheme.bg,
             ...scheme.vars,
         };
         for (const [name, val] of Object.entries(allVars)) {
+            if (name === 'color-scheme') continue; // already set above
             for (const m of modals) m.style.setProperty(name, val);
             _lastSchemeVars.push(name);
         }
