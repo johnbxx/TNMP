@@ -1763,8 +1763,6 @@ function highlightMatch(name, query) {
 function renderExplorerHeader(state) {
     const el = document.getElementById('explorer-header');
     const moveHistory = state.explorerMoveHistory;
-    const total = games.getExplorerStats()?.total || 0;
-    const gameLabel = total === 1 ? 'game' : 'games';
 
     // Move history (clickable plies)
     let title = '<span class="explorer-ply" data-ply="0">Starting Position</span>';
