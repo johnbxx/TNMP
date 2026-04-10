@@ -421,14 +421,12 @@ function init() {
     profileMount.className = 'tnmp';
     document.body.appendChild(profileMount);
 
-    // Set embed style defaults (only if user hasn't customized)
-    if (!localStorage.getItem('appScheme')) localStorage.setItem('appScheme', 'mi-light');
-    if (!localStorage.getItem('pieceTheme')) localStorage.setItem('pieceTheme', 'cburnett');
-    if (!localStorage.getItem('boardLight')) localStorage.setItem('boardLight', '#f0f0e0');
-    if (!localStorage.getItem('boardDark')) localStorage.setItem('boardDark', '#668d4e');
-
     // Init modules
     initGamePanel(gameMount, { features: FEAT });
+    localStorage.setItem('appScheme', 'mi-light');
+    localStorage.setItem('pieceTheme', 'cburnett');
+    localStorage.setItem('boardLight', '#f0f0e0');
+    localStorage.setItem('boardDark', '#668d4e');
     initStyle(styleMount);
     if (FEAT.playerProfiles) initPlayerProfile(profileMount);
 
