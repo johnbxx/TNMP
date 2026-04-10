@@ -124,7 +124,8 @@ jobs:
           npm run build:engine
           npx vite build
           mkdir -p dist/embed
-          if [ "${{ inputs.embed }}" = "true" ]; then
+          COMMIT_MSG="${{ github.event.head_commit.message }}${{ inputs.embed }}"
+          if echo "$COMMIT_MSG" | grep -qiE '\[embed\]|true'; then
             echo "Building fresh embed for publish..."
             node scripts/build-embed-pieces.js
             npx vite build --config vite.config.embed.js
@@ -138,7 +139,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Tag embed publish
-        if: inputs.embed == true
+        if: contains(github.event.head_commit.message, '[embed]') || inputs.embed == true
         run: |
           EMBED_VERSION=$(date +%Y%m%d-%H%M%S)
           git tag "embed-v${EMBED_VERSION}"

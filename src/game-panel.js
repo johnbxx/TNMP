@@ -562,7 +562,11 @@ export function toggleEngine() {
 
     const saved = engine.getSavedVariant();
     if (saved) startEngine(saved);
-    else document.getElementById('engine-choice-dialog')?.classList.remove('hidden');
+    else {
+        const d = document.getElementById('engine-choice-dialog');
+        d?.classList.remove('hidden');
+        if (d) wirePopupDismiss(d);
+    }
 }
 
 export function confirmEngineChoice(variant) {
@@ -848,6 +852,7 @@ export function openEngineSettings() {
     }
 
     dialog.classList.remove('hidden');
+    wirePopupDismiss(dialog);
 }
 
 export function applyEngineSettings() {
@@ -2454,6 +2459,7 @@ export function showImportDialog(submit = false) {
     textarea.value = '';
     if (submit) textarea.placeholder = 'Paste movetext or PGN here, or drag a .pgn file...';
     dialog.classList.remove('hidden');
+    wirePopupDismiss(dialog);
     textarea.focus();
     dialog.onclick = (e) => {
         if (e.target === dialog) hideImportDialog();
