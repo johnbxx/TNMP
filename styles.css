@@ -1,7 +1,7 @@
 @import '@lichess-org/chessground/assets/chessground.base.css';
 @import '@lichess-org/chessground/assets/chessground.cburnett.css';
 
-:root {
+.tnmp {
     color-scheme: dark;
 
     /* ── Base colors (themes override these) ─────────────── */

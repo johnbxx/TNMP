@@ -90,7 +90,9 @@ function pieceThemePath(theme, piece) {
 }
 
 function pieceSrc(theme, piece) {
-    return theme === 'default' ? `/pieces/${piece}.webp` : pieceThemePath(theme, piece);
+    const path = theme === 'default' ? `/pieces/${piece}.webp` : pieceThemePath(theme, piece);
+    // In embed builds, use absolute URLs so pieces load from our CDN, not the host page
+    return typeof __EMBED__ !== 'undefined' ? `https://tnmpairings.com${path}` : path;
 }
 
 function applyPieceTheme(theme) {
