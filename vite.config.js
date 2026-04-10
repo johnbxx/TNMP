@@ -25,6 +25,17 @@ export default defineConfig({
             'Cross-Origin-Embedder-Policy': 'require-corp',
         },
     },
+    css: {
+        lightningcss: {
+            targets: {
+                chrome: (123 << 16),
+                firefox: (120 << 16),
+                safari: (17 << 16) | (5 << 8),
+                edge: (123 << 16),
+            },
+            exclude: 1048576, // Features.LightDark — don't polyfill light-dark()
+        },
+    },
     build: {
         // Output hashed filenames for cache-busting
         rollupOptions: {
