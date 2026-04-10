@@ -3,6 +3,7 @@ import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import embedConfig from './embed.config.js';
+import { resolveTheme } from './scripts/vite-plugin-resolve-theme.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -20,9 +21,15 @@ const embedDefines = { '__EMBED__': 'true' };
 for (const [key, define] of Object.entries(featureNameMap)) {
     embedDefines[define] = JSON.stringify(embedConfig[key]);
 }
+if (embedConfig.theme) {
+    embedDefines['__THEME__'] = JSON.stringify(embedConfig.theme);
+}
 
 export default defineConfig({
-    plugins: [cssInjectedByJsPlugin()],
+    plugins: [
+        cssInjectedByJsPlugin(),
+        embedConfig.theme && resolveTheme(embedConfig.theme),
+    ].filter(Boolean),
     publicDir: false, // Don't copy public/ assets
     define: embedDefines,
     css: {

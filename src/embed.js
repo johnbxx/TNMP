@@ -67,6 +67,7 @@ import {
     doImport,
     submitGame,
     showHeaderEditor,
+    showTournamentInfo,
     saveHeaderEditor,
     launchExplorer,
     initGamePanel,
@@ -227,6 +228,8 @@ const ACTIONS = {
     'explorer-back': explorerBackToBrowser,
     'explorer-view-games': explorerBackToBrowser,
     // Browser
+    'browser-tournament-info': () => showTournamentInfo(),
+    'tournament-info-close': () => document.getElementById('tournament-info-popup')?.classList.add('hidden'),
     'browser-explore': () => {
         if (FEAT.explorer) launchExplorer();
     },
@@ -423,11 +426,20 @@ function init() {
 
     // Init modules
     initGamePanel(gameMount, { features: FEAT });
-    localStorage.setItem('appScheme', 'mi-light');
-    localStorage.setItem('pieceTheme', 'cburnett');
-    localStorage.setItem('boardLight', '#f0f0e0');
-    localStorage.setItem('boardDark', '#668d4e');
+
+    // Apply embed theme (compile-time constants from embed.config.js)
+    const _theme = typeof __EMBED__ !== 'undefined' && typeof __THEME__ !== 'undefined' ? __THEME__ : null; // eslint-disable-line
+    if (_theme) {
+        if (_theme.colorScheme === 'light') localStorage.setItem('appScheme', 'mi-light');
+        if (_theme.pieceTheme) localStorage.setItem('pieceTheme', _theme.pieceTheme);
+        if (_theme.boardLight) localStorage.setItem('boardLight', _theme.boardLight);
+        if (_theme.boardDark) localStorage.setItem('boardDark', _theme.boardDark);
+    }
     initStyle(styleMount);
+
+    // Inject inline piece images (chessground CSS fallback)
+    injectPieces();
+    patchPieceImages(document);
     if (FEAT.playerProfiles) initPlayerProfile(profileMount);
 
     // Embed branding
@@ -438,10 +450,6 @@ function init() {
     brand.className = 'embed-brand';
     brand.textContent = 'Powered by TNM Pairings';
     document.querySelector('.modal-content-viewer')?.appendChild(brand);
-
-    // Inject inline piece images (chessground CSS + icon src patches)
-    injectPieces();
-    patchPieceImages(document);
 
     // Watch for dynamically added piece images
     if (typeof MutationObserver !== 'undefined') {

@@ -219,7 +219,7 @@ export async function handleQuery(request, env) {
     const includePgn = includeSet.has('pgn');
     const includeSubmissions = includeSet.has('submissions');
 
-    const tournamentCols = ', t.name as tournament_name, t.total_rounds, t.sections as tournament_sections';
+    const tournamentCols = ', t.name as tournament_name, t.total_rounds, t.sections as tournament_sections, t.round_dates, t.time_control, t.player_count, t.game_count, t.director, t.organizer, t.url as tournament_url';
     let selectCols;
     if (includePgn) {
         selectCols = 'g.*' + tournamentCols;
@@ -323,6 +323,22 @@ export async function handleQuery(request, env) {
     if (firstRow?.tournament_sections) {
         try { response.sections = JSON.parse(firstRow.tournament_sections); } catch { /* ignore */ }
     }
+    // Tournament detail metadata
+    if (firstRow?.round_dates) {
+        try {
+            const dates = JSON.parse(firstRow.round_dates);
+            if (dates.length) {
+                response.startDate = dates[0].split('T')[0];
+                response.endDate = dates[dates.length - 1].split('T')[0];
+            }
+        } catch { /* ignore */ }
+    }
+    if (firstRow?.time_control) response.timeControl = firstRow.time_control;
+    if (firstRow?.player_count) response.playerCount = firstRow.player_count;
+    if (firstRow?.game_count) response.gameCount = firstRow.game_count;
+    if (firstRow?.director) response.director = firstRow.director;
+    if (firstRow?.organizer) response.organizer = firstRow.organizer;
+    if (firstRow?.tournament_url) response.tournamentUrl = firstRow.tournament_url;
     if (byeResult) {
         response.byes = byeResult.results.map(r => ({ round: r.round, type: r.bye_type }));
     }

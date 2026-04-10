@@ -105,7 +105,7 @@ function applyPieceTheme(theme) {
     const rules = ALL_PIECES.map((p) => {
         const color = PIECE_COLORS[p[0]];
         const role = PIECE_ROLES[p];
-        return `.cg-wrap piece.${role}.${color} { background-image: url('${pieceSrc(theme, p)}'); }`;
+        return `.tnmp .cg-wrap piece.${role}.${color} { background-image: url('${pieceSrc(theme, p)}'); }`;
     });
     _pieceStyleEl.textContent = rules.join('\n');
 

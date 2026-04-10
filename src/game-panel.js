@@ -73,6 +73,7 @@ export function initGamePanel(mount, { features } = {}) {
                             <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
                             <div id="browser-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
                         </div>
+                        <button type="button" class="browser-action-btn" data-action="browser-tournament-info" aria-label="Tournament Info" data-tooltip="Tournament Info">ⓘ</button>
                         <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer">${icon('explore', 16)}</button>
                         <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN">${icon('import', 16)}</button>
                         <button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs">${icon('download', 16)}</button>
@@ -150,9 +151,9 @@ export function initGamePanel(mount, { features } = {}) {
                 </div>
                 <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
                 <div class="viewer-tool-group">
-                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)">${icon('comments')}</button>
-                    <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)">${icon('branch')}</button>
-                    <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip')}</button>
+                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)">${icon('comments')}<span class="tool-label">Comments</span></button>
+                    <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)">${icon('branch')}<span class="tool-label">Variations</span></button>
+                    <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip')}<span class="tool-label">Flip</span></button>
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-nav-group">
@@ -164,9 +165,9 @@ export function initGamePanel(mount, { features } = {}) {
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-tool-group viewer-tool-group-end">
-                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Engine (A)">${icon('engine')}</button>
+                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Engine (A)">${icon('engine')}<span class="tool-label">Engine</span></button>
                     <div class="share-btn-wrapper">
-                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share">${icon('share')}</button>
+                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share">${icon('share')}<span class="tool-label">Share</span></button>
                         <div id="share-popover" class="share-popover hidden">
                             <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
                             <button class="share-option" data-action="share-copy-link">Copy Link</button>
@@ -175,7 +176,7 @@ export function initGamePanel(mount, { features } = {}) {
                             <button class="share-option" data-action="share-native">Share...</button>
                         </div>
                     </div>
-                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Edit game info" data-tooltip="Game Info">${icon('headers')}</button>
+                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Game info" data-tooltip="Game Info">ⓘ<span class="tool-label">Info</span></button>
                 </div>
                 <div class="overflow-btn-wrapper">
                     <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options" data-tooltip="More">${icon('overflow')}</button>
@@ -220,6 +221,17 @@ export function initGamePanel(mount, { features } = {}) {
                     <div class="editor-header-fields" id="editor-header-fields"></div>
                     <div class="editor-header-actions">
                         <button type="button" data-action="header-cancel" class="editor-h-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+            <div id="tournament-info-popup" class="editor-header-popup hidden">
+                <div class="editor-header-inner tournament-info-inner">
+                    <h3 class="editor-header-title" id="tournament-info-title"></h3>
+                    <div class="tournament-info-dates" id="tournament-info-dates"></div>
+                    <div class="editor-header-fields" id="tournament-info-fields"></div>
+                    <div class="tournament-info-link" id="tournament-info-link"></div>
+                    <div class="editor-header-actions">
+                        <button type="button" data-action="tournament-info-close" class="editor-h-btn">Close</button>
                     </div>
                 </div>
             </div>
@@ -2557,9 +2569,105 @@ export function showHeaderEditor() {
     }
 
     popup.classList.remove('hidden');
+    wirePopupDismiss(popup);
 }
 export function saveHeaderEditor() {
     document.getElementById('editor-header-popup')?.classList.add('hidden');
+}
+
+// Tournament info popup
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+const TI_ICONS = {
+    players:
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M12 13c-4.4 0-8 2-8 4.5V19h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/></svg>',
+    rounds: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/></svg>',
+    games: '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 16,14"/></svg>',
+};
+
+export function showTournamentInfo() {
+    const popup = document.getElementById('tournament-info-popup');
+    const meta = games.getTournamentMeta();
+
+    const title = document.getElementById('tournament-info-title');
+    title.textContent = meta?.name || games.getTitle();
+
+    const dates = document.getElementById('tournament-info-dates');
+    if (meta?.startDate && meta?.endDate) {
+        dates.textContent = `${formatDate(meta.startDate)} – ${formatDate(meta.endDate)}`;
+    } else if (meta?.startDate) {
+        dates.textContent = formatDate(meta.startDate);
+    } else {
+        dates.textContent = '';
+    }
+
+    const fields = document.getElementById('tournament-info-fields');
+
+    // Stats row with icons
+    const stats = [];
+    if (meta?.playerCount) stats.push(`<span class="ti-stat">${TI_ICONS.players} ${meta.playerCount} Players</span>`);
+    if (meta?.totalRounds) stats.push(`<span class="ti-stat">${TI_ICONS.rounds} ${meta.totalRounds} Rounds</span>`);
+    if (meta?.gameCount) stats.push(`<span class="ti-stat">${TI_ICONS.games} ${meta.gameCount} Games</span>`);
+    if (meta?.timeControl) stats.push(`<span class="ti-stat">${TI_ICONS.clock} ${meta.timeControl}</span>`);
+
+    let html = '';
+    if (stats.length) {
+        html += `<div class="ti-stats">${stats.join('')}</div>`;
+    }
+
+    // Sections
+    if (meta?.sections?.length) {
+        html += `<div class="ti-section-title">Sections</div>`;
+        html += `<div class="ti-sections">${meta.sections
+            .map((s) => `<span class="ti-section">${s}</span>`)
+            .join('')}</div>`;
+    }
+
+    // Officials
+    const officials = [];
+    if (meta?.director)
+        officials.push(
+            `<div class="ti-official"><span class="ti-official-role">Director</span> ${meta.director}</div>`,
+        );
+    if (meta?.organizer)
+        officials.push(
+            `<div class="ti-official"><span class="ti-official-role">Organizer</span> ${meta.organizer}</div>`,
+        );
+    if (officials.length) {
+        html += `<div class="ti-officials">${officials.join('')}</div>`;
+    }
+
+    if (!html) {
+        html = '<div class="editor-header-empty">No tournament info available.</div>';
+    }
+
+    fields.innerHTML = html;
+
+    const link = document.getElementById('tournament-info-link');
+    if (meta?.tournamentUrl) {
+        link.innerHTML = `<a href="${meta.tournamentUrl}" target="_blank" rel="noopener">View on MI website ›</a>`;
+    } else {
+        link.innerHTML = '';
+    }
+
+    popup.classList.remove('hidden');
+    wirePopupDismiss(popup);
+}
+
+// Click outside popup inner to dismiss
+function wirePopupDismiss(popup) {
+    const handler = (e) => {
+        if (e.target === popup) {
+            popup.classList.add('hidden');
+            popup.removeEventListener('click', handler);
+        }
+    };
+    popup.addEventListener('click', handler);
 }
 
 // Board-core compat (used by viewer-analysis action in app.js)

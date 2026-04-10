@@ -24,4 +24,16 @@ export default {
 
     /** Opening explorer button in the game browser */
     explorer: true,
+
+    /** Theme to bake into the embed build.
+     *  CSS color expressions (light-dark, rgb-from, color-mix) are resolved
+     *  at build time so the embed works on any host page without cascade issues. */
+    theme: {
+        colorScheme: 'light',
+        accent: '#5e8048',
+        bg: '#fcfcfc',
+        pieceTheme: 'cburnett',
+        boardLight: '#f0f0e0',
+        boardDark: '#668d4e',
+    },
 };

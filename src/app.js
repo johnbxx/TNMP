@@ -46,6 +46,7 @@ import {
     doImport,
     submitGame,
     showHeaderEditor,
+    showTournamentInfo,
     saveHeaderEditor,
     launchExplorer,
     initGamePanel,
@@ -477,6 +478,8 @@ const ACTIONS = {
     'explorer-view-games': explorerBackToBrowser,
     // Browser
     'browser-explore': launchExplorer,
+    'browser-tournament-info': showTournamentInfo,
+    'tournament-info-close': () => document.getElementById('tournament-info-popup')?.classList.add('hidden'),
     // Editor
     'editor-import-ok': doImport,
     'editor-import-cancel': hideImportDialog,

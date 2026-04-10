@@ -20,6 +20,7 @@ const GAMES_CACHE_KEY = 'gamesData';
 let _tournamentData = null; // { games }
 let _tournamentSections = []; // server-provided, pre-sorted
 let _tournamentTotalRounds = 0;
+let _tournamentMeta = null; // { startDate, endDate, timeControl, playerCount, gameCount, director, organizer, tournamentUrl }
 let _playerData = null; // { games }
 let _localData = null; // { games }
 let _tournamentList = null; // [{ slug, name }]
@@ -91,6 +92,10 @@ export function isPlayerMode() {
 export function getPlayerSources() {
     return _playerSources;
 }
+export function getTournamentMeta() {
+    return _tournamentMeta;
+}
+
 export function getTitle() {
     if (isLocalMode()) {
         const games = _localData.games || [];
@@ -347,6 +352,19 @@ export async function fetchGames(queryParams = {}, { cache = false } = {}) {
         _tournamentData = result;
         _tournamentSections = data.sections || [];
         _tournamentTotalRounds = data.totalRounds || 0;
+        _tournamentMeta = {
+            name: data.games?.[0]?.tournament || null,
+            startDate: data.startDate || null,
+            endDate: data.endDate || null,
+            timeControl: data.timeControl || null,
+            playerCount: data.playerCount || null,
+            gameCount: data.gameCount || null,
+            director: data.director || null,
+            organizer: data.organizer || null,
+            tournamentUrl: data.tournamentUrl || null,
+            totalRounds: data.totalRounds || null,
+            sections: data.sections || null,
+        };
         _sectionList = _tournamentSections;
         _visibleSections = new Set(_sectionList);
         resolveDefaultRound();
