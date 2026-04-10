@@ -2815,9 +2815,22 @@ button.viewer-close {
 }
 .editor-header-fields label {
     font-size: 0.8rem;
-    color: var(--text-primary);
+    color: var(--text-subtle);
     text-align: right;
     white-space: nowrap;
+}
+.editor-header-value {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.editor-header-empty {
+    grid-column: 1 / -1;
+    color: var(--text-faint);
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 1rem 0;
 }
 input.editor-header-input,
 select.editor-header-input {

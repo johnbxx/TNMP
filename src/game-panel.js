@@ -217,32 +217,9 @@ export function initGamePanel(mount, { features } = {}) {
             <div id="editor-header-popup" class="editor-header-popup hidden">
                 <div class="editor-header-inner">
                     <h3 class="editor-header-title">Game Info</h3>
-                    <div class="editor-header-fields">
-                        <label for="header-white">White</label>
-                        <input type="text" id="header-white" class="editor-header-input" data-header="White" placeholder="First Last">
-                        <label for="header-black">Black</label>
-                        <input type="text" id="header-black" class="editor-header-input" data-header="Black" placeholder="First Last">
-                        <label for="header-result">Result</label>
-                        <select id="header-result" class="editor-header-input" data-header="Result">
-                            <option value="*">*</option>
-                            <option value="1-0">1-0</option>
-                            <option value="0-1">0-1</option>
-                            <option value="1/2-1/2">1/2-1/2</option>
-                        </select>
-                        <label for="header-date">Date</label>
-                        <input type="text" id="header-date" class="editor-header-input" data-header="Date" placeholder="YYYY.MM.DD">
-                        <label for="header-white-elo">White Elo</label>
-                        <input type="text" id="header-white-elo" class="editor-header-input" data-header="WhiteElo" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
-                        <label for="header-black-elo">Black Elo</label>
-                        <input type="text" id="header-black-elo" class="editor-header-input" data-header="BlackElo" inputmode="numeric" pattern="[0-9]*" placeholder="1500">
-                        <label for="header-event">Event</label>
-                        <input type="text" id="header-event" class="editor-header-input" data-header="Event" placeholder="Tournament name">
-                        <label for="header-round">Round</label>
-                        <input type="text" id="header-round" class="editor-header-input" data-header="Round" placeholder="1 or 1.5">
-                    </div>
+                    <div class="editor-header-fields" id="editor-header-fields"></div>
                     <div class="editor-header-actions">
-                        <button type="button" data-action="header-cancel" class="editor-h-btn editor-h-btn-secondary">Cancel</button>
-                        <button type="button" data-action="header-save" class="editor-h-btn">Save</button>
+                        <button type="button" data-action="header-cancel" class="editor-h-btn">Close</button>
                     </div>
                 </div>
             </div>
@@ -2561,26 +2538,28 @@ export async function submitGame() {
     setToolbarButtons();
 }
 
-// Header editor
+// Header editor (read-only display of all PGN headers)
 export function showHeaderEditor() {
     const popup = document.getElementById('editor-header-popup');
+    const fields = document.getElementById('editor-header-fields');
     const headers = pgn.getHeaders();
-    for (const input of popup.querySelectorAll('[data-header]')) {
-        input.value = headers[input.dataset.header] || '';
+
+    // Skip internal/redundant/empty headers
+    const skip = new Set(['FEN', 'SetUp', 'GameId']);
+    const entries = Object.entries(headers).filter(([k, v]) => v && v !== '?' && v !== '-1' && !skip.has(k));
+
+    if (entries.length === 0) {
+        fields.innerHTML = '<div class="editor-header-empty">No game info available.</div>';
+    } else {
+        fields.innerHTML = entries
+            .map(([key, val]) => `<label>${key}</label><span class="editor-header-value">${val}</span>`)
+            .join('');
     }
+
     popup.classList.remove('hidden');
 }
 export function saveHeaderEditor() {
-    const popup = document.getElementById('editor-header-popup');
-    const headers = { ...pgn.getHeaders() };
-    for (const input of popup.querySelectorAll('[data-header]')) {
-        const val = input.value.trim();
-        if (val) headers[input.dataset.header] = val;
-        else delete headers[input.dataset.header];
-    }
-    pgn.setHeaders(headers);
-    if (_panel.gameId) games.updateCachedGame(_panel.gameId, headers);
-    popup.classList.add('hidden');
+    document.getElementById('editor-header-popup')?.classList.add('hidden');
 }
 
 // Board-core compat (used by viewer-analysis action in app.js)
