@@ -793,7 +793,8 @@
           <h4 style="color:var(--cyan)">State &amp; Data</h4>
           <ul>
             <li><code>config.js</code> — constants, state getters/setters</li>
-            <li><code>games.js</code> — /query fetch/cache, filters, explorer trie, virtual game list</li>
+            <li><code>games.js</code> — source-agnostic data layer: datasets, contexts, filters, explorer trie</li>
+            <li><code>tnm.js</code> — TNM API client (query, players, tournaments, localStorage cache)</li>
             <li><code>tree.js</code> — 0x88 replay engine, Zobrist hashing (~20× faster than chess.js)</li>
             <li><code>engine.js</code> — Stockfish 18 WASM wrapper (UCI, NNUE loading, eval cache)</li>
             <li><code>eco.js</code> — frontend ECO classification (localStorage cache)</li>
@@ -937,21 +938,35 @@
     <div class="module-card" style="border-left:3px solid var(--pink)">
       <h4 style="color:var(--pink)">games.js</h4>
       <div class="path">src/games.js</div>
-      <p>Pure data store with named getters. Fetches <code>/query</code>, caches games, builds explorer trie (via <code>tree.js</code> replay engine), player search, tournament switching. Zero DOM. <code>onChange</code> is a bare signal — observers pull state via getters.</p>
+      <p>Source-agnostic data layer. Manages datasets (games + metadata), contexts (filters + explorer + trie), and a context cache for instant switching. Zero knowledge of any API — data sources call <code>ingestDataset()</code> to load games. Pull-based: <code>onChange</code> fires a bare signal, observers read state via getters.</p>
       <div class="exports">
+        <span>ingestDataset()</span>
+        <span>activateCtx()</span>
         <span>onChange()</span>
         <span>getGroupedGames()</span>
-        <span>getPlayer()</span>
-        <span>isPlayerMode()</span>
+        <span>hasPlayer()</span>
+        <span>getEvents()</span>
         <span>getFilter()</span>
         <span>setFilter()</span>
         <span>isExplorerActive()</span>
         <span>getExplorerStats()</span>
-        <span>ensureExplorer()</span>
-        <span>setExplorerPosition()</span>
         <span>selectPlayer()</span>
-        <span>clearPlayerMode()</span>
         <span>switchDataSource()</span>
+        <span>setGamesData()</span>
+      </div>
+    </div>
+
+    <div class="module-card" style="border-left:3px solid var(--pink)">
+      <h4 style="color:var(--pink)">tnm.js</h4>
+      <div class="path">src/tnm.js</div>
+      <p>TNM API client. The only module that knows about the TNMP server endpoints. Wraps <code>/query</code>, <code>/players</code>, and <code>/tournaments</code>. Handles localStorage caching for instant bootstrap, tournament switching, player game fetching, and startup orchestration. Calls <code>games.ingestDataset()</code> to load fetched data.</p>
+      <div class="exports">
+        <span>queryGames()</span>
+        <span>fetchPlayerGames()</span>
+        <span>switchTournament()</span>
+        <span>prefetchGames()</span>
+        <span>getTournamentList()</span>
+        <span>getPlayerUscfId()</span>
       </div>
     </div>
 

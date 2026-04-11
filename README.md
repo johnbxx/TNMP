@@ -38,6 +38,7 @@ A Pages Function at the edge intercepts crawler requests to inject dynamic Open 
 ### Key technical decisions
 
 - **No framework** — vanilla JS, ES modules, ~85 KB gzipped.
+- **Source-agnostic data layer** — `games.js` has zero knowledge of any API. Datasets (games + metadata), contexts (filters + explorer state), and a context cache for instant switching are managed generically. The TNM server is one data source (`tnm.js`); chess.com imports, PGN files, or any future source plug in via the same `ingestDataset()` entry point.
 - **Server-side state computation** — the worker pre-computes tournament state on a cron schedule. The frontend is a thin rendering layer.
 - **Web Push from scratch** — VAPID JWT generation and RFC 8291 payload encryption implemented directly, no push service SDK.
 - **Position-based ECO classification** — 3,641 EPD positions from lichess chess-openings, matched by board state rather than move sequence.
