@@ -53,14 +53,15 @@ import {
 } from './game-panel.js';
 import { showToast } from './toast.js';
 import {
-    prefetchGames,
     getCachedGame,
-    fetchGames,
     selectPlayer,
     getPlayer,
     getGroupedGames,
     getFilter,
+    activateCtx,
+    getLastTournamentKey,
 } from './games.js';
+import { queryGames, prefetchGames, fetchPlayerGames } from './tnm.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
@@ -350,7 +351,11 @@ const ACTIONS = {
     'save-settings': () => saveSettings(wrappedCheckPairings),
     'enable-push': enablePush,
     'disable-push': disablePush,
-    'open-games': () => openGameViewer(),
+    'open-games': () => {
+        const key = getLastTournamentKey();
+        if (key) activateCtx(key);
+        openGameViewer();
+    },
     'open-profile': (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
         if (btn?.dataset.name) openPlayerProfile(btn.dataset.name);
@@ -360,7 +365,7 @@ const ACTIONS = {
         const gameId = btn?.dataset.gameId;
         if (!gameId) return;
         if (CONFIG.playerName) {
-            await selectPlayer(CONFIG.playerName, { norm: CONFIG.playerNorm || undefined });
+            await selectPlayer(CONFIG.playerName, { norm: CONFIG.playerNorm || undefined, fetch: fetchPlayerGames });
             openGameFromBrowser(gameId);
         } else {
             const game = getCachedGame(gameId);
@@ -693,9 +698,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const gameId = urlParams.get('game');
     if (gameId && /^\d{10,20}$/.test(gameId)) {
-        fetchGames({ gameId, include: 'pgn' })
-            .then(() => {
-                const game = getCachedGame(gameId);
+        queryGames({ gameId, include: 'pgn' })
+            .then((data) => {
+                const game = data.games?.[0] || getCachedGame(gameId);
                 if (game) {
                     const pNorm = CONFIG.playerNorm || null;
                     const orientation = pNorm && game.blackNorm === pNorm ? 'Black' : 'White';

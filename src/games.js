@@ -1,40 +1,22 @@
 /**
- * Games — data layer for game browsing and opening explorer.
+ * Games — source-agnostic data layer for game browsing and opening explorer.
  *
- * Owns: fetching, caching, filtering, grouping, player search,
- * tournament switching, opening explorer trie traversal.
+ * Owns: datasets, contexts, filtering, grouping, player search,
+ * opening explorer trie traversal. Zero knowledge of any API.
  *
- * Zero DOM. Pushes complete state snapshot via onChange callback
- * after every mutation so the view layer can re-render.
+ * Zero DOM. Pull-based: notifyChange() fires a bare signal,
+ * consumers read state via exported getters at render time.
  */
 
-import { WORKER_URL } from './config.js';
 import { Chess } from 'chess.js';
 import { extractMoveText } from './pgn-parser.js';
 import { ReplayEngine, hashFen, START_HASH } from './tree.js';
+import { getAllPlayers } from './tnm.js';
+
+// Re-export TNM getters for consumers
+export { getTournamentList, getActiveTournamentSlug, getPlayerUscfId } from './tnm.js';
 
 // ─── Private State ─────────────────────────────────────────────────
-
-// Fetch & cache
-const GAMES_CACHE_KEY = 'gamesData';
-let _tournamentData = null; // { games }
-let _tournamentSections = []; // server-provided, pre-sorted
-let _tournamentTotalRounds = 0;
-let _tournamentMeta = null; // { startDate, endDate, timeControl, playerCount, gameCount, director, organizer, tournamentUrl }
-let _playerData = null; // { games }
-let _localData = null; // { games }
-let _tournamentList = null; // [{ slug, name }]
-let _activeTournamentSlug = null;
-let _fetchGeneration = 0;
-
-let _allPlayers = null; // [{ name, norm }] (for autocomplete)
-let _tournamentScope = null; // embed-only: lock to a single tournament slug
-
-// Source selection
-let _currentSource = 'tournament'; // 'tournament' | 'player'
-let _currentPlayer = null;
-let _currentPlayerNorm = null;
-let _playerSources = []; // tournament list for current player
 
 // Filters (narrowing only — never decide data source)
 const EMPTY_FILTERS = {
@@ -46,15 +28,98 @@ const EMPTY_FILTERS = {
     event: null,
     openingFamily: null,
 };
-let _filters = { ...EMPTY_FILTERS };
-let _playerList = []; // searchable player names for current dataset
-let _sectionList = [];
-let _visibleSections = new Set();
 
-// Explorer
-let _explorer = null; // { chess, moveHistory }
-let _explorerActive = false;
-// _trie is declared near allocTrie()
+// ─── Dataset + Context Architecture ───────────────────────────────
+
+function makeDataset(fields = {}) {
+    return {
+        games: fields.games ?? [],
+        sections: fields.sections ?? null,
+        totalRounds: fields.totalRounds ?? null,
+        meta: fields.meta ?? null,
+        playerName: fields.playerName ?? null,
+        playerNorm: fields.playerNorm ?? null,
+        playerSources: fields.playerSources ?? null,
+        events: fields.events ?? null,
+    };
+}
+
+function uniqueValues(games, field) {
+    const vals = [];
+    const seen = new Set();
+    for (const g of games) {
+        const v = g[field];
+        if (v && !seen.has(v)) {
+            seen.add(v);
+            vals.push(v);
+        }
+    }
+    return vals;
+}
+
+function uniqueRounds(games) {
+    const rounds = new Set();
+    for (const g of games) {
+        if (g.round != null) rounds.add(g.round);
+    }
+    return rounds.size > 0 ? [...rounds].sort((a, b) => a - b) : [];
+}
+
+function makeCtx(dataset) {
+    const sections = dataset.sections ?? uniqueValues(dataset.games, 'section');
+    const rounds = dataset.totalRounds
+        ? Array.from({ length: dataset.totalRounds }, (_, i) => i + 1)
+        : uniqueRounds(dataset.games);
+    const events = dataset.events ?? uniqueValues(dataset.games, 'tournament');
+
+    return {
+        dataset,
+        sections: sections.length > 1 ? sections : [],
+        rounds,
+        events: events.length > 1 ? events : null,
+        filters: { ...EMPTY_FILTERS },
+        visibleSections: new Set(sections.length > 1 ? sections : []),
+        explorer: null,
+        explorerActive: false,
+        trie: null,
+        treeDirty: true,
+    };
+}
+
+let _activeCtx = null;
+const _ctxCache = new Map();
+
+let _lastTournamentKey = null;
+
+/**
+ * Universal entry point for loading games into the viewer.
+ * Any source (TNM, chess.com, import, collection) calls this.
+ */
+export function ingestDataset(key, fields, { defaultRound = false, filters = null } = {}) {
+    const ds = makeDataset(fields);
+    const ctx = makeCtx(ds);
+    if (defaultRound && ctx.rounds.length > 0) {
+        ctx.filters.round = ctx.rounds[ctx.rounds.length - 1];
+    }
+    if (filters) {
+        for (const [k, v] of Object.entries(filters)) {
+            if (v != null) ctx.filters[k] = v;
+        }
+    }
+    _ctxCache.set(key, ctx);
+    _activeCtx = ctx;
+    if (key.startsWith('tournament:')) _lastTournamentKey = key;
+    notifyChange();
+    return ctx;
+}
+
+export function getLastTournamentKey() {
+    return _lastTournamentKey;
+}
+
+// ─── Module state ─────────────────────────────────────────────────
+
+let _playerList = []; // searchable player names for current dataset
 
 // ─── Observer ──────────────────────────────────────────────────────
 
@@ -63,67 +128,70 @@ let _onChange = null;
 export function onChange(fn) {
     _onChange = fn || null;
 }
-export function getActiveTournamentSlug() {
-    return _activeTournamentSlug;
-}
+// ─── Ctx-aware getters ────────────────────────────────────────────
+
 export function getExplorerMoves() {
-    return _explorer?.moveHistory ?? [];
+    return _activeCtx?.explorer?.moveHistory ?? [];
 }
 export function getFilter(key) {
-    return _filters[key] ?? null;
+    return _activeCtx?.filters[key] ?? null;
 }
 export function getVisibleSections() {
-    return _visibleSections;
+    return _activeCtx?.visibleSections ?? new Set();
 }
 export function isExplorerActive() {
-    return _explorerActive;
+    return _activeCtx?.explorerActive ?? false;
 }
 export function getExplorerFen() {
-    return _explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-}
-export function getTournamentList() {
-    return _tournamentScope ? null : _tournamentList;
+    return _activeCtx?.explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 }
 export function getPlayer() {
-    return _currentPlayer;
+    return _activeCtx?.dataset.playerName ?? null;
 }
-export function isPlayerMode() {
-    return _currentSource === 'player';
+export function hasPlayer() {
+    return _activeCtx?.dataset.playerName != null;
 }
 export function getPlayerSources() {
-    return _playerSources;
+    return _activeCtx?.dataset.playerSources ?? [];
 }
 export function getTournamentMeta() {
-    return _tournamentMeta;
+    return _activeCtx?.dataset.meta ?? null;
 }
 
 export function getTitle() {
-    if (isLocalMode()) {
-        const games = _localData.games || [];
-        const events = new Set(games.map((g) => g.tournament).filter(Boolean));
-        if (events.size === 1) return [...events][0];
-        return `Imported Games (${games.length})`;
-    }
-    return activeData()?.games?.[0]?.tournament || 'Tournament Games';
-}
-export function getRoundNumbers() {
-    return _currentSource === 'tournament' && _tournamentTotalRounds > 0
-        ? Array.from({ length: _tournamentTotalRounds }, (_, i) => i + 1)
-        : [];
+    const ds = _activeCtx?.dataset;
+    if (!ds) return 'Tournament Games';
+    if (_activeCtx.events) return `Imported Games (${ds.games.length})`;
+    return ds.meta?.name ?? ds.games[0]?.tournament ?? 'Tournament Games';
 }
 export function getSectionList() {
-    return _sectionList;
+    if (!_activeCtx) return [];
+    // When filtered to a single event, scope sections to that event's games
+    const eventFilter = _activeCtx.filters.event;
+    if (eventFilter && _activeCtx.events) {
+        const eventSections = uniqueValues(
+            _activeCtx.dataset.games.filter((g) => g.tournament === eventFilter),
+            'section',
+        );
+        return eventSections.length > 1 ? eventSections : [];
+    }
+    return _activeCtx.sections;
 }
-export function getLocalEvents() {
-    if (!_localData?.games) return null;
-    const events = [...new Set(_localData.games.map((g) => g.tournament).filter(Boolean))];
-    return events.length > 1 ? events : null;
+export function getRoundNumbers() {
+    if (!_activeCtx) return [];
+    // When filtered to a single event, scope rounds to that event's games
+    const eventFilter = _activeCtx.filters.event;
+    if (eventFilter && _activeCtx.events) {
+        return uniqueRounds(_activeCtx.dataset.games.filter((g) => g.tournament === eventFilter));
+    }
+    return _activeCtx.rounds;
 }
-
-let _treeDirty = true;
+export function getEvents() {
+    return _activeCtx?.events ?? null;
+}
 
 function notifyChange() {
-    _treeDirty = true;
+    if (_activeCtx) _activeCtx.treeDirty = true;
     _onChange?.();
 }
 
@@ -137,12 +205,15 @@ export function getGroupedGames() {
 
 export function getCachedGame(gameId) {
     if (!gameId) return null;
-    return (
-        _localData?.games?.find((g) => g.gameId === gameId) ||
-        _playerData?.games?.find((g) => g.gameId === gameId) ||
-        _tournamentData?.games?.find((g) => g.gameId === gameId) ||
-        null
-    );
+    // Search active context first, then all cached contexts
+    const active = _activeCtx?.dataset.games?.find((g) => g.gameId === gameId);
+    if (active) return active;
+    for (const ctx of _ctxCache.values()) {
+        if (ctx === _activeCtx) continue;
+        const found = ctx.dataset.games?.find((g) => g.gameId === gameId);
+        if (found) return found;
+    }
+    return null;
 }
 
 /** Update a cached game's metadata from edited PGN headers. */
@@ -159,353 +230,235 @@ export function updateCachedGame(gameId, headers) {
 }
 
 export function getOrientationForGame(game) {
-    if (!_currentPlayerNorm || !game) return 'White';
-    if (game.blackNorm === _currentPlayerNorm) return 'Black';
+    const norm = _activeCtx?.dataset.playerNorm;
+    if (!norm || !game) return 'White';
+    if (game.blackNorm === norm) return 'Black';
     return 'White';
-}
-
-export function getPlayerUscfId(name) {
-    return _allPlayers?.find((p) => p.name === name)?.uscfId || null;
 }
 
 /** Search players. Returns [{ name, norm }]. */
 export function searchPlayers(query) {
     if (!query) return [];
     const q = query.toLowerCase();
-    const list = _playerList.length > 0 ? _playerList : _allPlayers || [];
+    const list = _playerList.length > 0 ? _playerList : getAllPlayers();
     return list.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
 }
 
 // ─── Mutations ─────────────────────────────────────────────────────
 
+/**
+ * Load a player's games into the viewer.
+ * Accepts games directly (opts.data), checks cache, or calls opts.fetch() to retrieve.
+ */
 export async function selectPlayer(name, opts = {}) {
     let norm = opts.norm || null;
+    const cacheKey = `player:${norm || name}`;
 
-    const isSamePlayer = norm ? _currentPlayerNorm === norm : _currentPlayer === name;
-
+    let games;
     if (opts.data) {
-        _playerData = opts.data;
-    } else if (!isLocalMode() && (!_playerData?.games.length || !isSamePlayer)) {
-        const query = norm
-            ? { player_norm: norm, tournament: 'all', include: 'pgn' }
-            : { player: name, tournament: 'all', include: 'pgn' };
-        const data = await fetchGames(query);
-        if (data.playerNorm) norm = data.playerNorm;
-    }
-
-    _currentSource = 'player';
-    _currentPlayer = name;
-    _currentPlayerNorm = norm;
-    const sources = new Map();
-    for (const g of _playerData?.games || []) {
-        const key = g.tournamentSlug || g.tournament;
-        if (key && !sources.has(key)) sources.set(key, g.tournament || key);
-    }
-    _playerSources = [...sources].map(([value, label]) => ({ value, label }));
-    _filters = { ...EMPTY_FILTERS };
-    if (opts.tournament && opts.tournament !== 'all') _filters.tournament = opts.tournament;
-    if (opts.color) _filters.color = opts.color;
-    if (opts.opponent) {
-        _filters.opponent = opts.opponent;
-        _filters.opponentNorm = opts.opponentNorm || null;
-    }
-    if (opts.openingFamily) _filters.openingFamily = opts.openingFamily;
-    notifyChange();
-}
-
-function resetToTournament() {
-    _currentSource = 'tournament';
-    _currentPlayer = null;
-    _currentPlayerNorm = null;
-    _playerSources = [];
-    _filters = { ...EMPTY_FILTERS };
-    _playerData = null;
-    _sectionList = _tournamentSections;
-    _visibleSections = new Set(_sectionList);
-    resolveDefaultRound(true);
-}
-
-export function clearPlayerMode() {
-    resetToTournament();
-    if (_explorer) {
-        _explorer.chess.reset();
-        _explorer.moveHistory = [];
-    }
-    notifyChange();
-}
-
-export async function switchDataSource(value, currentSlug) {
-    if (isLocalMode()) {
-        _filters.event = value || null;
-        _playerList = buildPlayerListFromGames();
+        games = opts.data.games || [];
     } else {
-        const isCurrentTournament = value === currentSlug;
-        _activeTournamentSlug = isCurrentTournament ? null : value;
-        _currentSource = 'tournament';
-        _currentPlayer = null;
-        _currentPlayerNorm = null;
-        _playerSources = [];
-        _filters = { ...EMPTY_FILTERS };
-
-        await fetchGames({ tournament: value, include: 'pgn,submissions' }, { cache: isCurrentTournament });
-        _playerData = null;
-
-        try {
-            _playerList = await fetchPlayerList();
-        } catch {
-            _playerList = buildPlayerListFromGames();
+        const cached = _ctxCache.get(cacheKey);
+        if (cached) {
+            games = cached.dataset.games;
+        } else if (opts.fetch) {
+            const data = await opts.fetch(name, norm);
+            if (data.playerNorm) norm = data.playerNorm;
+            games = data.games || [];
+        } else {
+            games = [];
         }
     }
 
-    if (!isLocalMode()) {
-        resolveDefaultRound(true);
-        _sectionList = _tournamentSections;
-        _visibleSections = new Set(_sectionList);
+    const sources = new Map();
+    for (const g of games) {
+        const key = g.tournamentSlug || g.tournament;
+        if (key && !sources.has(key)) sources.set(key, g.tournament || key);
     }
-    _explorer = null;
+    const playerSources = [...sources].map(([value, label]) => ({ value, label }));
+
+    const filters = {};
+    if (opts.tournament && opts.tournament !== 'all') filters.tournament = opts.tournament;
+    if (opts.color) filters.color = opts.color;
+    if (opts.opponent) {
+        filters.opponent = opts.opponent;
+        filters.opponentNorm = opts.opponentNorm || null;
+    }
+    if (opts.openingFamily) filters.openingFamily = opts.openingFamily;
+
+    ingestDataset(cacheKey, { games, playerName: name, playerNorm: norm, playerSources }, { filters });
+}
+
+export function clearPlayerMode() {
+    if (_lastTournamentKey) {
+        activateCtx(_lastTournamentKey);
+    } else {
+        _activeCtx = null;
+        notifyChange();
+    }
+    if (_activeCtx?.explorer) {
+        _activeCtx.explorer.chess.reset();
+        _activeCtx.explorer.moveHistory = [];
+    }
+}
+
+/**
+ * Switch between events (multi-event dataset) or tournament sources.
+ * opts.onSwitch(value, currentSlug, cached) is called for server-side switches.
+ */
+export async function switchDataSource(value, currentSlug, opts = {}) {
+    if (_activeCtx?.events) {
+        // Multi-event dataset: just update the event filter
+        _activeCtx.filters.event = value || null;
+        _playerList = buildPlayerListFromGames();
+    } else {
+        // Tournament switch: check cache for instant switch
+        const cacheKey = `tournament:${value}`;
+        const cached = _ctxCache.get(cacheKey);
+
+        if (cached) {
+            _activeCtx = cached;
+        } else if (opts.onSwitch) {
+            await opts.onSwitch(value, currentSlug);
+        }
+
+        _playerList = buildPlayerListFromGames();
+    }
+
+    // Reset explorer on the active ctx
+    if (_activeCtx) {
+        _activeCtx.explorer = null;
+        _activeCtx.explorerActive = false;
+    }
     ensureExplorer();
     notifyChange();
 }
 
 export function setFilter(key, value) {
-    _filters[key] = value ?? null;
+    if (_activeCtx) _activeCtx.filters[key] = value ?? null;
     notifyChange();
 }
 
 export function toggleSection(section) {
-    const allVisible = _visibleSections.size === _sectionList.length;
+    if (!_activeCtx) return;
+    const ctx = _activeCtx;
+    const allVisible = ctx.visibleSections.size === ctx.sections.length;
     if (allVisible) {
-        _visibleSections = new Set([section]);
-    } else if (_visibleSections.has(section)) {
-        const next = new Set(_visibleSections);
+        ctx.visibleSections = new Set([section]);
+    } else if (ctx.visibleSections.has(section)) {
+        const next = new Set(ctx.visibleSections);
         next.delete(section);
-        _visibleSections = next.size > 0 ? next : new Set(_sectionList);
+        ctx.visibleSections = next.size > 0 ? next : new Set(ctx.sections);
     } else {
-        const next = new Set(_visibleSections);
+        const next = new Set(ctx.visibleSections);
         next.add(section);
-        _visibleSections = next.size === _sectionList.length ? new Set(_sectionList) : next;
+        ctx.visibleSections = next.size === ctx.sections.length ? new Set(ctx.sections) : next;
     }
 
     notifyChange();
 }
 
 export function clearFilter() {
-    _filters = { ...EMPTY_FILTERS };
-    _visibleSections = new Set(_sectionList);
+    if (_activeCtx) {
+        _activeCtx.filters = { ...EMPTY_FILTERS };
+        _activeCtx.visibleSections = new Set(_activeCtx.sections);
+    }
     notifyChange();
 }
 
+export function activateCtx(key) {
+    const ctx = _ctxCache.get(key);
+    if (ctx) {
+        _activeCtx = ctx;
+        notifyChange();
+        return true;
+    }
+    return false;
+}
+
 export function closeBrowser() {
-    resetToTournament();
-    _explorer = null;
-    _explorerActive = false;
-    _localData = null;
+    _activeCtx = null;
     notifyChange();
 }
 
 // ─── Explorer ──────────────────────────────────────────────────────
 
-/** Ensure _explorer object exists and is active. */
+/** Ensure explorer object exists and is active. */
 export function ensureExplorer() {
-    if (!_explorer) {
-        _explorer = { chess: new Chess(), moveHistory: [] };
+    if (!_activeCtx) return;
+    if (!_activeCtx.explorer) {
+        _activeCtx.explorer = { chess: new Chess(), moveHistory: [] };
     }
-    _explorerActive = true;
+    _activeCtx.explorerActive = true;
 }
 
 export function setExplorerPosition(moves = []) {
     ensureExplorer();
-    _explorer.chess.reset();
-    _explorer.moveHistory = [];
+    if (!_activeCtx?.explorer) return;
+    const explorer = _activeCtx.explorer;
+    explorer.chess.reset();
+    explorer.moveHistory = [];
     for (const san of moves) {
         try {
-            _explorer.chess.move(san);
+            explorer.chess.move(san);
         } catch {
             break;
         }
-        _explorer.moveHistory.push(san);
+        explorer.moveHistory.push(san);
     }
     _onChange?.(); // notify UI without dirtying the tree
 }
 
-// ─── Fetch & Cache ─────────────────────────────────────────────────
+// ─── Data Loading ─────────────────────────────────────────────────
 
-export async function fetchGames(queryParams = {}, { cache = false } = {}) {
-    const gen = ++_fetchGeneration;
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(queryParams)) {
-        if (value != null) params.set(key, String(value));
-    }
-    if (!params.has('include')) params.set('include', 'pgn');
-    if (!params.has('limit')) params.set('limit', '500');
-
-    const response = await fetch(`${WORKER_URL}/query?${params}`);
-    if (!response.ok) throw new Error('Failed to fetch games');
-    const data = await response.json();
-
-    if (gen !== _fetchGeneration) return _playerData || _tournamentData;
-
-    // Assign synthetic IDs to shell records (no game_id from server)
-    for (const g of data.games) {
-        if (!g.gameId) g.gameId = `${g.tournamentSlug}:${g.round}:${g.board}`;
-    }
-    const result = { games: data.games };
-    if (queryParams.player || queryParams.player_norm) {
-        _playerData = result;
-    } else {
-        _tournamentData = result;
-        _tournamentSections = data.sections || [];
-        _tournamentTotalRounds = data.totalRounds || 0;
-        _tournamentMeta = {
-            name: data.games?.[0]?.tournament || null,
-            startDate: data.startDate || null,
-            endDate: data.endDate || null,
-            timeControl: data.timeControl || null,
-            playerCount: data.playerCount || null,
-            gameCount: data.gameCount || null,
-            director: data.director || null,
-            organizer: data.organizer || null,
-            tournamentUrl: data.tournamentUrl || null,
-            totalRounds: data.totalRounds || null,
-            sections: data.sections || null,
-        };
-        _sectionList = _tournamentSections;
-        _visibleSections = new Set(_sectionList);
-        resolveDefaultRound();
-    }
-
-    if (cache) {
-        try {
-            localStorage.setItem(
-                GAMES_CACHE_KEY,
-                JSON.stringify({ games: data.games, sections: data.sections, totalRounds: data.totalRounds }),
-            );
-        } catch {
-            /* quota */
-        }
-    }
-
-    notifyChange();
-    return data;
-}
-
-export function prefetchGames({ tournamentScope, localPlayerSearch } = {}) {
-    if (_tournamentData) return;
-    if (tournamentScope) _tournamentScope = tournamentScope;
-    try {
-        const cached = localStorage.getItem(GAMES_CACHE_KEY);
-        if (cached) {
-            const parsed = JSON.parse(cached);
-            _tournamentData = { games: parsed.games || [] };
-            _tournamentSections = parsed.sections || [];
-            _tournamentTotalRounds = parsed.totalRounds || 0;
-            _sectionList = _tournamentSections;
-            _visibleSections = new Set(_sectionList);
-            resolveDefaultRound();
-            notifyChange();
-        }
-    } catch {
-        localStorage.removeItem(GAMES_CACHE_KEY);
-    }
-    const query = _tournamentScope ? { tournament: _tournamentScope, include: 'pgn' } : { include: 'pgn,submissions' };
-    fetchGames(query, { cache: true })
-        .then(() => {
-            if (localPlayerSearch) _playerList = buildPlayerListFromGames();
-        })
-        .catch(() => {});
-    if (!_tournamentScope) fetchTournamentList().catch(() => {});
-    // Always fetch player list (needed for uscfId lookup even when search is local)
-    fetchPlayerList().catch(() => {});
-}
-
-/** Inject data directly (e.g., PGN import). Discards in-flight fetches. */
+/** Inject data directly (e.g., PGN import). */
 export function setGamesData(data) {
-    _fetchGeneration++;
-    _localData = data;
-    _filters = { ...EMPTY_FILTERS };
-    _sectionList = [];
-    _visibleSections = new Set();
-    notifyChange();
-}
-
-async function fetchPlayerList() {
-    if (_allPlayers) return _allPlayers;
-    const response = await fetch(`${WORKER_URL}/players`);
-    if (!response.ok) throw new Error('Failed to fetch players');
-    const data = await response.json();
-    _allPlayers = data.players.map((p) => ({ name: p.name, norm: p.norm, uscfId: p.uscfId || null }));
-    return _allPlayers;
-}
-
-async function fetchTournamentList() {
-    if (_tournamentList) return _tournamentList;
-    const response = await fetch(`${WORKER_URL}/tournaments`);
-    if (!response.ok) throw new Error('Failed to fetch tournaments');
-    const data = await response.json();
-    _tournamentList = data.tournaments;
-    return _tournamentList;
+    ingestDataset(`import:${Date.now()}`, { games: data.games || [] });
 }
 
 // ─── Internals ─────────────────────────────────────────────────────
 
-export function isLocalMode() {
-    return !!_localData;
-}
-function activeData() {
-    return _localData || _tournamentData;
-}
-
-function getSourceGames() {
-    if (_currentSource === 'player') return _playerData;
-    return _localData || _tournamentData;
-}
-
-/** Default round: latest round in tournament mode, null otherwise. */
-function resolveDefaultRound(forceReset = false) {
-    if (_currentSource !== 'tournament' || _tournamentTotalRounds === 0) return;
-    if (forceReset || !_filters.round || _filters.round > _tournamentTotalRounds) {
-        _filters.round = _tournamentTotalRounds;
-    }
-}
-
 function passesUserFilters(g) {
-    const { round, tournament, color, opponentNorm, event } = _filters;
+    if (!_activeCtx) return true;
+    const { round, tournament, color, opponentNorm, event, openingFamily } = _activeCtx.filters;
+    const playerNorm = _activeCtx.dataset.playerNorm;
+
     if (round != null && g.round !== round) return false;
     if (tournament && (g.tournamentSlug || g.tournament) !== tournament) return false;
-    if (color && _currentPlayerNorm) {
-        if (color === 'white' ? g.whiteNorm !== _currentPlayerNorm : g.blackNorm !== _currentPlayerNorm) return false;
+    if (color && playerNorm) {
+        if (color === 'white' ? g.whiteNorm !== playerNorm : g.blackNorm !== playerNorm) return false;
     }
     if (opponentNorm && g.whiteNorm !== opponentNorm && g.blackNorm !== opponentNorm) return false;
     if (event && g.tournament !== event) return false;
-    if (_filters.openingFamily && g.openingName) {
+    if (openingFamily && g.openingName) {
         const sep = g.openingName.search(/[:,]/);
         const family = sep > 0 ? g.openingName.slice(0, sep).trim() : g.openingName;
-        if (family !== _filters.openingFamily) return false;
-    } else if (_filters.openingFamily) return false;
-    if (_currentSource === 'tournament' && _sectionList.length > 1 && g.section && !_visibleSections.has(g.section))
-        return false;
+        if (family !== openingFamily) return false;
+    } else if (openingFamily) return false;
+    if (_activeCtx.sections.length > 0 && g.section && !_activeCtx.visibleSections.has(g.section)) return false;
     return true;
 }
 
 function getVisibleGames() {
-    const source = getSourceGames();
-    let games = source?.games || [];
-    const statsGameIds = _explorerActive ? getExplorerStats()?.gameIds : null;
+    if (!_activeCtx) return [];
+    const ctx = _activeCtx;
+    let games = ctx.dataset.games || [];
+    const statsGameIds = ctx.explorerActive ? getExplorerStats()?.gameIds : null;
     const explorerGameIds = statsGameIds ? new Set(statsGameIds) : null;
 
     games = games.filter((g) => {
         if (!passesUserFilters(g)) return false;
         if (
             explorerGameIds &&
-            (!g.pgn ? _explorer.moveHistory.length > 0 : !(g.gameId && explorerGameIds.has(g.gameId)))
+            (!g.pgn ? ctx.explorer.moveHistory.length > 0 : !(g.gameId && explorerGameIds.has(g.gameId)))
         )
             return false;
         return true;
     });
 
-    // Section sorting for tournament mode
-    if (_currentSource === 'tournament' && _sectionList.length > 1) {
-        const sectionOrder = new Map(_sectionList.map((s, i) => [s, i]));
+    // Section sorting when multiple sections exist
+    if (ctx.sections.length > 0) {
+        const sectionOrder = new Map(ctx.sections.map((s, i) => [s, i]));
         games = [...games].sort((a, b) => {
             const sa = sectionOrder.get(a.section) ?? 999;
             const sb = sectionOrder.get(b.section) ?? 999;
@@ -519,19 +472,25 @@ function getVisibleGames() {
 
 function groupGames(games) {
     let keyFn, headerFn;
-    if (_currentSource === 'player') {
+    const ds = _activeCtx?.dataset;
+    const sections = _activeCtx?.sections ?? [];
+
+    if (ds?.playerName) {
+        // Player dataset: group by tournament
         keyFn = (g) => g.tournamentSlug;
         headerFn = (g) => g.tournament;
-    } else if (isLocalMode()) {
-        const multiEvent = new Set(games.map((g) => g.tournament).filter(Boolean)).size > 1;
+    } else if (sections.length > 0) {
+        // Has sections: group by section
+        keyFn = (g) => g.section;
+        headerFn = keyFn;
+    } else {
+        // Generic (import, single-section tournament): group by round
+        const multiEvent = _activeCtx?.events != null;
         keyFn = (g) => {
             const r = g.round;
             if (!r && !multiEvent) return null;
             return multiEvent ? `${g.tournament || 'Unknown'} — Round ${r || '?'}` : `Round ${r}`;
         };
-        headerFn = keyFn;
-    } else {
-        keyFn = (g) => g.section;
         headerFn = keyFn;
     }
 
@@ -549,7 +508,7 @@ function groupGames(games) {
 }
 
 function buildPlayerListFromGames() {
-    const games = activeData()?.games;
+    const games = _activeCtx?.dataset.games;
     if (!games) return [];
     const byNorm = new Map();
     for (const g of games) {
@@ -560,9 +519,6 @@ function buildPlayerListFromGames() {
 }
 
 // ─── Explorer Trie (flat typed-array) ─────────────────────────────
-
-// Trie storage — lazily allocated, reused across rebuilds
-let _trie = null;
 
 function allocTrie(gameCount) {
     // ~75 unique positions/game with diverse openings, 100× for headroom
@@ -663,11 +619,11 @@ function trieFindOrAddEdge(t, nodeId, sanIdx) {
 }
 
 export function getExplorerStats() {
-    if (!_explorer) return null;
+    if (!_activeCtx?.explorer) return null;
     buildExplorerTree();
-    const t = _trie;
+    const t = _activeCtx.trie;
     if (!t) return null;
-    const nodeId = trieLookup(t, hashFen(_explorer.chess.fen()));
+    const nodeId = trieLookup(t, hashFen(_activeCtx.explorer.chess.fen()));
     if (nodeId === -1) return null;
 
     // Walk edges to build moves array
@@ -766,17 +722,19 @@ const RESULT = {
 };
 
 function buildExplorerTree() {
-    if (!_treeDirty) return;
-    _treeDirty = false;
-    const games = (getSourceGames()?.games || []).filter((g) => g.pgn && g.gameId && passesUserFilters(g));
+    if (!_activeCtx) return;
+    const ctx = _activeCtx;
+    if (!ctx.treeDirty) return;
+    ctx.treeDirty = false;
+    const games = (ctx.dataset.games || []).filter((g) => g.pgn && g.gameId && passesUserFilters(g));
 
     // Allocate or reset trie (threshold must match allocTrie's gameCount * 100)
-    if (!_trie || _trie.nTotal.length < Math.max(games.length * 100, 4096)) {
-        _trie = allocTrie(games.length);
+    if (!ctx.trie || ctx.trie.nTotal.length < Math.max(games.length * 100, 4096)) {
+        ctx.trie = allocTrie(games.length);
     } else {
-        resetTrie(_trie);
+        resetTrie(ctx.trie);
     }
-    const t = _trie;
+    const t = ctx.trie;
 
     const engine = new ReplayEngine();
 

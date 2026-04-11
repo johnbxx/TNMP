@@ -72,15 +72,8 @@ import {
     launchExplorer,
     initGamePanel,
 } from './game-panel.js';
-import {
-    prefetchGames,
-    getCachedGame,
-    fetchGames,
-    getPlayer,
-    getPlayerUscfId,
-    getGroupedGames,
-    getFilter,
-} from './games.js';
+import { getCachedGame, getPlayer, getGroupedGames, getFilter } from './games.js';
+import { queryGames, getPlayerUscfId, prefetchGames } from './tnm.js';
 
 // --- PGN download helper ---
 
@@ -484,7 +477,6 @@ function init() {
     // Prefetch game data from API
     prefetchGames({
         ...(_scriptScope && { tournamentScope: _scriptScope }),
-        ...(!FEAT.globalPlayerSearch && { localPlayerSearch: true }),
     });
 }
 
@@ -502,8 +494,8 @@ if (document.readyState === 'loading') {
 window.TNMPViewer = {
     open: (opts) => openGamePanel(opts),
     openGame: (gameId) => {
-        fetchGames({ gameId, include: 'pgn' }).then(() => {
-            const game = getCachedGame(gameId);
+        queryGames({ gameId, include: 'pgn' }).then((data) => {
+            const game = data.games?.[0] || getCachedGame(gameId);
             if (game) openGamePanel({ game });
         });
     },

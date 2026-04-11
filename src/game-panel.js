@@ -19,6 +19,7 @@ import { classifyFen, loadEcoData } from './eco.js';
 import * as games from './games.js';
 import * as board from './board.js';
 import * as pgn from './pgn.js';
+import { switchTournament, fetchPlayerGames } from './tnm.js';
 import * as engine from './engine.js';
 
 loadEcoData();
@@ -2265,7 +2266,7 @@ function renderBrowserPanel(state) {
     const searchInput = document.getElementById('browser-search-input');
     const clearBtn = document.getElementById('browser-search-clear');
     if (searchInput) {
-        if (games.isPlayerMode()) {
+        if (games.hasPlayer()) {
             searchInput.value = games.getPlayer() || '';
             clearBtn?.classList.remove('hidden');
         } else if (!searchInput.matches(':focus')) {
@@ -2284,17 +2285,17 @@ function renderBrowserPanel(state) {
 function renderBrowserTitle(panelEl, state) {
     const titleEl = panelEl.querySelector('#browser-title-panel');
 
-    if (games.isPlayerMode()) {
+    if (games.hasPlayer()) {
         titleEl.textContent = `${games.getPlayer()}'s Games`;
         return;
     }
 
     // Don't clobber existing server dropdown (avoids re-render flicker on every onChange)
     const existingSelect = titleEl.querySelector('#browser-title-select');
-    if (existingSelect && existingSelect.dataset.mode === 'server' && !games.isLocalMode()) return;
+    if (existingSelect && existingSelect.dataset.mode === 'server' && !games.getEvents()) return;
 
-    // Local mode with multiple events: dropdown with "All Events (N games)" default
-    const localEvents = games.getLocalEvents();
+    // Multiple events: dropdown with "All Events (N games)" default
+    const localEvents = games.getEvents();
     if (localEvents) {
         const allLabel = `All Events (${state.groupedGames.reduce((n, g) => n + g.games.length, 0)} games)`;
         const options = localEvents
@@ -2324,21 +2325,20 @@ function renderBrowserTitle(panelEl, state) {
 
     titleEl.innerHTML = `<select id="browser-title-select" class="browser-title-select" data-mode="server">${options}</select>`;
     titleEl.querySelector('#browser-title-select').addEventListener('change', (e) => {
-        games.switchDataSource(e.target.value, slug);
+        games.switchDataSource(e.target.value, slug, { onSwitch: switchTournament });
     });
 }
 
 function renderBrowserChips(panelEl, state) {
     const container = panelEl.querySelector('#browser-chips');
 
-    if (!games.isPlayerMode()) {
+    if (!games.hasPlayer()) {
         container.classList.add('hidden');
         return;
     }
     container.classList.remove('hidden');
 
     const sources = games.getPlayerSources();
-    const isLocal = games.isLocalMode();
 
     let sourceHtml = '';
     if (sources.length > 0) {
@@ -2348,8 +2348,7 @@ function renderBrowserChips(panelEl, state) {
                     `<option value="${value}"${state.tournament === value ? ' selected' : ''}>${label}</option>`,
             )
             .join('');
-        const allLabel = isLocal ? 'All Events' : 'All Tournaments';
-        sourceHtml = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">${allLabel}</option>${options}</select>`;
+        sourceHtml = `<select class="browser-chip-select" data-chip="tournament-select"><option value="">All Tournaments</option>${options}</select>`;
     }
 
     container.innerHTML = `
@@ -2361,11 +2360,11 @@ function renderBrowserChips(panelEl, state) {
 
 function renderBrowserFilters(panelEl, state) {
     const container = panelEl.querySelector('#browser-filters');
-    const isLocal = games.isLocalMode();
     const roundNumbers = games.getRoundNumbers();
     const sectionList = games.getSectionList();
-    const showRounds = !games.isPlayerMode() && roundNumbers.length > 0 && (!isLocal || state.event);
-    const showSections = !games.isPlayerMode() && sectionList.length > 1 && (!isLocal || state.event);
+    const hasMultipleEvents = games.getEvents() != null;
+    const showRounds = !games.hasPlayer() && roundNumbers.length > 0 && (!hasMultipleEvents || state.event);
+    const showSections = !games.hasPlayer() && sectionList.length > 0 && (!hasMultipleEvents || state.event);
 
     if (!showRounds && !showSections) {
         container.classList.add('hidden');
@@ -2420,14 +2419,14 @@ function renderBrowserGameList(panelEl, state) {
 
     // Build flat item list
     const items = [];
-    const isPlayerMode = games.isPlayerMode();
-    if (_features.playerProfiles && isPlayerMode && !state.tournament && !games.isLocalMode()) {
+    const playerMode = games.hasPlayer();
+    if (_features.playerProfiles && playerMode && !state.tournament) {
         items.push({ type: 'profile', data: games.getPlayer() });
     }
     for (const { header, games: groupItems } of state.groupedGames) {
         if (header) items.push({ type: 'header', data: header });
         for (const game of groupItems) {
-            items.push({ type: 'game', data: game, label: isPlayerMode ? `${game.round}.${game.board || '?'}` : null });
+            items.push({ type: 'game', data: game, label: playerMode ? `${game.round}.${game.board || '?'}` : null });
         }
     }
     _vlist.items = items;
@@ -2596,7 +2595,7 @@ function wireBrowserListeners(panelEl) {
                 autocomplete.classList.add('hidden');
                 searchInput.setAttribute('aria-expanded', 'false');
                 panelEl.querySelector('#browser-filters')?.classList.remove('hidden');
-                if (games.isPlayerMode()) {
+                if (games.hasPlayer()) {
                     games.clearPlayerMode();
                     clearBtn.classList.add('hidden');
                 }
@@ -2614,7 +2613,7 @@ function wireBrowserListeners(panelEl) {
                     )
                     .join('');
                 const exactMatch = matches.find((p) => p.name.toLowerCase() === query);
-                if (_features.playerProfiles && !games.isLocalMode() && (matches.length === 1 || exactMatch)) {
+                if (_features.playerProfiles && (matches.length === 1 || exactMatch)) {
                     const profile = exactMatch || matches[0];
                     autocomplete.insertAdjacentHTML(
                         'afterbegin',
@@ -2769,7 +2768,7 @@ function doSelectPlayer(name, searchInput, autocomplete, clearBtn, norm) {
     autocomplete.classList.add('hidden');
     searchInput.setAttribute('aria-expanded', 'false');
     clearBtn.classList.remove('hidden');
-    games.selectPlayer(name, { norm });
+    games.selectPlayer(name, { norm, fetch: fetchPlayerGames });
 }
 
 // ─── Re-exports for app.js action dispatch ─────────────────────────
