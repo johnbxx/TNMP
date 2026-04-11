@@ -361,6 +361,25 @@ export function setComment(nodeId, text) {
     notifyChange();
 }
 
+export function setShapeAnnotations(nodeId, arrows, squares) {
+    if (nodeId < 0 || nodeId >= _nodes.length) return;
+    _dirty = true;
+    const node = _nodes[nodeId];
+    if (!arrows?.length && !squares?.length) {
+        // Clear shape annotations
+        if (node.annotations) {
+            delete node.annotations.arrows;
+            delete node.annotations.squares;
+            if (Object.keys(node.annotations).length === 0) node.annotations = null;
+        }
+    } else {
+        if (!node.annotations) node.annotations = {};
+        node.annotations.arrows = arrows?.length ? arrows : undefined;
+        node.annotations.squares = squares?.length ? squares : undefined;
+    }
+    notifyChange();
+}
+
 export function toggleNag(nodeId, nagNum) {
     if (nodeId <= 0 || nodeId >= _nodes.length) return;
     _dirty = true;

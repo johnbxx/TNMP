@@ -11,5 +11,12 @@ local/
 .vscode/
 scripts/serve-coop.mjs
 scripts/backfill-tournament-meta.mjs
+scripts/backfill-tournament-details.mjs
+scripts/benchmark-chesscom.mjs
+scripts/upload-tournament-details.mjs
 public/engine/
 CLAUDE.md
+.claude/
+data/
+lab.html
+src/palette-editor.js

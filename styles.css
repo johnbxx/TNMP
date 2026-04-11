@@ -1440,6 +1440,35 @@ button.viewer-close {
 .viewer-loser .viewer-player-name,
 .viewer-loser .viewer-player-elo { color: var(--text-primary); }
 
+.viewer-player-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    color: var(--text-subtle);
+    background: rgb(from var(--foreground) r g b / 0.06);
+    padding: 0.3rem 0.55rem;
+    border-radius: var(--radius-xs);
+    flex-shrink: 0;
+}
+
+.viewer-player-clock .clock-icon {
+    flex-shrink: 0;
+}
+
+.viewer-player-clock.clock-active {
+    color: var(--text-primary);
+    background: rgb(from var(--foreground) r g b / 0.1);
+}
+
+.viewer-player-clock.clock-low {
+    color: var(--result-lose-text);
+    background: rgb(from var(--result-lose-text) r g b / 0.12);
+}
+
 .viewer-piece-icon {
     width: 1.4rem;
     height: 1.4rem;
@@ -2559,6 +2588,13 @@ button.viewer-close {
     min-width: 0;
 }
 
+.comment-editing {
+    outline: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: rgba(0,0,0,0.2);
+    cursor: text;
+}
+
 .move-table .mt-variation {
     grid-column: 1 / -1;
     color: var(--text-muted);
@@ -2595,28 +2631,6 @@ button.viewer-close {
 .editor-h-btn-secondary:hover { background: var(--border-color); }
 
 /* Editor comment input (below board in editor mode) */
-.editor-comment-input { 
-    flex: 0 0 auto;
-    width: 100%;
-    padding: 0.35rem 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: rgba(0,0,0,0.3);
-    color: var(--text-primary);
-    font-size: 0.8rem;
-    font-family: inherit;
-    font-style: italic;
-    box-sizing: border-box;
-    min-height: 1.8rem;
-    margin-top: 0.35rem;
-    resize: none;
-    line-height: 1.5;
-    overflow-y: hidden;
-    transition: height 0.15s ease;
-    field-sizing: content;
-}
-.editor-comment-input::placeholder { color: var(--text-faint); font-style: italic; }
-.editor-comment-input:focus { outline: none; border-color: var(--accent); }
 /* Status bar */
 /* NAG picker */
 .editor-nag-picker {
@@ -2803,6 +2817,50 @@ button.viewer-close {
 .editor-dirty-content { max-width: 400px; }
 .editor-dirty-message { color: var(--text-subtle); margin: 0.5rem 0 1rem; }
 .editor-dirty-actions { flex-wrap: wrap; }
+
+/* Confirm dialog */
+.confirm-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay-backdrop);
+    z-index: 30;
+}
+.confirm-dialog {
+    background: var(--modal-bg);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem 1.5rem;
+    max-width: 300px;
+    box-shadow: var(--shadow-modal);
+    text-align: center;
+}
+.confirm-message {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin: 0 0 1rem;
+}
+.confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+.confirm-btn {
+    padding: 0.4rem 1rem;
+    border: none;
+    border-radius: var(--radius-xs);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--result-lose-text);
+    color: white;
+}
+.confirm-btn:hover { filter: brightness(1.15); }
+.confirm-btn-secondary {
+    background: var(--surface);
+    color: var(--text-primary);
+}
 
 /* Header editor popup */
 .editor-header-popup {
@@ -2993,19 +3051,7 @@ select.editor-header-input {
     margin-top: 0.85rem;
 }
 
-/* Editor mobile overrides (when comment input is visible = editor mode) */
 @media (max-width: 767px) {
-    .viewer-board-col:has(.editor-comment-input:not(.hidden)) ~ .viewer-side-col .viewer-moves,
-    .viewer-board-col:has(.editor-comment-input:not(.hidden)) ~ .viewer-moves {
-        flex: 1 1 0;
-        height: auto;
-        min-height: 80px;
-    }
-    .editor-comment-input:not(.hidden) {
-        min-height: 3rem;
-        max-height: 5rem;
-    }
-
     /* Mobile toolbar: [flip] [nav×5] [overflow] */
     .viewer-toolbar {
         justify-content: space-evenly;

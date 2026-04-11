@@ -1,9 +1,8 @@
 import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
-import { selectPlayer, setExplorerPosition } from './games.js';
+import { selectPlayer } from './games.js';
 // openViewer = openGamePanel (opens modal + board + explorer mode)
 import { openGamePanel as openViewer, setBoardOrientation } from './game-panel.js';
-import { findOpeningByName } from './eco.js';
 
 let currentPlayer = null;
 let currentPlayerNorm = null;
@@ -69,11 +68,11 @@ function computeStats(games, norm) {
         if (!tournaments.has(slug)) tournaments.set(slug, { name: game.tournament, ...wld() });
         tally(tournaments.get(slug), outcome);
 
-        // ECO (by side)
-        if (game.eco) {
-            if (!ecos.has(game.eco))
-                ecos.set(game.eco, { name: game.openingName || game.eco, white: wld(), black: wld() });
-            tally(ecos.get(game.eco)[side], outcome);
+        // ECO (by opening family, not raw ECO code — A00 covers many unrelated openings)
+        if (game.eco && game.openingName) {
+            const family = openingFamily(game.openingName);
+            if (!ecos.has(family)) ecos.set(family, { name: game.openingName, white: wld(), black: wld() });
+            tally(ecos.get(family)[side], outcome);
         }
 
         // Opponent (keyed by norm to merge name variations)
@@ -124,7 +123,7 @@ function profileRow(
     const nameEl = profileName
         ? `<span class="profile-row-name profile-row-link" data-action-profile="${profileName}">${label}</span>`
         : `<span class="profile-row-name">${label}</span>`;
-    return `<button class="${cls}" ${actionAttr}='${action}'>
+    return `<button class="${cls}" ${actionAttr}='${action.replace(/'/g, '&#39;')}'>
         <div class="profile-row-label">
             ${icon ? `<img class="profile-color-icon" src="/pieces/${icon}" alt="">` : ''}
             ${nameEl}
@@ -173,8 +172,10 @@ function renderOverview(stats) {
 }
 
 function openingFamily(name) {
-    const colon = name.indexOf(':');
-    return colon > 0 ? name.slice(0, colon).trim() : name;
+    // "Polish Opening: Czech Defense" → "Polish Opening"
+    // "Polish Opening, with d5" → "Polish Opening"
+    const sep = name.search(/[:,]/);
+    return sep > 0 ? name.slice(0, sep).trim() : name;
 }
 
 function groupByFamily(entries, side) {
@@ -384,23 +385,13 @@ export function initPlayerProfile(mount) {
                 color: query.color,
                 opponent: query.opponent,
                 opponentNorm: query.opponentNorm,
+                openingFamily: query.ecoLabel || null,
             });
 
             // Now open panel — it reads the correct state
             openViewer();
 
             if (query.color === 'black') setBoardOrientation('black');
-
-            if (query.ecoLabel) {
-                const opening = findOpeningByName(query.ecoLabel);
-                if (opening?.pgn) {
-                    const moves = opening.pgn
-                        .replace(/\d+\.\s*/g, '')
-                        .trim()
-                        .split(/\s+/);
-                    setExplorerPosition(moves);
-                }
-            }
         }
     });
 }

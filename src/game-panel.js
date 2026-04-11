@@ -94,12 +94,14 @@ export function initGamePanel(mount, { features } = {}) {
                         <div class="viewer-players">
                             <div class="viewer-player" id="viewer-player-white">
                                 <span class="viewer-player-name" data-player="" id="viewer-white-name"></span>
+                                <span class="viewer-player-clock hidden" id="viewer-white-clock"></span>
                                 <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
                                 <span class="viewer-player-score" id="viewer-white-score"></span>
                             </div>
                             <div class="viewer-player" id="viewer-player-black">
                                 <span class="viewer-player-score" id="viewer-black-score"></span>
                                 <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
+                                <span class="viewer-player-clock hidden" id="viewer-black-clock"></span>
                                 <span class="viewer-player-name" data-player="" id="viewer-black-name"></span>
                             </div>
                         </div>
@@ -114,7 +116,6 @@ export function initGamePanel(mount, { features } = {}) {
                     <div class="viewer-board-col">
                         <div id="viewer-board" class="viewer-board"></div>
                         <div id="editor-eco" class="editor-eco hidden"></div>
-                        <textarea id="editor-comment-input" class="editor-comment-input hidden" placeholder="Add a comment to this move..." rows="1"></textarea>
                     </div>
                     <div id="eval-bar" class="eval-bar hidden">
                         <div class="eval-bar-fill"></div>
@@ -151,7 +152,7 @@ export function initGamePanel(mount, { features } = {}) {
                 </div>
                 <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
                 <div class="viewer-tool-group">
-                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Toggle comments" data-tooltip="Comments (C)">${icon('comments')}<span class="tool-label">Comments</span></button>
+                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Show/hide comments" data-tooltip="Show/hide comments (C)">${icon('comments')}<span class="tool-label">Comments</span></button>
                     <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)">${icon('branch')}<span class="tool-label">Variations</span></button>
                     <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip')}<span class="tool-label">Flip</span></button>
                 </div>
@@ -165,9 +166,9 @@ export function initGamePanel(mount, { features } = {}) {
                 </div>
                 <div class="viewer-toolbar-sep"></div>
                 <div class="viewer-tool-group viewer-tool-group-end">
-                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Engine (A)">${icon('engine')}<span class="tool-label">Engine</span></button>
+                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Toggle engine analysis (A)">${icon('engine')}<span class="tool-label">Engine</span></button>
                     <div class="share-btn-wrapper">
-                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share game" data-tooltip="Share">${icon('share')}<span class="tool-label">Share</span></button>
+                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share / Export game" data-tooltip="Share / Export game">${icon('share')}<span class="tool-label">Share</span></button>
                         <div id="share-popover" class="share-popover hidden">
                             <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
                             <button class="share-option" data-action="share-copy-link">Copy Link</button>
@@ -176,7 +177,7 @@ export function initGamePanel(mount, { features } = {}) {
                             <button class="share-option" data-action="share-native">Share...</button>
                         </div>
                     </div>
-                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Game info" data-tooltip="Game Info">ⓘ<span class="tool-label">Info</span></button>
+                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Game info" data-tooltip="Game info">ⓘ<span class="tool-label">Info</span></button>
                 </div>
                 <div class="overflow-btn-wrapper">
                     <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options" data-tooltip="More">${icon('overflow')}</button>
@@ -364,6 +365,8 @@ export function initGamePanel(mount, { features } = {}) {
                 <button class="ctx-nag" data-nag="5">⁉︎</button>
                 <button class="ctx-nag" data-nag="6">⁈</button>
             </div>
+            <button class="ctx-item ctx-comment" data-ctx-action="comment">Add comment</button>
+            <button class="ctx-item ctx-delete-comment hidden" data-ctx-action="delete-comment">Delete comment</button>
             <button class="ctx-item" data-ctx-action="annotate">More annotations...</button>
             <button class="ctx-item" data-ctx-action="explore">Explore from here</button>
             <button class="ctx-item" data-ctx-action="delete">Delete from here</button>
@@ -371,11 +374,6 @@ export function initGamePanel(mount, { features } = {}) {
         </div>
     </div>
     </div>`;
-
-    // Wire comment input
-    document.getElementById('editor-comment-input')?.addEventListener('input', (e) => {
-        pgn.setComment(_pgnState?.currentNodeId || 0, e.target.value);
-    });
 
     // Wire browser listeners once (scaffold is now permanent)
     wireBrowserListeners(document.getElementById('viewer-browser-panel'));
@@ -454,11 +452,10 @@ let _analysisGen = 0; // incremented on each position change to discard stale re
 
 pgn.onChange((state) => {
     _pgnState = state;
-    if (_viewMode === 'game') {
+    if (_viewMode === 'game' && !_editingComment) {
         renderPgnMoveList();
     }
     updatePlayButton(state.isPlaying);
-    document.getElementById('editor-comment-input')?.classList.add('hidden');
     const headerEl = document.getElementById('viewer-header');
     if (headerEl && _viewMode === 'game') updateGameHeader(_panel.meta);
 });
@@ -479,7 +476,6 @@ games.onChange(() => {
     // Explorer takes over the board/moves only when no game is loaded
     if (_gamesState.explorerActive && _viewMode !== 'game') {
         setToolbarButtons();
-        document.getElementById('editor-comment-input')?.classList.add('hidden');
         renderExplorerHeader(_gamesState);
         renderExplorerMoveList();
         board.setPosition(games.getExplorerFen(), true);
@@ -489,6 +485,7 @@ games.onChange(() => {
 });
 
 function onBoardMove(san) {
+    if (_editingComment) document.activeElement?.blur();
     if (_viewMode === 'explorer' && games.isExplorerActive()) {
         games.setExplorerPosition([...games.getExplorerMoves(), san]);
     } else {
@@ -496,8 +493,41 @@ function onBoardMove(san) {
     }
 }
 
-// Map PGN annotation color codes to chessground brush names
+function onBoardDraw(shapes) {
+    const nodeId = pgn.getCurrentNodeId();
+    if (nodeId < 0) return;
+    if (shapes.length === 0) return; // chessground fires onChange([]) on click-to-clear
+
+    // Merge new user-drawn shapes with existing PGN annotations
+    const node = pgn.getNodes()[nodeId];
+    const existing = node?.annotations || {};
+    const arrows = [...(existing.arrows || [])];
+    const squares = [...(existing.squares || [])];
+
+    for (const s of shapes) {
+        const code = (BRUSH_TO_CODE[s.brush] || 'G') + s.orig + (s.dest || '');
+        if (s.dest) {
+            // Toggle: remove if already exists, add if new
+            const idx = arrows.indexOf(code);
+            if (idx >= 0) arrows.splice(idx, 1);
+            else arrows.push(code);
+        } else {
+            const idx = squares.indexOf(code);
+            if (idx >= 0) squares.splice(idx, 1);
+            else squares.push(code);
+        }
+    }
+
+    pgn.setShapeAnnotations(nodeId, arrows, squares);
+    // Sync: render from PGN annotations as the single source of truth
+    const updated = pgn.getNodes()[nodeId];
+    board.setAutoShapes(annotationsToShapes(updated?.annotations));
+    board.clearDrawnShapes();
+}
+
+// Map PGN annotation color codes to chessground brush names (and reverse)
 const BRUSH_MAP = { G: 'green', R: 'red', B: 'blue', Y: 'yellow', O: 'yellow' };
+const BRUSH_TO_CODE = { green: 'G', red: 'R', blue: 'B', yellow: 'Y' };
 
 function parseShapeCode(code) {
     // Standard: G=green, R=red, B=blue, Y=yellow, O=orange→yellow
@@ -531,6 +561,8 @@ function onPositionChange(fen, from, to, annotations) {
     board.setPosition(fen, true);
     board.highlightSquares(from, to);
     board.setAutoShapes(annotationsToShapes(annotations));
+    board.clearDrawnShapes();
+    updateClocks();
     if (_engineActive) analyzeCurrentPosition(fen);
 }
 
@@ -992,7 +1024,7 @@ function setToolbarButtons() {
 
 function ensureBoard() {
     if (!document.querySelector('#viewer-board .cg-wrap')) {
-        board.createBoard('viewer-board', { onMove: onBoardMove, orientation: 'white' });
+        board.createBoard('viewer-board', { onMove: onBoardMove, onDraw: onBoardDraw, orientation: 'white' });
     }
 }
 
@@ -1023,7 +1055,6 @@ function loadExplorer({ restoreMoves } = {}) {
     setToolbarButtons();
     document.getElementById('viewer-game-header')?.classList.add('hidden');
     document.getElementById('explorer-header')?.classList.remove('hidden');
-    document.getElementById('editor-comment-input')?.classList.add('hidden');
 
     board.setOrientation(games.getFilter('color') === 'black' ? 'black' : 'white');
     board.highlightSquares(null, null);
@@ -1115,16 +1146,63 @@ function showContextMenu(nodeId, anchorEl) {
     _ctxAnchorEl = anchorEl;
     menu.classList.remove('hidden');
 
-    // Show/hide "Make mainline" based on whether this is a variation
     const nodes = pgn.getNodes();
     const node = nodes[nodeId];
     const parent = node ? nodes[node.parentId] : null;
+
+    // Show/hide "Make mainline" based on whether this is a variation
     const isVariation = parent && parent.mainChild !== nodeId;
     const mainlineBtn = menu.querySelector('.ctx-mainline');
     if (mainlineBtn) mainlineBtn.classList.toggle('hidden', !isVariation);
 
+    // Comment items: "Add comment" vs "Edit comment" + "Delete comment"
+    const hasComment = !!node?.comment;
+    const commentBtn = menu.querySelector('.ctx-comment');
+    const deleteCommentBtn = menu.querySelector('.ctx-delete-comment');
+    if (commentBtn) commentBtn.textContent = hasComment ? 'Edit comment' : 'Add comment';
+    if (deleteCommentBtn) deleteCommentBtn.classList.toggle('hidden', !hasComment);
+
     positionPopup(menu, anchorEl);
     refreshNagHighlights();
+}
+
+function showConfirm(message, confirmLabel = 'Delete') {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.innerHTML = `<div class="confirm-dialog">
+            <p class="confirm-message">${message}</p>
+            <div class="confirm-actions">
+                <button class="confirm-btn confirm-yes">${confirmLabel}</button>
+                <button class="confirm-btn confirm-btn-secondary confirm-no">Cancel</button>
+            </div>
+        </div>`;
+        const container =
+            document.getElementById('viewer-modal')?.querySelector('.modal-content-viewer') || document.body;
+        container.appendChild(overlay);
+        const close = (result) => {
+            overlay.remove();
+            resolve(result);
+        };
+        overlay.querySelector('.confirm-yes').addEventListener('click', () => close(true));
+        overlay.querySelector('.confirm-no').addEventListener('click', () => close(false));
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) close(false);
+        });
+    });
+}
+
+function countMoves(nodes, startId) {
+    let count = 0;
+    const stack = [startId];
+    while (stack.length) {
+        const id = stack.pop();
+        const node = nodes[id];
+        if (!node || node.deleted) continue;
+        count++;
+        for (const cid of node.children) stack.push(cid);
+    }
+    return count;
 }
 
 function hideContextMenu() {
@@ -1133,15 +1211,110 @@ function hideContextMenu() {
     _ctxAnchorEl = null;
 }
 
+// ─── Inline comment editing ─────────────────────────────────────
+
+let _editingComment = false; // suppress re-render while editing
+
+function startCommentEdit(nodeId) {
+    const container = document.getElementById('viewer-moves');
+    if (!container) return;
+
+    // Find existing comment span or the move span to anchor after
+    let commentEl = container.querySelector(`[data-comment-node="${nodeId}"]`);
+    if (!commentEl) {
+        // Create a new comment span after the move
+        const moveEl = container.querySelector(`[data-node-id="${nodeId}"]`);
+        if (!moveEl) return;
+        commentEl = document.createElement('span');
+        commentEl.className = 'mt-comment';
+        commentEl.dataset.commentNode = nodeId;
+        moveEl.after(commentEl);
+    }
+
+    _editingComment = true;
+    commentEl.contentEditable = 'true';
+    commentEl.classList.add('comment-editing');
+    commentEl.focus();
+
+    // Select all text if there's existing content
+    if (commentEl.textContent) {
+        const range = document.createRange();
+        range.selectNodeContents(commentEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function commit() {
+        if (!_editingComment) return;
+        _editingComment = false;
+        commentEl.contentEditable = 'false';
+        commentEl.classList.remove('comment-editing');
+        const text = commentEl.textContent.trim();
+        pgn.setComment(nodeId, text);
+        // setComment triggers notifyChange → re-render, which replaces this span
+    }
+
+    commentEl.addEventListener('blur', commit, { once: true });
+    commentEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            commentEl.blur(); // triggers commit via blur handler
+        } else if (e.key === 'Escape') {
+            _editingComment = false;
+            commentEl.contentEditable = 'false';
+            commentEl.classList.remove('comment-editing');
+            // Revert: re-render without saving
+            renderPgnMoveList();
+        }
+    });
+}
+
 function wireContextMenu() {
     const container = document.getElementById('viewer-moves');
 
     // Right-click (desktop)
     container.addEventListener('contextmenu', (e) => {
         const moveEl = e.target.closest('[data-node-id]');
-        if (!moveEl) return;
-        e.preventDefault();
-        showContextMenu(parseInt(moveEl.dataset.nodeId, 10), moveEl);
+        if (moveEl) {
+            e.preventDefault();
+            showContextMenu(parseInt(moveEl.dataset.nodeId, 10), moveEl);
+            return;
+        }
+        const commentEl = e.target.closest('[data-comment-node]');
+        if (commentEl) {
+            e.preventDefault();
+            showContextMenu(parseInt(commentEl.dataset.commentNode, 10), commentEl);
+        }
+    });
+
+    // Double-click on comments to edit, or on moves to create a comment.
+    // Moves rerender on single-click (goToMove), so native dblclick won't fire
+    // (the target element gets replaced between clicks). Track it manually.
+    let _lastClickNodeId = null;
+    let _lastClickTime = 0;
+    container.addEventListener('dblclick', (e) => {
+        const commentEl = e.target.closest('[data-comment-node]');
+        if (commentEl) {
+            e.preventDefault();
+            startCommentEdit(parseInt(commentEl.dataset.commentNode, 10));
+        }
+    });
+    container.addEventListener('click', (e) => {
+        const moveEl = e.target.closest('[data-node-id]');
+        if (!moveEl) {
+            _lastClickNodeId = null;
+            return;
+        }
+        const nodeId = parseInt(moveEl.dataset.nodeId, 10);
+        const now = Date.now();
+        if (nodeId === _lastClickNodeId && now - _lastClickTime < 400) {
+            _lastClickNodeId = null;
+            startCommentEdit(nodeId);
+        } else {
+            _lastClickNodeId = nodeId;
+            _lastClickTime = now;
+        }
     });
 
     // Long-press (mobile)
@@ -1183,7 +1356,11 @@ function wireContextMenu() {
         const item = e.target.closest('.ctx-item');
         if (!item) return;
         const action = item.dataset.ctxAction;
-        if (action === 'annotate') {
+        if (action === 'comment') {
+            const targetId = _ctxTargetNodeId;
+            hideContextMenu();
+            if (targetId != null && targetId > 0) startCommentEdit(targetId);
+        } else if (action === 'annotate') {
             const anchor = _ctxAnchorEl;
             const targetId = _ctxTargetNodeId;
             hideContextMenu();
@@ -1194,11 +1371,29 @@ function wireContextMenu() {
                 hideContextMenu();
                 loadExplorer({ restoreMoves: moves });
             }
+        } else if (action === 'delete-comment') {
+            if (_ctxTargetNodeId != null && _ctxTargetNodeId > 0) {
+                pgn.setComment(_ctxTargetNodeId, null);
+                hideContextMenu();
+                showToast('Comment deleted');
+            }
         } else if (action === 'delete') {
             if (_ctxTargetNodeId != null && _ctxTargetNodeId !== 0) {
-                pgn.goToMove(_ctxTargetNodeId);
+                const targetId = _ctxTargetNodeId;
+                const count = countMoves(pgn.getNodes(), targetId);
                 hideContextMenu();
-                pgn.deleteFromHere();
+                const doDelete = () => {
+                    pgn.goToMove(targetId);
+                    pgn.deleteFromHere();
+                    showToast(`${count} ${count === 1 ? 'move' : 'moves'} deleted`);
+                };
+                if (count >= 5) {
+                    showConfirm(`Delete ${count} half-moves from here?`).then((ok) => {
+                        if (ok) doDelete();
+                    });
+                } else {
+                    doDelete();
+                }
             }
         } else if (action === 'mainline') {
             if (_ctxTargetNodeId != null) {
@@ -1294,8 +1489,10 @@ export function getGamePgn() {
 // ─── 4. Keyboard Dispatch ──────────────────────────────────────────
 
 export function handlePanelKeydown(e) {
-    const tag = document.activeElement.tagName;
+    const active = document.activeElement;
+    const tag = active.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (active.isContentEditable) return;
 
     // Branch popover intercepts arrow keys when open
     if (_branchChoices.length > 0) {
@@ -1375,7 +1572,21 @@ export function handlePanelKeydown(e) {
     } else if (e.key === 'a' || e.key === 'A') {
         toggleEngine();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        pgn.deleteFromHere();
+        const nodeId = pgn.getCurrentNodeId();
+        if (nodeId > 0) {
+            const count = countMoves(pgn.getNodes(), nodeId);
+            const doDelete = () => {
+                pgn.deleteFromHere();
+                showToast(`${count} ${count === 1 ? 'move' : 'moves'} deleted`);
+            };
+            if (count >= 5) {
+                showConfirm(`Delete ${count} half-moves from here?`).then((ok) => {
+                    if (ok) doDelete();
+                });
+            } else {
+                doDelete();
+            }
+        }
         e.preventDefault();
     } else if (e.key === 'Escape') {
         closeGamePanel();
@@ -1489,6 +1700,192 @@ function updateGameHeader(meta) {
     }
 }
 
+// ─── Clock time display ─────────────────────────────────────────
+
+function parseHms(s) {
+    // "h:mm:ss" or "m:ss" → seconds
+    if (!s) return 0;
+    const parts = s.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] || 0;
+}
+
+function clockSvg(seconds, active) {
+    // Tiny analog clock face — hands reflect remaining time
+    const s = Math.max(0, Math.round(seconds || 0));
+    const mins = (s / 60) % 60;
+    const hrs = (s / 3600) % 12;
+    const minAngle = mins * 6; // 360° / 60 min
+    const hrAngle = hrs * 30 + mins * 0.5; // 360° / 12 hrs + minute offset
+    const opacity = active ? '1' : '0.45';
+    return (
+        `<svg class="clock-icon" viewBox="0 0 20 20" width="18" height="18" style="opacity:${opacity}">` +
+        `<circle cx="10" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+        `<line x1="10" y1="10" x2="10" y2="3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" transform="rotate(${minAngle},10,10)"/>` +
+        `<line x1="10" y1="10" x2="10" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round" transform="rotate(${hrAngle},10,10)"/>` +
+        `</svg>`
+    );
+}
+
+function formatSeconds(sec) {
+    if (sec == null) return '';
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const mm = String(m).padStart(2, '0');
+    const ss = String(s).padStart(2, '0');
+    return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+function parseTimeControl(tc) {
+    if (!tc) return null;
+    // "G/90;+30" → simple with increment
+    // "G/120;d5" → simple with delay (no time added)
+    // "30/90,SD/30;d5" or "30/90 SD/30" or "30/90 GAME/30" or "30/90, SD 30" → two-phase
+    // "40/85,SD/30;d5" → two-phase with different move count
+
+    // Extract increment: ";+N" at end
+    const incMatch = tc.match(/;\+(\d+)/);
+    const inc = incMatch ? parseInt(incMatch[1], 10) : 0;
+
+    // Simple: G/N...
+    const simpleMatch = tc.match(/^G\/(\d+)/i);
+    if (simpleMatch) {
+        return { base: parseInt(simpleMatch[1], 10) * 60, inc, phase1Moves: 0, phase2: 0 };
+    }
+
+    // Two-phase: N/M followed by SD/N or GAME/N or SD N
+    const twoPhase = tc.match(/^(\d+)\/(\d+)[,\s]+(?:SD|GAME)\s*\/?(\d+)/i);
+    if (twoPhase) {
+        return {
+            base: parseInt(twoPhase[2], 10) * 60,
+            inc,
+            phase1Moves: parseInt(twoPhase[1], 10),
+            phase2: parseInt(twoPhase[3], 10) * 60,
+        };
+    }
+
+    return null;
+}
+
+function computeEmtClocks(nodes, targetNodeId, tc) {
+    // Walk from root to targetNodeId, accumulating EMT per side.
+    // First, build the path from root to target by walking parentId chain.
+    const path = [];
+    let id = targetNodeId;
+    while (id > 0) {
+        path.push(id);
+        id = nodes[id].parentId;
+    }
+    path.reverse();
+
+    let whiteRem = tc.base;
+    let blackRem = tc.base;
+    let whiteMoves = 0;
+    let blackMoves = 0;
+
+    for (const nid of path) {
+        const node = nodes[nid];
+        const emt = parseHms(node.annotations?.emt);
+        const isWhite = node.ply % 2 === 1;
+
+        if (isWhite) {
+            whiteRem -= emt;
+            whiteRem += tc.inc;
+            whiteMoves++;
+            if (tc.phase1Moves && whiteMoves === tc.phase1Moves) whiteRem += tc.phase2;
+        } else {
+            blackRem -= emt;
+            blackRem += tc.inc;
+            blackMoves++;
+            if (tc.phase1Moves && blackMoves === tc.phase1Moves) blackRem += tc.phase2;
+        }
+        // Sanity check: if either clock goes wildly negative, EMT data is corrupt
+        if (whiteRem < -300 || blackRem < -300) return null;
+    }
+
+    return { white: whiteRem, black: blackRem };
+}
+
+const LOW_TIME_THRESHOLD = 300; // 5 minutes in seconds
+
+function setClockDisplay(el, text, seconds, active) {
+    if (!text) {
+        el.innerHTML = '';
+        el.classList.add('hidden');
+        el.classList.remove('clock-low', 'clock-active');
+        return;
+    }
+    el.innerHTML = clockSvg(seconds, active) + `<span>${text}</span>`;
+    el.classList.toggle('clock-low', seconds != null && seconds < LOW_TIME_THRESHOLD);
+    el.classList.toggle('clock-active', !!active);
+    el.classList.remove('hidden');
+}
+
+function updateClocks() {
+    const nodes = pgn.getNodes();
+    const nodeId = pgn.getCurrentNodeId();
+    const wEl = document.getElementById('viewer-white-clock');
+    const bEl = document.getElementById('viewer-black-clock');
+    if (!wEl || !bEl) return;
+
+    // Determine whose turn it is (the side that HASN'T just moved)
+    const currentPly = nodeId > 0 ? nodes[nodeId]?.ply || 0 : 0;
+    const whiteTurn = currentPly % 2 === 0; // after black's move (even ply), it's white's turn
+
+    // Strategy 1: native [%clk] annotations — walk back to find each side's latest
+    if (nodeId > 0 && nodes[nodeId]?.annotations?.clk) {
+        let wClk = null,
+            bClk = null;
+        let id = nodeId;
+        while (id > 0 && (wClk === null || bClk === null)) {
+            const node = nodes[id];
+            if (!node) break;
+            const clk = node.annotations?.clk;
+            if (clk) {
+                if (node.ply % 2 === 1 && wClk === null) wClk = clk;
+                else if (node.ply % 2 === 0 && bClk === null) bClk = clk;
+            }
+            id = node.parentId;
+        }
+        const wSec = wClk ? parseHms(wClk) : null;
+        const bSec = bClk ? parseHms(bClk) : null;
+        setClockDisplay(wEl, wClk ? wClk.replace(/^0:/, '') : '', wSec, whiteTurn);
+        setClockDisplay(bEl, bClk ? bClk.replace(/^0:/, '') : '', bSec, !whiteTurn);
+        return;
+    }
+
+    // Strategy 2: compute from [%emt] + tournament time control
+    const tc = parseTimeControl(games.getTournamentMeta()?.timeControl);
+    if (tc && nodeId > 0) {
+        // Check if any node on the path has emt
+        let hasEmt = false;
+        let id = nodeId;
+        while (id > 0) {
+            if (nodes[id]?.annotations?.emt) {
+                hasEmt = true;
+                break;
+            }
+            id = nodes[id].parentId;
+        }
+        if (hasEmt) {
+            const clocks = computeEmtClocks(nodes, nodeId, tc);
+            if (clocks) {
+                setClockDisplay(wEl, formatSeconds(clocks.white), clocks.white, whiteTurn);
+                setClockDisplay(bEl, formatSeconds(clocks.black), clocks.black, !whiteTurn);
+                return;
+            }
+            // clocks === null → corrupt EMT data, fall through to hide
+        }
+    }
+
+    // No clock data available
+    setClockDisplay(wEl, '', null);
+    setClockDisplay(bEl, '', null);
+}
+
 function renderExplorerMoveListHtml(stats, moveHistory) {
     let html = '<div class="explorer-content">';
 
@@ -1580,7 +1977,8 @@ function renderMoveTableHtml(nodes, currentNodeId, commentsHidden) {
             html += `<span class="move-num${stripe}">${moveNum}.</span>`;
             html += `<span class="move${white.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${white.id}">${white.san}${wNag}</span>`;
             html += `<span class="move-empty${stripe}"></span>`;
-            if (wComment) html += `<span class="mt-comment${stripe}">${wComment}</span>`;
+            if (wComment)
+                html += `<span class="mt-comment${stripe}" data-comment-node="${white.id}">${wComment}</span>`;
             if (hasWhiteVars) emitVariations(whiteParent);
             row++;
 
@@ -1592,7 +1990,8 @@ function renderMoveTableHtml(nodes, currentNodeId, commentsHidden) {
                 html += `<span class="move-num${stripe2}"></span>`;
                 html += `<span class="move-empty${stripe2}"></span>`;
                 html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe2}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
-                if (bComment) html += `<span class="mt-comment${stripe2}">${bComment}</span>`;
+                if (bComment)
+                    html += `<span class="mt-comment${stripe2}" data-comment-node="${black.id}">${bComment}</span>`;
                 if (hasBlackVars) emitVariations(white);
                 row++;
                 id = black.mainChild;
@@ -1609,7 +2008,8 @@ function renderMoveTableHtml(nodes, currentNodeId, commentsHidden) {
                 const hasBlackVars = !commentsHidden && white.children.length > 1;
                 html += `<span class="move${black.id === currentNodeId ? ' move-current' : ''}${stripe}" data-node-id="${black.id}">${black.san}${bNag}</span>`;
                 if (bComment || hasBlackVars) {
-                    if (bComment) html += `<span class="mt-comment${stripe}">${bComment}</span>`;
+                    if (bComment)
+                        html += `<span class="mt-comment${stripe}" data-comment-node="${black.id}">${bComment}</span>`;
                     if (hasBlackVars) emitVariations(white);
                 }
                 row++;
@@ -1640,7 +2040,7 @@ function renderMovesInlineHtml(nodes, currentNodeId, startId, isVariation) {
         html += `<span class="${cls}${current}" data-node-id="${id}">${node.san}${renderNags(node.nags)}</span>`;
         html += ' ';
         const comment = cleanComment(node.comment);
-        if (comment) html += `<span class="move-comment">${comment}</span> `;
+        if (comment) html += `<span class="move-comment" data-comment-node="${id}">${comment}</span> `;
         // Render sibling variations — but NOT at the start of a variation
         // (those are already rendered by the caller at the branch point)
         if (!(id === startId && isVariation)) {
@@ -1889,10 +2289,9 @@ function renderBrowserTitle(panelEl, state) {
         return;
     }
 
-    // Don't clobber existing dropdown if mode hasn't changed
+    // Don't clobber existing server dropdown (avoids re-render flicker on every onChange)
     const existingSelect = titleEl.querySelector('#browser-title-select');
-    const currentMode = games.isLocalMode() ? 'local' : 'server';
-    if (existingSelect && existingSelect.dataset.mode === currentMode) return;
+    if (existingSelect && existingSelect.dataset.mode === 'server' && !games.isLocalMode()) return;
 
     // Local mode with multiple events: dropdown with "All Events (N games)" default
     const localEvents = games.getLocalEvents();

@@ -508,6 +508,7 @@ document.addEventListener('click', (e) => {
         const handler = ACTIONS[actionBtn.dataset.action];
         if (handler) {
             handler(e);
+            actionBtn.blur();
             return;
         }
     }

@@ -54,8 +54,9 @@ export function classifyFen(fen) {
 
 export function findOpeningByName(name) {
     if (!_ecoData) return null;
+    const needle = name.replace(/[\u2018\u2019\u0060\u00B4]/g, "'");
     for (const entry of Object.values(_ecoData)) {
-        if (entry.name === name) return entry;
+        if (entry.name.replace(/[\u2018\u2019\u0060\u00B4]/g, "'") === needle) return entry;
     }
     return null;
 }

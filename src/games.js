@@ -44,6 +44,7 @@ const EMPTY_FILTERS = {
     opponent: null,
     opponentNorm: null,
     event: null,
+    openingFamily: null,
 };
 let _filters = { ...EMPTY_FILTERS };
 let _playerList = []; // searchable player names for current dataset
@@ -208,6 +209,7 @@ export async function selectPlayer(name, opts = {}) {
         _filters.opponent = opts.opponent;
         _filters.opponentNorm = opts.opponentNorm || null;
     }
+    if (opts.openingFamily) _filters.openingFamily = opts.openingFamily;
     notifyChange();
 }
 
@@ -255,9 +257,11 @@ export async function switchDataSource(value, currentSlug) {
         }
     }
 
-    resolveDefaultRound(true);
-    _sectionList = _tournamentSections;
-    _visibleSections = new Set(_sectionList);
+    if (!isLocalMode()) {
+        resolveDefaultRound(true);
+        _sectionList = _tournamentSections;
+        _visibleSections = new Set(_sectionList);
+    }
     _explorer = null;
     ensureExplorer();
     notifyChange();
@@ -473,6 +477,11 @@ function passesUserFilters(g) {
     }
     if (opponentNorm && g.whiteNorm !== opponentNorm && g.blackNorm !== opponentNorm) return false;
     if (event && g.tournament !== event) return false;
+    if (_filters.openingFamily && g.openingName) {
+        const sep = g.openingName.search(/[:,]/);
+        const family = sep > 0 ? g.openingName.slice(0, sep).trim() : g.openingName;
+        if (family !== _filters.openingFamily) return false;
+    } else if (_filters.openingFamily) return false;
     if (_currentSource === 'tournament' && _sectionList.length > 1 && g.section && !_visibleSections.has(g.section))
         return false;
     return true;

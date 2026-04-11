@@ -12,6 +12,7 @@ import { START_FEN } from './pgn.js';
 
 let _cg = null;
 let _onMove = null; // callback: (san, from, to) => void
+let _onDraw = null; // callback: (shapes) => void
 let _currentFen = null;
 let _orientation = 'white';
 let _dismissPromotion = null;
@@ -95,10 +96,11 @@ function makeMove(from, to, promotion) {
     return true;
 }
 
-export function createBoard(containerId, { onMove, orientation = 'white', fen } = {}) {
+export function createBoard(containerId, { onMove, onDraw, orientation = 'white', fen } = {}) {
     destroy();
 
     _onMove = onMove || null;
+    _onDraw = onDraw || null;
     _currentFen = fen || START_FEN;
     _orientation = orientation;
 
@@ -127,6 +129,7 @@ export function createBoard(containerId, { onMove, orientation = 'white', fen } 
         premovable: { enabled: false },
         predroppable: { enabled: false },
         coordinates: localStorage.getItem('boardCoords') === 'true',
+        drawable: { onChange: (shapes) => _onDraw?.(shapes) },
     });
 
     return _cg;
@@ -158,6 +161,10 @@ export function highlightSquares(from, to) {
 
 export function setAutoShapes(shapes) {
     _cg.setAutoShapes(shapes || []);
+}
+
+export function clearDrawnShapes() {
+    if (_cg) _cg.set({ drawable: { shapes: [] } });
 }
 
 export function getOrientation() {
