@@ -539,11 +539,8 @@ function groupGames(games) {
 
     // Player mode: sort tournament groups reverse-chronologically, games by round desc
     if (ds?.playerName) {
-        groups.sort((a, b) => {
-            const da = a.games[0]?.date || '';
-            const db = b.games[0]?.date || '';
-            return db.localeCompare(da);
-        });
+        const maxDate = (g) => g.games.reduce((max, x) => (x.date > max ? x.date : max), '');
+        groups.sort((a, b) => maxDate(b).localeCompare(maxDate(a)));
         for (const g of groups) {
             g.games.sort((a, b) => (b.round || 0) - (a.round || 0));
         }

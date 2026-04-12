@@ -1201,7 +1201,6 @@ select.editor-header-input option {
         var(--modal-bg),
         color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-modal);
     max-width: 560px;
     width: 95%;
     max-height: 98vh;
@@ -1254,7 +1253,8 @@ button.viewer-close {
 .viewer-board cg-board square.oc.move-dest {
     background: radial-gradient(transparent 0%, transparent 80%, var(--board-capture) 80%);
 }
-.viewer-board cg-board square.last-move {
+.viewer-board cg-board square.last-move,
+.tab-preview-board cg-board square.last-move {
     background-color: var(--board-highlight);
 }
 .viewer-board cg-board square.selected {
@@ -2459,7 +2459,7 @@ button.viewer-close {
     .viewer-tab-bar {
         display: flex;
         align-items: flex-end;
-        background: rgba(0, 0, 0, 0.4);
+        background: light-dark(rgb(from var(--accent) r g b / 0.15), rgba(0, 0, 0, 0.4));
         padding: 6px 6px 0 6px;
         border-radius: var(--radius-card) var(--radius-card) 0 0;
         gap: 0;
@@ -2480,7 +2480,8 @@ button.viewer-close {
         padding: 6px 10px;
         border: none;
         background: transparent;
-        color: var(--text-secondary);
+        color: var(--text-primary);
+        opacity: 0.6;
         font-size: 0.8rem;
         cursor: pointer;
         position: relative;
@@ -2508,8 +2509,9 @@ button.viewer-close {
         background: rgb(from var(--accent) r g b / 0.15);
     }
     .viewer-tab-bar .tab-btn.tab-active {
-        background: var(--surface-subtle);
+        background: light-dark(var(--modal-bg), var(--surface-subtle));
         color: var(--text-primary);
+        opacity: 1;
         position: relative;
         z-index: 3;
         border-radius: 12px 12px 0 0;
@@ -2521,7 +2523,7 @@ button.viewer-close {
         position: absolute;
         top: auto; bottom: 0; left: -15px;
         width: 15px; height: 15px;
-        background: radial-gradient(circle at 0 0, transparent 15px, var(--surface-subtle) 15px);
+        background: radial-gradient(circle at 0 0, transparent 15px, light-dark(var(--modal-bg), var(--surface-subtle)) 15px);
         opacity: 1;
         z-index: 2;
     }
@@ -2530,7 +2532,7 @@ button.viewer-close {
         position: absolute;
         bottom: 0; right: -15px;
         width: 15px; height: 15px;
-        background: radial-gradient(circle at 100% 0, transparent 15px, var(--surface-subtle) 15px);
+        background: radial-gradient(circle at 100% 0, transparent 15px, light-dark(var(--modal-bg), var(--surface-subtle)) 15px);
         z-index: 2;
     }
     .tab-label {
@@ -2573,7 +2575,8 @@ button.viewer-close {
         border-radius: 50%;
         border: none;
         background: transparent;
-        color: var(--text-secondary);
+        color: var(--text-primary);
+        opacity: 0.6;
         font-size: 1.1rem;
         cursor: pointer;
         display: flex;
@@ -2586,6 +2589,7 @@ button.viewer-close {
     .tab-bar-close:hover {
         background: var(--surface-subtle);
         color: var(--text-primary);
+        opacity: 1;
     }
     .tab-bar-close {
         margin-right: 3px;
@@ -2603,6 +2607,34 @@ button.viewer-close {
     .viewer-tab-host {
         width: 95vw;
     }
+}
+
+/* Tab hover preview */
+.tab-preview {
+    position: absolute;
+    z-index: 100;
+    width: 260px;
+    background: var(--modal-bg);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-modal);
+    overflow: hidden;
+    transition: left 150ms ease, top 150ms ease, opacity 150ms ease;
+}
+.tab-preview.hidden {
+    display: none;
+}
+.tab-preview-board {
+    width: 260px;
+    height: 260px;
+}
+.tab-preview-label {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
 }
 
 /* Desktop combined layout: browser + viewer side-by-side */

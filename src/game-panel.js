@@ -19,6 +19,7 @@ import { showToast } from './toast.js';
 import { classifyFen, loadEcoData } from './eco.js';
 import * as games from './games.js';
 import * as board from './board.js';
+import { Chessground } from '@lichess-org/chessground';
 import { createGame } from './pgn.js';
 import { switchTournament, fetchPlayerGames } from './tnm.js';
 import * as engine from './engine.js';
@@ -257,6 +258,8 @@ function createTab() {
         // Per-tab state
         game: null,
         board: null,
+        currentFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        lastMove: null,
         panel: { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null },
         gamesState: null,
         pgnState: null,
@@ -394,6 +397,38 @@ function openGameInNewTab(gameId) {
     openGameFromBrowser(gameId);
 }
 
+/** Find or create a tab for a specific game. */
+export function openGameInTab(gameId, opts = {}) {
+    // Already open in a tab? Switch to it.
+    const existing = _tabs.find((t) => t.panel.gameId === gameId);
+    if (existing) {
+        switchTab(existing);
+        openPanel();
+        return;
+    }
+    // Create new tab and open the game
+    addTab();
+    openPanel();
+    const game = games.getCachedGame(gameId);
+    if (game) {
+        openGamePanel({ game, ...opts });
+    }
+}
+
+/** Find or create a tab for the tournament explorer. */
+export function openExplorerInTab(ctxKey) {
+    // Already have an explorer tab for this tournament? Switch to it.
+    const existing = _tabs.find((t) => t.ctxKey?.includes(ctxKey) && !t.game);
+    if (existing) {
+        switchTab(existing);
+        openPanel();
+        return;
+    }
+    // Create new tab
+    addTab();
+    openPanel();
+}
+
 let _browserCtxGameId = null;
 
 function showBrowserContextMenu(gameId, anchor) {
@@ -460,6 +495,7 @@ export function initGamePanel(mount, { features } = {}) {
         if (tabBtn) {
             const tab = _tabs.find((t) => t.tabBtn === tabBtn);
             if (tab && tab !== _activeTab) {
+                hideTabPreview();
                 switchTab(tab);
                 tabBtn.blur();
             }
@@ -480,6 +516,111 @@ export function initGamePanel(mount, { features } = {}) {
         if (!browserCtxMenu.classList.contains('hidden') && !browserCtxMenu.contains(e.target)) {
             hideBrowserContextMenu();
         }
+    });
+
+    // Tab hover preview
+    const tabPreview = document.createElement('div');
+    tabPreview.className = 'tab-preview hidden';
+    tabPreview.innerHTML = '<div class="tab-preview-board"></div><div class="tab-preview-label"></div>';
+    modal.appendChild(tabPreview);
+
+    let _previewTimer = null;
+    let _previewTab = null;
+    let _previewCg = null;
+    let _previewActive = false; // true once the first preview has shown
+
+    function showTabPreview(tab) {
+        if (tab === _activeTab || !tab.tabBtn) return;
+        _previewTab = tab;
+
+        const fen = tab.currentFen;
+        const orientation = tab.board?.getOrientation() || 'white';
+
+        // Position below the tab button
+        const rect = tab.tabBtn.getBoundingClientRect();
+        const modalRect = modal.getBoundingClientRect();
+        const previewW = 260;
+        let left = rect.left + rect.width / 2 - previewW / 2 - modalRect.left;
+        // Clamp to modal bounds
+        left = Math.max(8, Math.min(left, modalRect.width - previewW - 8));
+        tabPreview.style.left = `${left}px`;
+        tabPreview.style.top = `${rect.bottom - modalRect.top + 4}px`;
+
+        // Label
+        const labelEl = tabPreview.querySelector('.tab-preview-label');
+        labelEl.textContent = tab.tabBtn.querySelector('.tab-label')?.textContent || '';
+
+        // Create or update chessground
+        const boardEl = tabPreview.querySelector('.tab-preview-board');
+        if (_previewCg) {
+            _previewCg.set({ fen, orientation, lastMove: tab.lastMove || undefined, animation: { enabled: false } });
+        } else {
+            _previewCg = Chessground(boardEl, {
+                fen,
+                orientation,
+                lastMove: tab.lastMove || undefined,
+                viewOnly: true,
+                coordinates: false,
+                animation: { enabled: false },
+                highlight: { lastMove: true },
+                drawable: { enabled: false },
+            });
+        }
+
+        tabPreview.classList.remove('hidden');
+    }
+
+    function hideTabPreview() {
+        clearTimeout(_previewTimer);
+        _previewTimer = null;
+        _previewTab = null;
+        _previewActive = false;
+        tabPreview.classList.add('hidden');
+        if (_previewCg) {
+            _previewCg.destroy();
+            _previewCg = null;
+            tabPreview.querySelector('.tab-preview-board').innerHTML = '';
+        }
+    }
+
+    _tabBar.addEventListener('mouseover', (e) => {
+        const tabBtn = e.target.closest('.tab-btn');
+        if (!tabBtn) {
+            if (!e.target.closest('.tab-preview')) {
+                clearTimeout(_previewTimer);
+                _previewTimer = setTimeout(hideTabPreview, 150);
+            }
+            return;
+        }
+        const tab = _tabs.find((t) => t.tabBtn === tabBtn);
+        if (!tab || tab === _activeTab) {
+            clearTimeout(_previewTimer);
+            _previewTimer = setTimeout(hideTabPreview, 150);
+            return;
+        }
+        clearTimeout(_previewTimer);
+        if (_previewActive && _previewTab !== tab) {
+            // Already showing a preview — snap instantly
+            showTabPreview(tab);
+        } else if (!_previewActive) {
+            // First hover — delay
+            _previewTimer = setTimeout(() => {
+                _previewActive = true;
+                showTabPreview(tab);
+            }, 500);
+        }
+    });
+
+    _tabBar.addEventListener('mouseleave', () => {
+        clearTimeout(_previewTimer);
+        _previewTimer = setTimeout(hideTabPreview, 150);
+    });
+
+    tabPreview.addEventListener('mouseenter', () => {
+        clearTimeout(_previewTimer);
+    });
+    tabPreview.addEventListener('mouseleave', () => {
+        _previewTimer = setTimeout(hideTabPreview, 150);
     });
 
     // Create first tab
@@ -671,9 +812,7 @@ export function initGamePanel(mount, { features } = {}) {
     );
 
     onModalClose('viewer-modal', () => {
-        games.closeBrowser();
-        _activeTab.browserPanel.classList.add('hidden');
-        _activeTab.el.classList.remove('has-browser');
+        // Don't clear ctx — tabs preserve their state across modal open/close
     });
 }
 
@@ -722,6 +861,9 @@ function onGameChange(state) {
     if (!_activeTab.editingComment) renderPgnMoveList();
     updatePlayButton(state.isPlaying);
     updateGameHeader(_activeTab.panel.meta);
+    // Sync toolbar button states to game state
+    _activeTab.commentsBtn?.classList.toggle('active', !state.commentsHidden);
+    _activeTab.branchBtn?.classList.toggle('active', state.branchMode);
 }
 
 games.onChange(() => {
@@ -745,7 +887,8 @@ games.onChange(() => {
         setToolbarButtons();
         renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
-        _activeTab.board.setPosition(games.getExplorerFen(), true);
+        _activeTab.currentFen = games.getExplorerFen();
+        _activeTab.board.setPosition(_activeTab.currentFen, true);
         _activeTab.board.highlightSquares(null, null);
         _activeTab.board.resize();
     }
@@ -825,6 +968,8 @@ function annotationsToShapes(annotations) {
 }
 
 function onPositionChange(fen, from, to, annotations) {
+    _activeTab.currentFen = fen;
+    _activeTab.lastMove = from && to ? [from, to] : null;
     _activeTab.board.setPosition(fen, true);
     _activeTab.board.highlightSquares(from, to);
     _activeTab.board.setAutoShapes(annotationsToShapes(annotations));
@@ -1256,30 +1401,16 @@ export function openGamePanel(opts = {}) {
 }
 
 export function closeGamePanel() {
-    if (_activeTab.game?.isDirty()) {
-        _pendingAction = forceCloseGamePanel;
-        document.getElementById('editor-dirty-dialog')?.classList.remove('hidden');
-        return;
-    }
     forceCloseGamePanel();
 }
 
 function forceCloseGamePanel() {
-    const onCloseCallback = _activeTab.panel.onClose;
-    _activeTab.panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
     _pendingAction = null;
-    // Stop engine analysis (but keep worker alive for re-use)
-    if (_activeTab.engineActive) {
-        _activeTab.engineActive = false;
+    // Pause engine but don't destroy (resumes on reopen)
+    if (_activeTab.engineActive && !_activeTab.enginePaused) {
         engine.stopAnalysis();
-        _activeTab.enginePanel?.classList.add('hidden');
-        _activeTab.evalBar?.classList.add('hidden');
-        _activeTab.engineBtn?.classList.remove('active');
     }
-    _activeTab.game?.destroy();
-    _activeTab.game = null;
     closeModal('viewer-modal');
-    onCloseCallback?.();
 }
 
 function setToolbarButtons() {
@@ -3054,6 +3185,7 @@ export const flipBoard = () => {
 };
 export const setBoardOrientation = (color) => _activeTab.board.setOrientation(color);
 export const setBoardCoordinates = (show) => _activeTab.board?.setCoordinates(show);
+export const getActiveTabEl = () => _activeTab?.el;
 export const toggleAutoPlay = () => _activeTab.game.toggleAutoPlay();
 export const toggleComments = () => _activeTab.game.toggleComments();
 export const toggleBranchMode = () => _activeTab.game.toggleBranchMode();

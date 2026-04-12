@@ -14,8 +14,6 @@ import { openStyle, initStyle } from './style.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
-    openGamePanel as openGameViewer,
-    openGameFromBrowser,
     closeGamePanel,
     handlePanelKeydown,
     explorerBackToBrowser,
@@ -49,18 +47,13 @@ import {
     saveHeaderEditor,
     launchExplorer,
     initGamePanel,
+    getActiveTabEl,
+    openGameInTab,
+    openExplorerInTab,
 } from './game-panel.js';
 import { showToast } from './toast.js';
-import {
-    getCachedGame,
-    selectPlayer,
-    getPlayer,
-    getGroupedGames,
-    getFilter,
-    activateCtx,
-    getLastTournamentKey,
-} from './games.js';
-import { queryGames, prefetchGames, fetchPlayerGames } from './tnm.js';
+import { getCachedGame, getPlayer, getGroupedGames, getFilter, getLastTournamentKey } from './games.js';
+import { queryGames, prefetchGames } from './tnm.js';
 import { formatName, getHeader } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
@@ -352,24 +345,16 @@ const ACTIONS = {
     'disable-push': disablePush,
     'open-games': () => {
         const key = getLastTournamentKey();
-        if (key) activateCtx(key);
-        openGameViewer();
+        if (key) openExplorerInTab(key);
     },
     'open-profile': (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
         if (btn?.dataset.name) openPlayerProfile(btn.dataset.name);
     },
-    'view-tracker-game': async (e) => {
+    'view-tracker-game': (e) => {
         const btn = e.target.closest('[data-action="view-tracker-game"]');
         const gameId = btn?.dataset.gameId;
-        if (!gameId) return;
-        if (CONFIG.playerName) {
-            await selectPlayer(CONFIG.playerName, { norm: CONFIG.playerNorm || undefined, fetch: fetchPlayerGames });
-            openGameFromBrowser(gameId);
-        } else {
-            const game = getCachedGame(gameId);
-            if (game) openGameViewer({ game });
-        }
+        if (gameId) openGameInTab(gameId);
     },
     // Viewer
     'viewer-start': goToStart,
@@ -387,8 +372,8 @@ const ACTIONS = {
         btn.classList.toggle('active', toggleBranchMode());
     },
     'viewer-analysis': async () => {
-        document.querySelector('.share-popover')?.classList.add('hidden');
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        getActiveTabEl()?.querySelector('.share-popover')?.classList.add('hidden');
+        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
         const pgn = getGamePgn();
         if (!pgn) return;
         const nodes = getNodes();
@@ -417,16 +402,16 @@ const ACTIONS = {
     },
     'viewer-share': (e) => {
         e.stopPropagation();
-        document.querySelector('.share-popover').classList.toggle('hidden');
+        getActiveTabEl()?.querySelector('.share-popover').classList.toggle('hidden');
     },
     'viewer-overflow': (e) => {
         e.stopPropagation();
-        const menu = document.querySelector('.overflow-menu');
+        const menu = getActiveTabEl()?.querySelector('.overflow-menu');
         const stillHidden = menu.classList.toggle('hidden');
         if (!stillHidden) {
             // Sync toggle states when opening
-            const commentsBtn = document.querySelector('.viewer-comments-btn');
-            const branchBtn = document.querySelector('.viewer-branch-btn');
+            const commentsBtn = getActiveTabEl()?.querySelector('.viewer-comments-btn');
+            const branchBtn = getActiveTabEl()?.querySelector('.viewer-branch-btn');
             menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle(
                 'active',
                 commentsBtn?.classList.contains('active'),
@@ -439,17 +424,17 @@ const ACTIONS = {
     },
     'overflow-comments': (e) => {
         const showing = !toggleComments();
-        document.querySelector('.viewer-comments-btn')?.classList.toggle('active', showing);
+        getActiveTabEl()?.querySelector('.viewer-comments-btn')?.classList.toggle('active', showing);
         e.target.closest('.overflow-item')?.classList.toggle('active', showing);
     },
     'overflow-branch': (e) => {
         const showing = toggleBranchMode();
-        document.querySelector('.viewer-branch-btn')?.classList.toggle('active', showing);
+        getActiveTabEl()?.querySelector('.viewer-branch-btn')?.classList.toggle('active', showing);
         e.target.closest('.overflow-item')?.classList.toggle('active', showing);
     },
     'viewer-engine': () => toggleEngine(),
     'overflow-engine': () => {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
         toggleEngine();
     },
     'engine-confirm': () => {
@@ -466,11 +451,11 @@ const ACTIONS = {
         document.getElementById('engine-settings-dialog')?.classList.add('hidden');
     },
     'overflow-analysis': () => {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
         ACTIONS['viewer-analysis']();
     },
     'overflow-headers': () => {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
         ACTIONS['editor-headers']();
     },
     // Explorer
@@ -523,13 +508,13 @@ document.addEventListener('click', (e) => {
 
     // Dismiss share popover on outside click
     if (!e.target.closest('.share-btn-wrapper') && !e.target.closest('.overflow-btn-wrapper')) {
-        const popover = document.querySelector('.share-popover');
+        const popover = getActiveTabEl()?.querySelector('.share-popover');
         if (popover) popover.classList.add('hidden');
     }
 
     // Dismiss overflow menu on outside click
     if (!e.target.closest('.overflow-btn-wrapper')) {
-        const menu = document.querySelector('.overflow-menu');
+        const menu = getActiveTabEl()?.querySelector('.overflow-menu');
         if (menu) menu.classList.add('hidden');
     }
 
@@ -571,8 +556,8 @@ document.addEventListener('click', (e) => {
 }
 
 async function handleShareAction(action) {
-    document.querySelector('.share-popover').classList.add('hidden');
-    document.querySelector('.overflow-menu')?.classList.add('hidden');
+    getActiveTabEl()?.querySelector('.share-popover').classList.add('hidden');
+    getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {
@@ -660,9 +645,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initGamePanel(document.getElementById('game-panel-mount'));
     initStyle(document.getElementById('style-mount'));
 
-    // Comments button starts active
-    document.querySelector('[data-action="viewer-comments"]')?.classList.add('active');
-
     // Hide "Share..." on platforms without native share
     if (!navigator.share) {
         document.querySelector('[data-action="share-native"]')?.classList.add('hidden');
@@ -699,9 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then((data) => {
                 const game = data.games?.[0] || getCachedGame(gameId);
                 if (game) {
-                    const pNorm = CONFIG.playerNorm || null;
-                    const orientation = pNorm && game.blackNorm === pNorm ? 'Black' : 'White';
-                    openGameViewer({ game, orientation });
+                    openGameInTab(gameId);
                 }
                 window.history.replaceState({}, '', window.location.pathname);
             })
