@@ -389,6 +389,26 @@ function updateTabLabel(tab) {
     }
 }
 
+function openGameInNewTab(gameId) {
+    addTab();
+    openGameFromBrowser(gameId);
+}
+
+let _browserCtxGameId = null;
+
+function showBrowserContextMenu(gameId, anchor) {
+    const menu = document.getElementById('browser-context-menu');
+    if (!menu) return;
+    _browserCtxGameId = gameId;
+    menu.classList.remove('hidden');
+    positionPopup(menu, anchor);
+}
+
+function hideBrowserContextMenu() {
+    document.getElementById('browser-context-menu')?.classList.add('hidden');
+    _browserCtxGameId = null;
+}
+
 function updateTabCloseVisibility() {
     const hide = _tabs.length <= 1;
     for (const tab of _tabs) {
@@ -439,7 +459,26 @@ export function initGamePanel(mount, { features } = {}) {
         const tabBtn = e.target.closest('.tab-btn');
         if (tabBtn) {
             const tab = _tabs.find((t) => t.tabBtn === tabBtn);
-            if (tab && tab !== _activeTab) switchTab(tab);
+            if (tab && tab !== _activeTab) {
+                switchTab(tab);
+                tabBtn.blur();
+            }
+        }
+    });
+
+    // Wire browser context menu
+    modal.addEventListener('click', (e) => {
+        const browserCtxMenu = document.getElementById('browser-context-menu');
+        if (!browserCtxMenu) return;
+        const action = e.target.closest('[data-browser-action]')?.dataset.browserAction;
+        if (action === 'open-new-tab' && _browserCtxGameId) {
+            const gameId = _browserCtxGameId;
+            hideBrowserContextMenu();
+            openGameInNewTab(gameId);
+            return;
+        }
+        if (!browserCtxMenu.classList.contains('hidden') && !browserCtxMenu.contains(e.target)) {
+            hideBrowserContextMenu();
         }
     });
 
@@ -624,6 +663,9 @@ export function initGamePanel(mount, { features } = {}) {
             <button class="ctx-item" data-ctx-action="explore">Explore from here</button>
             <button class="ctx-item" data-ctx-action="delete">Delete from here</button>
             <button class="ctx-item ctx-mainline" data-ctx-action="mainline">Make mainline</button>
+        </div>
+        <div id="browser-context-menu" class="editor-context-menu hidden">
+            <button class="ctx-item" data-browser-action="open-new-tab">Open in new tab</button>
         </div>
     `,
     );
@@ -2952,6 +2994,19 @@ function wireBrowserListeners(panelEl) {
                 } else if (gameId) {
                     showToast('No moves yet for this game', 'info');
                 }
+            }
+        },
+        { signal },
+    );
+
+    // Right-click context menu on game rows
+    panelEl.addEventListener(
+        'contextmenu',
+        (e) => {
+            const row = e.target.closest('[data-game-id]');
+            if (row && row.dataset.hasPgn === '1') {
+                e.preventDefault();
+                showBrowserContextMenu(row.dataset.gameId, row);
             }
         },
         { signal },
