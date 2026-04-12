@@ -399,14 +399,17 @@ function updateTabLabel(tab) {
     }
 }
 
+const tabsActive = () => _features.tabs && _tabBar?.offsetParent !== null;
+
 function openGameInNewTab(gameId) {
+    if (!tabsActive()) return;
     addTab({ sourceCtxKey: _activeTab.ctxKey });
     openGameFromBrowser(gameId);
 }
 
 /** Find or create a tab for a specific game. */
 export function openGameInTab(gameId, opts = {}) {
-    if (_features.tabs) {
+    if (tabsActive()) {
         // Already open in a tab? Switch to it.
         const existing = _tabs.find((t) => t.panel.gameId === gameId);
         if (existing) {
@@ -426,7 +429,7 @@ export function openGameInTab(gameId, opts = {}) {
 
 /** Find or create a tab for the tournament explorer. */
 export function openExplorerInTab(ctxKey) {
-    if (_features.tabs) {
+    if (tabsActive()) {
         // Already have an explorer tab for this tournament? Switch to it.
         const existing = _tabs.find((t) => !t.game && (t.ctxKey === ctxKey || t.ctxKey?.endsWith(':' + ctxKey)));
         if (existing) {
