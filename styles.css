@@ -844,7 +844,7 @@ html.off-season .meme {
 }
 
 #browser-title,
-#browser-title-panel {
+.browser-title-panel {
     white-space: nowrap;
     text-align: center;
     overflow: hidden;
@@ -1237,20 +1237,20 @@ button.viewer-close {
 }
 
 /* Chessground overrides */
-#viewer-board cg-board {
+.viewer-board cg-board {
     border-radius: var(--radius-sm);
     overflow: hidden;
 }
-#viewer-board cg-board square.move-dest {
+.viewer-board cg-board square.move-dest {
     background: radial-gradient(var(--board-dot) 22%, transparent 0);
 }
-#viewer-board cg-board square.oc.move-dest {
+.viewer-board cg-board square.oc.move-dest {
     background: radial-gradient(transparent 0%, transparent 80%, var(--board-capture) 80%);
 }
-#viewer-board cg-board square.last-move {
+.viewer-board cg-board square.last-move {
     background-color: var(--board-highlight);
 }
-#viewer-board cg-board square.selected {
+.viewer-board cg-board square.selected {
     background-color: var(--board-select);
 }
 
@@ -1266,7 +1266,7 @@ button.viewer-close {
     margin-bottom: 0.75rem;
 }
 
-#viewer-round-label {
+.viewer-round-label {
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-subtle);
@@ -2229,7 +2229,7 @@ button.viewer-close {
 }
 
 /* Emphasize play button */
-#viewer-play {
+.viewer-play-btn {
     width: 2.8rem;
     height: 2.8rem;
     padding: 0.35rem;
@@ -2239,7 +2239,7 @@ button.viewer-close {
     border: 1px solid var(--surface-subtle);
 }
 
-#viewer-play:hover {
+.viewer-play-btn:hover {
     background: var(--border-color);
     box-shadow: var(--shadow-sm);
 }
@@ -2426,7 +2426,7 @@ button.viewer-close {
         height: 2.25rem;
         padding: 0.35rem;
     }
-    #viewer-play {
+    .viewer-play-btn {
         width: 2.5rem;
         height: 2.5rem;
     }
@@ -3084,7 +3084,7 @@ select.editor-header-input {
         height: 3rem;
         padding: 0.55rem;
     }
-    #viewer-play {
+    .viewer-play-btn {
         width: 3.5rem;
         height: 3.5rem;
     }

@@ -388,8 +388,8 @@ const ACTIONS = {
         btn.classList.toggle('active', toggleBranchMode());
     },
     'viewer-analysis': async () => {
-        document.getElementById('share-popover')?.classList.add('hidden');
-        document.getElementById('overflow-menu')?.classList.add('hidden');
+        document.querySelector('.share-popover')?.classList.add('hidden');
+        document.querySelector('.overflow-menu')?.classList.add('hidden');
         const pgn = getGamePgn();
         if (!pgn) return;
         const nodes = getNodes();
@@ -418,16 +418,16 @@ const ACTIONS = {
     },
     'viewer-share': (e) => {
         e.stopPropagation();
-        document.getElementById('share-popover').classList.toggle('hidden');
+        document.querySelector('.share-popover').classList.toggle('hidden');
     },
     'viewer-overflow': (e) => {
         e.stopPropagation();
-        const menu = document.getElementById('overflow-menu');
+        const menu = document.querySelector('.overflow-menu');
         const stillHidden = menu.classList.toggle('hidden');
         if (!stillHidden) {
             // Sync toggle states when opening
-            const commentsBtn = document.getElementById('viewer-comments');
-            const branchBtn = document.getElementById('viewer-branch');
+            const commentsBtn = document.querySelector('.viewer-comments-btn');
+            const branchBtn = document.querySelector('.viewer-branch-btn');
             menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle(
                 'active',
                 commentsBtn?.classList.contains('active'),
@@ -440,17 +440,17 @@ const ACTIONS = {
     },
     'overflow-comments': (e) => {
         const showing = !toggleComments();
-        document.getElementById('viewer-comments')?.classList.toggle('active', showing);
+        document.querySelector('.viewer-comments-btn')?.classList.toggle('active', showing);
         e.target.closest('.overflow-item')?.classList.toggle('active', showing);
     },
     'overflow-branch': (e) => {
         const showing = toggleBranchMode();
-        document.getElementById('viewer-branch')?.classList.toggle('active', showing);
+        document.querySelector('.viewer-branch-btn')?.classList.toggle('active', showing);
         e.target.closest('.overflow-item')?.classList.toggle('active', showing);
     },
     'viewer-engine': () => toggleEngine(),
     'overflow-engine': () => {
-        document.getElementById('overflow-menu')?.classList.add('hidden');
+        document.querySelector('.overflow-menu')?.classList.add('hidden');
         toggleEngine();
     },
     'engine-confirm': () => {
@@ -467,11 +467,11 @@ const ACTIONS = {
         document.getElementById('engine-settings-dialog')?.classList.add('hidden');
     },
     'overflow-analysis': () => {
-        document.getElementById('overflow-menu')?.classList.add('hidden');
+        document.querySelector('.overflow-menu')?.classList.add('hidden');
         ACTIONS['viewer-analysis']();
     },
     'overflow-headers': () => {
-        document.getElementById('overflow-menu')?.classList.add('hidden');
+        document.querySelector('.overflow-menu')?.classList.add('hidden');
         ACTIONS['editor-headers']();
     },
     // Explorer
@@ -526,18 +526,18 @@ document.addEventListener('click', (e) => {
 
     // Dismiss share popover on outside click
     if (!e.target.closest('.share-btn-wrapper') && !e.target.closest('.overflow-btn-wrapper')) {
-        const popover = document.getElementById('share-popover');
+        const popover = document.querySelector('.share-popover');
         if (popover) popover.classList.add('hidden');
     }
 
     // Dismiss overflow menu on outside click
     if (!e.target.closest('.overflow-btn-wrapper')) {
-        const menu = document.getElementById('overflow-menu');
+        const menu = document.querySelector('.overflow-menu');
         if (menu) menu.classList.add('hidden');
     }
 
     // Browser export
-    if (e.target.closest('#browser-export')) {
+    if (e.target.closest('.browser-export')) {
         handleBrowserExport();
         return;
     }
@@ -574,8 +574,8 @@ document.addEventListener('click', (e) => {
 }
 
 async function handleShareAction(action) {
-    document.getElementById('share-popover').classList.add('hidden');
-    document.getElementById('overflow-menu')?.classList.add('hidden');
+    document.querySelector('.share-popover').classList.add('hidden');
+    document.querySelector('.overflow-menu')?.classList.add('hidden');
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {

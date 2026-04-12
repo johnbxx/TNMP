@@ -11,6 +11,7 @@ import { Chessground } from '@lichess-org/chessground';
 import { START_FEN } from './pgn.js';
 
 let _cg = null;
+let _boardEl = null; // the container element passed to createBoard
 let _onMove = null; // callback: (san, from, to) => void
 let _onDraw = null; // callback: (shapes) => void
 let _currentFen = null;
@@ -96,7 +97,7 @@ function makeMove(from, to, promotion) {
     return true;
 }
 
-export function createBoard(containerId, { onMove, onDraw, orientation = 'white', fen } = {}) {
+export function createBoard(container, { onMove, onDraw, orientation = 'white', fen } = {}) {
     destroy();
 
     _onMove = onMove || null;
@@ -104,8 +105,9 @@ export function createBoard(containerId, { onMove, onDraw, orientation = 'white'
     _currentFen = fen || START_FEN;
     _orientation = orientation;
 
-    const el = document.getElementById(containerId);
+    const el = typeof container === 'string' ? document.getElementById(container) : container;
     if (!el) return null;
+    _boardEl = el;
 
     const turn = turnColor(_currentFen);
     const dests = computeDests(_currentFen);
@@ -190,13 +192,9 @@ export function destroy() {
         _cg = null;
     }
 
-    // Replace the board DOM element to strip orphaned event listeners
-    const oldEl = document.getElementById('viewer-board');
-    if (oldEl) {
-        const fresh = document.createElement('div');
-        fresh.id = 'viewer-board';
-        fresh.className = 'viewer-board';
-        oldEl.replaceWith(fresh);
+    // Clear board DOM (cg.destroy() already removes chessground listeners)
+    if (_boardEl) {
+        _boardEl.innerHTML = '';
     }
 
     _currentFen = null;

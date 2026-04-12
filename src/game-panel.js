@@ -57,147 +57,217 @@ function icon(name, size) {
 // Embed feature flags (set via initGamePanel options, defaults = full app)
 let _features = { playerProfiles: true, globalPlayerSearch: true, import: true, localEngine: true, explorer: true };
 
+let _activeTab = null;
+
+function buildTabDOM() {
+    const el = document.createElement('div');
+    el.className = 'modal-content modal-content-viewer';
+    el.innerHTML = `
+        <button class="viewer-close" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
+        <div class="viewer-browser-panel hidden">
+            <h2 class="browser-title-panel"></h2>
+            <div class="browser-content">
+                <div class="browser-search">
+                    <div class="browser-search-wrap">
+                        <input type="text" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="browser-autocomplete">
+                        <button type="button" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
+                        <div class="browser-autocomplete hidden" role="listbox"></div>
+                    </div>
+                    <button type="button" class="browser-action-btn" data-action="browser-tournament-info" aria-label="Tournament Info" data-tooltip="Tournament Info">ⓘ</button>
+                    <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer">${icon('explore', 16)}</button>
+                    <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN">${icon('import', 16)}</button>
+                    <button type="button" class="browser-action-btn browser-export" aria-label="Download PGNs" data-tooltip="Download PGNs">${icon('download', 16)}</button>
+                </div>
+                <div class="browser-chips hidden"></div>
+                <div class="browser-filters hidden"></div>
+                <div class="browser-games-wrap raised-panel"><div class="browser-games"></div></div>
+            </div>
+        </div>
+        <div class="viewer-main">
+            <div class="viewer-header">
+                <div class="viewer-game-header">
+                    <div class="viewer-browser-nav">
+                        <button class="viewer-browse-arrow viewer-browse-prev" aria-label="Previous game">&#8249;</button>
+                        <button class="viewer-browse-back"><span class="viewer-round-label"></span></button>
+                        <button class="viewer-browse-arrow viewer-browse-next" aria-label="Next game">&#8250;</button>
+                    </div>
+                    <div class="viewer-players">
+                        <div class="viewer-player viewer-player-white">
+                            <span class="viewer-player-name viewer-white-name" data-player=""></span>
+                            <span class="viewer-player-clock viewer-white-clock hidden"></span>
+                            <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
+                            <span class="viewer-player-score viewer-white-score"></span>
+                        </div>
+                        <div class="viewer-player viewer-player-black">
+                            <span class="viewer-player-score viewer-black-score"></span>
+                            <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
+                            <span class="viewer-player-clock viewer-black-clock hidden"></span>
+                            <span class="viewer-player-name viewer-black-name" data-player=""></span>
+                        </div>
+                    </div>
+                    <div class="viewer-opening hidden">
+                        <span class="viewer-eco-code"></span>
+                        <span class="viewer-eco-name"></span>
+                    </div>
+                </div>
+                <div class="explorer-header hidden"></div>
+            </div>
+            <div class="viewer-layout">
+                <div class="viewer-board-col">
+                    <div class="viewer-board"></div>
+                    <div class="editor-eco hidden"></div>
+                </div>
+                <div class="eval-bar hidden">
+                    <div class="eval-bar-fill"></div>
+                    <span class="eval-bar-label eval-bar-label-bottom"></span>
+                </div>
+                <div class="viewer-side-col">
+                    <div class="viewer-moves"></div>
+                    <div class="engine-panel hidden">
+                        <div class="engine-panel-header">
+                            <div class="engine-panel-title">
+                                <button data-action="engine-pause" class="engine-pause-btn" aria-label="Pause/resume analysis" data-tooltip="Pause/Resume">${icon('play', 14)}</button>
+                                <span class="engine-name">Stockfish 18</span>
+                                <span class="engine-variant-badge"></span>
+                                <span class="engine-nps"></span>
+                            </div>
+                            <div class="engine-panel-controls">
+                                <span class="engine-depth"></span>
+                                <label class="engine-lines-label">
+                                    Lines
+                                    <select class="engine-lines-select">
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                    </select>
+                                </label>
+                                <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings" data-tooltip="Settings">${icon('settings', 14)}</button>
+                            </div>
+                        </div>
+                        <div class="engine-pv-lines"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="viewer-toolbar raised-panel hidden">
+            <div class="viewer-tool-group">
+                <button class="viewer-tool-btn viewer-comments-btn" data-action="viewer-comments" aria-label="Show/hide comments" data-tooltip="Show/hide comments (C)">${icon('comments')}<span class="tool-label">Comments</span></button>
+                <button class="viewer-tool-btn viewer-branch-btn" data-action="viewer-branch" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)">${icon('branch')}<span class="tool-label">Variations</span></button>
+                <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip')}<span class="tool-label">Flip</span></button>
+            </div>
+            <div class="viewer-toolbar-sep"></div>
+            <div class="viewer-nav-group">
+                <button data-action="viewer-start" class="viewer-nav-btn" aria-label="Go to start" data-tooltip="Start">${icon('start')}</button>
+                <button data-action="viewer-prev" data-hold class="viewer-nav-btn" aria-label="Previous move" data-tooltip="Previous move (Left)">${icon('prev')}</button>
+                <button class="viewer-nav-btn viewer-play-btn" data-action="viewer-play" aria-label="Play" data-tooltip="Play (Space)">${icon('play')}</button>
+                <button data-action="viewer-next" data-hold class="viewer-nav-btn" aria-label="Next move" data-tooltip="Next move (Right)">${icon('next')}</button>
+                <button data-action="viewer-end" class="viewer-nav-btn" aria-label="Go to end" data-tooltip="End">${icon('end')}</button>
+            </div>
+            <div class="viewer-toolbar-sep"></div>
+            <div class="viewer-tool-group viewer-tool-group-end">
+                <button class="viewer-tool-btn viewer-engine-btn" data-action="viewer-engine" aria-label="Toggle engine analysis" data-tooltip="Toggle engine analysis (A)">${icon('engine')}<span class="tool-label">Engine</span></button>
+                <div class="share-btn-wrapper">
+                    <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share / Export game" data-tooltip="Share / Export game">${icon('share')}<span class="tool-label">Share</span></button>
+                    <div class="share-popover hidden">
+                        <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
+                        <button class="share-option" data-action="share-copy-link">Copy Link</button>
+                        <button class="share-option" data-action="share-download">Download PGN</button>
+                        <button class="share-option" data-action="viewer-analysis">Analyze on Lichess</button>
+                        <button class="share-option" data-action="share-native">Share...</button>
+                    </div>
+                </div>
+                <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Game info" data-tooltip="Game info">ⓘ<span class="tool-label">Info</span></button>
+            </div>
+            <div class="overflow-btn-wrapper">
+                <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options" data-tooltip="More">${icon('overflow')}</button>
+                <div class="overflow-menu hidden">
+                    <button class="overflow-item" data-action="overflow-comments">${icon('comments')}Comments</button>
+                    <button class="overflow-item" data-action="overflow-branch">${icon('branch')}Variations</button>
+                    <button class="overflow-item" data-action="overflow-engine">${icon('engine')}Engine</button>
+                    <button class="overflow-item" data-action="overflow-analysis">${icon('search')}Analyze on Lichess</button>
+                    <button class="overflow-item" data-action="overflow-headers">${icon('headers')}Game Info</button>
+                    <div class="overflow-sep"></div>
+                    <button class="overflow-item" data-action="share-copy-pgn">${icon('copy')}Copy PGN</button>
+                    <button class="overflow-item" data-action="share-copy-link">${icon('link')}Copy Link</button>
+                    <button class="overflow-item" data-action="share-download">${icon('download')}Download PGN</button>
+                    <button class="overflow-item" data-action="share-native">${icon('share')}Share...</button>
+                </div>
+            </div>
+            </div>
+        </div>`;
+    return el;
+}
+
+function createTab() {
+    const el = buildTabDOM();
+    return {
+        el,
+        browserPanel: el.querySelector('.viewer-browser-panel'),
+        browserGames: el.querySelector('.browser-games'),
+        searchInput: el.querySelector('.browser-search-input'),
+        searchClear: el.querySelector('.browser-search-clear'),
+        autocomplete: el.querySelector('.browser-autocomplete'),
+        browserChips: el.querySelector('.browser-chips'),
+        browserFilters: el.querySelector('.browser-filters'),
+        titlePanel: el.querySelector('.browser-title-panel'),
+        browserExport: el.querySelector('.browser-export'),
+        viewerHeader: el.querySelector('.viewer-header'),
+        gameHeader: el.querySelector('.viewer-game-header'),
+        explorerHeader: el.querySelector('.explorer-header'),
+        roundLabel: el.querySelector('.viewer-round-label'),
+        browsePrev: el.querySelector('.viewer-browse-prev'),
+        browseNext: el.querySelector('.viewer-browse-next'),
+        whiteName: el.querySelector('.viewer-white-name'),
+        blackName: el.querySelector('.viewer-black-name'),
+        whiteScore: el.querySelector('.viewer-white-score'),
+        blackScore: el.querySelector('.viewer-black-score'),
+        playerWhite: el.querySelector('.viewer-player-white'),
+        playerBlack: el.querySelector('.viewer-player-black'),
+        whiteClock: el.querySelector('.viewer-white-clock'),
+        blackClock: el.querySelector('.viewer-black-clock'),
+        opening: el.querySelector('.viewer-opening'),
+        ecoCode: el.querySelector('.viewer-eco-code'),
+        ecoName: el.querySelector('.viewer-eco-name'),
+        viewerBoard: el.querySelector('.viewer-board'),
+        viewerMoves: el.querySelector('.viewer-moves'),
+        evalBar: el.querySelector('.eval-bar'),
+        editorEco: el.querySelector('.editor-eco'),
+        enginePanel: el.querySelector('.engine-panel'),
+        enginePvLines: el.querySelector('.engine-pv-lines'),
+        engineVariantBadge: el.querySelector('.engine-variant-badge'),
+        enginePauseBtn: el.querySelector('.engine-pause-btn'),
+        engineLinesSelect: el.querySelector('.engine-lines-select'),
+        engineDepth: el.querySelector('.engine-depth'),
+        engineNps: el.querySelector('.engine-nps'),
+        toolbar: el.querySelector('.viewer-toolbar'),
+        engineBtn: el.querySelector('.viewer-engine-btn'),
+        commentsBtn: el.querySelector('.viewer-comments-btn'),
+        branchBtn: el.querySelector('.viewer-branch-btn'),
+        playBtn: el.querySelector('.viewer-play-btn'),
+    };
+}
+
 export function initGamePanel(mount, { features } = {}) {
     if (features) _features = { ..._features, ...features };
+
+    _activeTab = createTab();
+
     mount.innerHTML = `
     <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true" data-manual-close>
         <div class="modal-backdrop"></div>
         ${ICON_SPRITE}
-        <div class="modal-content modal-content-viewer">
-            <button class="viewer-close" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
-            <div id="viewer-browser-panel" class="viewer-browser-panel hidden">
-                <h2 id="browser-title-panel"></h2>
-                <div class="browser-content">
-                    <div class="browser-search" id="browser-search">
-                        <div class="browser-search-wrap">
-                            <input type="text" id="browser-search-input" class="browser-search-input" placeholder="Search players..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="browser-autocomplete">
-                            <button type="button" id="browser-search-clear" class="browser-search-clear hidden" aria-label="Clear search">&times;</button>
-                            <div id="browser-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
-                        </div>
-                        <button type="button" class="browser-action-btn" data-action="browser-tournament-info" aria-label="Tournament Info" data-tooltip="Tournament Info">ⓘ</button>
-                        <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer">${icon('explore', 16)}</button>
-                        <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN">${icon('import', 16)}</button>
-                        <button type="button" id="browser-export" class="browser-action-btn" aria-label="Download PGNs" data-tooltip="Download PGNs">${icon('download', 16)}</button>
-                    </div>
-                    <div class="browser-chips hidden" id="browser-chips"></div>
-                    <div class="browser-filters hidden" id="browser-filters"></div>
-                    <div class="browser-games-wrap raised-panel"><div id="browser-games" class="browser-games"></div></div>
-                </div>
-            </div>
-            <div class="viewer-main">
-                <div id="viewer-header" class="viewer-header">
-                    <div id="viewer-game-header">
-                        <div class="viewer-browser-nav" id="viewer-nav-row">
-                            <button class="viewer-browse-arrow" id="viewer-browse-prev" aria-label="Previous game">&#8249;</button>
-                            <button class="viewer-browse-back" id="viewer-back-to-browser"><span id="viewer-round-label"></span></button>
-                            <button class="viewer-browse-arrow" id="viewer-browse-next" aria-label="Next game">&#8250;</button>
-                        </div>
-                        <div class="viewer-players">
-                            <div class="viewer-player" id="viewer-player-white">
-                                <span class="viewer-player-name" data-player="" id="viewer-white-name"></span>
-                                <span class="viewer-player-clock hidden" id="viewer-white-clock"></span>
-                                <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
-                                <span class="viewer-player-score" id="viewer-white-score"></span>
-                            </div>
-                            <div class="viewer-player" id="viewer-player-black">
-                                <span class="viewer-player-score" id="viewer-black-score"></span>
-                                <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
-                                <span class="viewer-player-clock hidden" id="viewer-black-clock"></span>
-                                <span class="viewer-player-name" data-player="" id="viewer-black-name"></span>
-                            </div>
-                        </div>
-                        <div class="viewer-opening hidden" id="viewer-opening">
-                            <span class="viewer-eco-code" id="viewer-eco-code"></span>
-                            <span id="viewer-eco-name"></span>
-                        </div>
-                    </div>
-                    <div id="explorer-header" class="hidden"></div>
-                </div>
-                <div class="viewer-layout">
-                    <div class="viewer-board-col">
-                        <div id="viewer-board" class="viewer-board"></div>
-                        <div id="editor-eco" class="editor-eco hidden"></div>
-                    </div>
-                    <div id="eval-bar" class="eval-bar hidden">
-                        <div class="eval-bar-fill"></div>
-                        <span class="eval-bar-label eval-bar-label-bottom"></span>
-                    </div>
-                    <div class="viewer-side-col">
-                        <div id="viewer-moves" class="viewer-moves"></div>
-                        <div id="engine-panel" class="engine-panel hidden">
-                            <div class="engine-panel-header">
-                                <div class="engine-panel-title">
-                                    <button data-action="engine-pause" id="engine-pause-btn" class="engine-pause-btn" aria-label="Pause/resume analysis" data-tooltip="Pause/Resume">${icon('play', 14)}</button>
-                                    <span class="engine-name">Stockfish 18</span>
-                                    <span class="engine-variant-badge" id="engine-variant-badge"></span>
-                                    <span class="engine-nps" id="engine-nps"></span>
-                                </div>
-                                <div class="engine-panel-controls">
-                                    <span class="engine-depth" id="engine-depth"></span>
-                                    <label class="engine-lines-label">
-                                        Lines
-                                        <select id="engine-lines-select" class="engine-lines-select">
-                                            <option value="1">1</option>
-                                            <option value="2">2</option>
-                                            <option value="3">3</option>
-                                            <option value="4">4</option>
-                                            <option value="5">5</option>
-                                        </select>
-                                    </label>
-                                    <button data-action="engine-settings" class="engine-settings-btn" aria-label="Engine settings" data-tooltip="Settings">${icon('settings', 14)}</button>
-                                </div>
-                            </div>
-                            <div class="engine-pv-lines" id="engine-pv-lines"></div>
-                        </div>
-                    </div>
-                </div>
-                <div id="panel-toolbar" class="viewer-toolbar raised-panel hidden">
-                <div class="viewer-tool-group">
-                    <button id="viewer-comments" data-action="viewer-comments" class="viewer-tool-btn" aria-label="Show/hide comments" data-tooltip="Show/hide comments (C)">${icon('comments')}<span class="tool-label">Comments</span></button>
-                    <button id="viewer-branch" data-action="viewer-branch" class="viewer-tool-btn" aria-label="Toggle branch exploration" data-tooltip="Explore lines (B)">${icon('branch')}<span class="tool-label">Variations</span></button>
-                    <button data-action="viewer-flip" class="viewer-tool-btn" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip')}<span class="tool-label">Flip</span></button>
-                </div>
-                <div class="viewer-toolbar-sep"></div>
-                <div class="viewer-nav-group">
-                    <button data-action="viewer-start" class="viewer-nav-btn" aria-label="Go to start" data-tooltip="Start">${icon('start')}</button>
-                    <button data-action="viewer-prev" data-hold class="viewer-nav-btn" aria-label="Previous move" data-tooltip="Previous move (Left)">${icon('prev')}</button>
-                    <button id="viewer-play" data-action="viewer-play" class="viewer-nav-btn" aria-label="Play" data-tooltip="Play (Space)">${icon('play')}</button>
-                    <button data-action="viewer-next" data-hold class="viewer-nav-btn" aria-label="Next move" data-tooltip="Next move (Right)">${icon('next')}</button>
-                    <button data-action="viewer-end" class="viewer-nav-btn" aria-label="Go to end" data-tooltip="End">${icon('end')}</button>
-                </div>
-                <div class="viewer-toolbar-sep"></div>
-                <div class="viewer-tool-group viewer-tool-group-end">
-                    <button id="viewer-engine" data-action="viewer-engine" class="viewer-tool-btn" aria-label="Toggle engine analysis" data-tooltip="Toggle engine analysis (A)">${icon('engine')}<span class="tool-label">Engine</span></button>
-                    <div class="share-btn-wrapper">
-                        <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share / Export game" data-tooltip="Share / Export game">${icon('share')}<span class="tool-label">Share</span></button>
-                        <div id="share-popover" class="share-popover hidden">
-                            <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
-                            <button class="share-option" data-action="share-copy-link">Copy Link</button>
-                            <button class="share-option" data-action="share-download">Download PGN</button>
-                            <button class="share-option" data-action="viewer-analysis">Analyze on Lichess</button>
-                            <button class="share-option" data-action="share-native">Share...</button>
-                        </div>
-                    </div>
-                    <button data-action="editor-headers" class="viewer-tool-btn" aria-label="Game info" data-tooltip="Game info">ⓘ<span class="tool-label">Info</span></button>
-                </div>
-                <div class="overflow-btn-wrapper">
-                    <button data-action="viewer-overflow" class="viewer-nav-btn viewer-overflow-btn" aria-label="More options" data-tooltip="More">${icon('overflow')}</button>
-                    <div id="overflow-menu" class="overflow-menu hidden">
-                        <button class="overflow-item" data-action="overflow-comments">${icon('comments')}Comments</button>
-                        <button class="overflow-item" data-action="overflow-branch">${icon('branch')}Variations</button>
-                        <button class="overflow-item" data-action="overflow-engine">${icon('engine')}Engine</button>
-                        <button class="overflow-item" data-action="overflow-analysis">${icon('search')}Analyze on Lichess</button>
-                        <button class="overflow-item" data-action="overflow-headers">${icon('headers')}Game Info</button>
-                        <div class="overflow-sep"></div>
-                        <button class="overflow-item" data-action="share-copy-pgn">${icon('copy')}Copy PGN</button>
-                        <button class="overflow-item" data-action="share-copy-link">${icon('link')}Copy Link</button>
-                        <button class="overflow-item" data-action="share-download">${icon('download')}Download PGN</button>
-                        <button class="overflow-item" data-action="share-native">${icon('share')}Share...</button>
-                    </div>
-                </div>
-                </div>
-            </div>
-            <!-- Panel overlays -->
+        </div>`;
+
+    // Insert tab content before the closing </div> of the modal
+    const modal = mount.querySelector('#viewer-modal');
+    modal.appendChild(_activeTab.el);
+
+    // Append shared dialogs
+    modal.insertAdjacentHTML(
+        'beforeend',
+        `
+            <!-- Panel overlays (shared, not per-tab) -->
             <div id="board-promotion" class="board-promotion hidden">
                 <button class="promo-btn" data-piece="q"><img alt="Queen"></button>
                 <button class="promo-btn" data-piece="r"><img alt="Rook"></button>
@@ -309,7 +379,6 @@ export function initGamePanel(mount, { features } = {}) {
                     </div>
                 </div>
             </div>
-            </div>
         <!-- NAG picker popup (outside modal-content to avoid overflow clipping) -->
         <div id="editor-nag-picker" class="editor-nag-picker hidden">
             <div class="nag-section">
@@ -373,19 +442,16 @@ export function initGamePanel(mount, { features } = {}) {
             <button class="ctx-item" data-ctx-action="delete">Delete from here</button>
             <button class="ctx-item ctx-mainline" data-ctx-action="mainline">Make mainline</button>
         </div>
-    </div>
-    </div>`;
+    `,
+    );
 
     // Wire browser listeners once (scaffold is now permanent)
-    wireBrowserListeners(document.getElementById('viewer-browser-panel'));
+    wireBrowserListeners(_activeTab.browserPanel);
 
     onModalClose('viewer-modal', () => {
         games.closeBrowser();
-        const panelEl = document.getElementById('viewer-browser-panel');
-        if (panelEl) {
-            panelEl.classList.add('hidden');
-            panelEl.closest('.modal-content-viewer')?.classList.remove('has-browser');
-        }
+        _activeTab.browserPanel.classList.add('hidden');
+        _activeTab.el.classList.remove('has-browser');
     });
 }
 
@@ -396,7 +462,7 @@ const isCombinedWidth = () => combinedWidthQuery.matches;
 
 // Re-evaluate layout when crossing the mobile/desktop breakpoint
 combinedWidthQuery.addEventListener('change', () => {
-    const modal = document.querySelector('.modal-content-viewer');
+    const modal = _activeTab.el;
     if (!modal || modal.closest('.modal.hidden')) return;
     updateLayout();
     board.resize();
@@ -407,7 +473,7 @@ combinedWidthQuery.addEventListener('change', () => {
 
 // Mobile view toggle: browser-panel vs viewer-main
 function showBrowser() {
-    const modal = document.querySelector('.modal-content-viewer');
+    const modal = _activeTab.el;
     if (modal && !isCombinedWidth()) {
         modal.classList.add('browser-only');
         requestAnimationFrame(() => {
@@ -416,7 +482,7 @@ function showBrowser() {
     }
 }
 function showViewer() {
-    const modal = document.querySelector('.modal-content-viewer');
+    const modal = _activeTab.el;
     if (modal) modal.classList.remove('browser-only');
 }
 
@@ -457,7 +523,7 @@ pgn.onChange((state) => {
         renderPgnMoveList();
     }
     updatePlayButton(state.isPlaying);
-    const headerEl = document.getElementById('viewer-header');
+    const headerEl = _activeTab.viewerHeader;
     if (headerEl && _viewMode === 'game') updateGameHeader(_panel.meta);
 });
 
@@ -580,9 +646,9 @@ export function toggleEngine() {
     if (_engineActive) {
         _engineActive = false;
         engine.stopAnalysis();
-        document.getElementById('engine-panel')?.classList.add('hidden');
-        document.getElementById('eval-bar')?.classList.add('hidden');
-        document.getElementById('viewer-engine')?.classList.remove('active');
+        _activeTab.enginePanel?.classList.add('hidden');
+        _activeTab.evalBar?.classList.add('hidden');
+        _activeTab.engineBtn?.classList.remove('active');
         positionEnginePanel();
         return;
     }
@@ -608,14 +674,14 @@ export function confirmEngineChoice(variant) {
 }
 
 function startEngine(variant) {
-    document.getElementById('viewer-engine')?.classList.add('active');
+    _activeTab.engineBtn?.classList.add('active');
 
     // Show loading state immediately
-    const panel = document.getElementById('engine-panel');
-    const pvContainer = document.getElementById('engine-pv-lines');
+    const panel = _activeTab.enginePanel;
+    const pvContainer = _activeTab.enginePvLines;
     if (panel) panel.classList.remove('hidden');
     if (pvContainer) pvContainer.innerHTML = '<div class="engine-pv-loading">Loading Stockfish\u2026</div>';
-    const badge = document.getElementById('engine-variant-badge');
+    const badge = _activeTab.engineVariantBadge;
     if (badge) badge.textContent = variant === 'full' ? 'Full' : 'Lite';
     positionEnginePanel();
 
@@ -626,7 +692,7 @@ function startEngine(variant) {
         })
         .catch((err) => {
             console.error('Engine failed to load:', err);
-            document.getElementById('viewer-engine')?.classList.remove('active');
+            _activeTab.engineBtn?.classList.remove('active');
             if (panel) panel.classList.add('hidden');
             showToast('Engine failed to load', 'error');
         });
@@ -634,10 +700,10 @@ function startEngine(variant) {
 
 /** Move the engine panel to the browser column on tablet, or back to side-col. */
 function positionEnginePanel() {
-    const panel = document.getElementById('engine-panel');
+    const panel = _activeTab.enginePanel;
     if (!panel) return;
-    const browserPanel = document.getElementById('viewer-browser-panel');
-    const sideCol = document.querySelector('.viewer-side-col');
+    const browserPanel = _activeTab.browserPanel;
+    const sideCol = _activeTab.el.querySelector('.viewer-side-col');
     const hasBrowser = browserPanel && !browserPanel.classList.contains('hidden');
     const isTablet = window.matchMedia('(min-width: 1000px) and (max-width: 1599px)').matches;
 
@@ -652,21 +718,21 @@ function positionEnginePanel() {
 
 function activateEngine() {
     _engineActive = true;
-    const panel = document.getElementById('engine-panel');
+    const panel = _activeTab.enginePanel;
     panel?.classList.remove('hidden');
-    document.getElementById('eval-bar')?.classList.remove('hidden');
-    document.getElementById('viewer-engine')?.classList.add('active');
+    _activeTab.evalBar?.classList.remove('hidden');
+    _activeTab.engineBtn?.classList.add('active');
     positionEnginePanel();
 
     // Set variant badge
     _enginePaused = false;
-    const badge = document.getElementById('engine-variant-badge');
+    const badge = _activeTab.engineVariantBadge;
     if (badge) badge.textContent = engine.getVariant() === 'full' ? 'Full' : 'Lite';
-    const pauseBtn = document.getElementById('engine-pause-btn');
+    const pauseBtn = _activeTab.enginePauseBtn;
     if (pauseBtn) pauseBtn.innerHTML = icon('pause', 14);
 
     // Wire lines selector
-    const linesSelect = document.getElementById('engine-lines-select');
+    const linesSelect = _activeTab.engineLinesSelect;
     if (linesSelect) {
         linesSelect.value = String(_engineNumLines);
         linesSelect.onchange = () => {
@@ -678,7 +744,7 @@ function activateEngine() {
     }
 
     // Wire PV click-to-insert
-    const pvContainer = document.getElementById('engine-pv-lines');
+    const pvContainer = _activeTab.enginePvLines;
     if (pvContainer) pvContainer.onclick = handlePvClick;
 
     const fen = pgn.getCurrentFen();
@@ -688,7 +754,7 @@ function activateEngine() {
 export function toggleEnginePause() {
     if (!_engineActive || !engine.isReady()) return;
     _enginePaused = !_enginePaused;
-    const btn = document.getElementById('engine-pause-btn');
+    const btn = _activeTab.enginePauseBtn;
     if (btn) {
         btn.innerHTML = _enginePaused ? icon('play', 14) : icon('pause', 14);
     }
@@ -718,8 +784,8 @@ function analyzeCurrentPosition(fen) {
 
 function renderEnginePanel(fen) {
     // Depth + speed display
-    const depthEl = document.getElementById('engine-depth');
-    const npsEl = document.getElementById('engine-nps');
+    const depthEl = _activeTab.engineDepth;
+    const npsEl = _activeTab.engineNps;
     const best = _pvInfos[0];
     if (depthEl && best) {
         const target = _engineInfinite ? '\u221E' : _engineDepth;
@@ -739,7 +805,7 @@ function renderEnginePanel(fen) {
     renderEvalBar(best, fen);
 
     // PV lines
-    const container = document.getElementById('engine-pv-lines');
+    const container = _activeTab.enginePvLines;
     if (!container) return;
 
     const whiteToMove = !fen || fen.split(' ')[1] !== 'b';
@@ -789,7 +855,7 @@ function renderEnginePanel(fen) {
 }
 
 function renderEvalBar(info, fen) {
-    const bar = document.getElementById('eval-bar');
+    const bar = _activeTab.evalBar;
     if (!bar) return;
     const fill = bar.querySelector('.eval-bar-fill');
     const label = bar.querySelector('.eval-bar-label');
@@ -936,7 +1002,7 @@ export function openPanel() {
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
     if (!alreadyOpen) openModal('viewer-modal');
-    const panelEl = document.getElementById('viewer-browser-panel');
+    const panelEl = _activeTab.browserPanel;
     if (panelEl && panelEl.classList.contains('hidden')) {
         panelEl.classList.remove('hidden');
         panelEl.closest('.modal-content-viewer')?.classList.add('has-browser');
@@ -1008,9 +1074,9 @@ function forceCloseGamePanel() {
     if (_engineActive) {
         _engineActive = false;
         engine.stopAnalysis();
-        document.getElementById('engine-panel')?.classList.add('hidden');
-        document.getElementById('eval-bar')?.classList.add('hidden');
-        document.getElementById('viewer-engine')?.classList.remove('active');
+        _activeTab.enginePanel?.classList.add('hidden');
+        _activeTab.evalBar?.classList.add('hidden');
+        _activeTab.engineBtn?.classList.remove('active');
     }
     pgn.destroyGame();
     closeModal('viewer-modal');
@@ -1018,14 +1084,14 @@ function forceCloseGamePanel() {
 }
 
 function setToolbarButtons() {
-    document.getElementById('panel-toolbar')?.classList.toggle('hidden', _viewMode !== 'game');
-    const submitBtn = document.getElementById('viewer-submit');
+    _activeTab.toolbar?.classList.toggle('hidden', _viewMode !== 'game');
+    const submitBtn = _activeTab.el.querySelector('.viewer-submit');
     if (submitBtn) submitBtn.classList.toggle('hidden', !SUBMISSIONS_ENABLED || !_pendingSubmission);
 }
 
 function ensureBoard() {
-    if (!document.querySelector('#viewer-board .cg-wrap')) {
-        board.createBoard('viewer-board', { onMove: onBoardMove, onDraw: onBoardDraw, orientation: 'white' });
+    if (!_activeTab.viewerBoard.querySelector('.cg-wrap')) {
+        board.createBoard(_activeTab.viewerBoard, { onMove: onBoardMove, onDraw: onBoardDraw, orientation: 'white' });
     }
 }
 
@@ -1035,8 +1101,8 @@ function loadGame(pgnText, orientation = 'white') {
     showViewer();
     updateLayout();
     setToolbarButtons();
-    document.getElementById('viewer-game-header')?.classList.remove('hidden');
-    document.getElementById('explorer-header')?.classList.add('hidden');
+    _activeTab.gameHeader?.classList.remove('hidden');
+    _activeTab.explorerHeader?.classList.add('hidden');
 
     pgn.initGame(pgnText, { onPositionChange });
     updateGameHeader(_panel.meta);
@@ -1054,8 +1120,8 @@ function loadExplorer({ restoreMoves } = {}) {
     showViewer();
     updateLayout();
     setToolbarButtons();
-    document.getElementById('viewer-game-header')?.classList.add('hidden');
-    document.getElementById('explorer-header')?.classList.remove('hidden');
+    _activeTab.gameHeader?.classList.add('hidden');
+    _activeTab.explorerHeader?.classList.remove('hidden');
 
     board.setOrientation(games.getFilter('color') === 'black' ? 'black' : 'white');
     board.highlightSquares(null, null);
@@ -1072,7 +1138,7 @@ function loadExplorer({ restoreMoves } = {}) {
 
 function updateLayout() {
     // On desktop, both panels are always visible — never use browser-only
-    const modal = document.querySelector('.modal-content-viewer');
+    const modal = _activeTab.el;
     if (isCombinedWidth()) modal.classList.remove('browser-only');
 }
 
@@ -1178,8 +1244,7 @@ function showConfirm(message, confirmLabel = 'Delete') {
                 <button class="confirm-btn confirm-btn-secondary confirm-no">Cancel</button>
             </div>
         </div>`;
-        const container =
-            document.getElementById('viewer-modal')?.querySelector('.modal-content-viewer') || document.body;
+        const container = _activeTab.el || document.body;
         container.appendChild(overlay);
         const close = (result) => {
             overlay.remove();
@@ -1217,7 +1282,7 @@ function hideContextMenu() {
 let _editingComment = false; // suppress re-render while editing
 
 function startCommentEdit(nodeId) {
-    const container = document.getElementById('viewer-moves');
+    const container = _activeTab.viewerMoves;
     if (!container) return;
 
     // Find existing comment span or the move span to anchor after
@@ -1272,7 +1337,7 @@ function startCommentEdit(nodeId) {
 }
 
 function wireContextMenu() {
-    const container = document.getElementById('viewer-moves');
+    const container = _activeTab.viewerMoves;
 
     // Right-click (desktop)
     container.addEventListener('contextmenu', (e) => {
@@ -1566,10 +1631,10 @@ export function handlePanelKeydown(e) {
         board.flip();
     } else if (e.key === 'c' || e.key === 'C') {
         const hidden = pgn.toggleComments();
-        document.getElementById('viewer-comments')?.classList.toggle('active', !hidden);
+        _activeTab.commentsBtn?.classList.toggle('active', !hidden);
     } else if (e.key === 'b' || e.key === 'B') {
         const active = pgn.toggleBranchMode();
-        document.getElementById('viewer-branch')?.classList.toggle('active', active);
+        _activeTab.branchBtn?.classList.toggle('active', active);
     } else if (e.key === 'a' || e.key === 'A') {
         toggleEngine();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1609,13 +1674,13 @@ function showBranchPopover(childIds) {
         })
         .join('');
 
-    const modal = document.querySelector('.modal-content-viewer');
+    const modal = _activeTab.el;
     modal.insertAdjacentHTML(
         'beforeend',
-        `<div class="branch-overlay" id="branch-popover"><div class="branch-popover">${btns}</div></div>`,
+        `<div class="branch-overlay"><div class="branch-popover">${btns}</div></div>`,
     );
 
-    document.getElementById('branch-popover').addEventListener('click', (e) => {
+    _activeTab.el.querySelector('.branch-overlay').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-node-id]');
         if (btn) {
             dismissBranchPopover();
@@ -1625,7 +1690,7 @@ function showBranchPopover(childIds) {
 }
 
 function dismissBranchPopover() {
-    document.getElementById('branch-popover')?.remove();
+    _activeTab.el.querySelector('.branch-overlay')?.remove();
     _branchChoices = [];
     _branchSelectedIdx = 0;
 }
@@ -1639,16 +1704,16 @@ function branchPopoverNavigate(action) {
     }
     const delta = action === 'up' ? -1 : 1;
     _branchSelectedIdx = (_branchSelectedIdx + delta + _branchChoices.length) % _branchChoices.length;
-    document.querySelectorAll('.branch-option').forEach((btn, i) => {
+    _activeTab.el.querySelectorAll('.branch-option').forEach((btn, i) => {
         btn.classList.toggle('branch-selected', i === _branchSelectedIdx);
     });
 }
 
 function updateExplorerSelection() {
-    document.querySelectorAll('.explorer-row[data-explorer-san]').forEach((btn, i) => {
+    _activeTab.el.querySelectorAll('.explorer-row[data-explorer-san]').forEach((btn, i) => {
         btn.classList.toggle('explorer-row-selected', i === _explorerSelectedIdx);
     });
-    const selected = document.querySelector('.explorer-row-selected');
+    const selected = _activeTab.el.querySelector('.explorer-row-selected');
     if (selected) selected.scrollIntoView({ block: 'nearest' });
 }
 
@@ -1670,31 +1735,31 @@ function updateGameHeader(meta) {
         .filter(Boolean)
         .join(' \u00B7 ');
 
-    document.getElementById('viewer-round-label').textContent = roundBoardLabel;
-    document.getElementById('viewer-browse-prev').classList.toggle('hidden', !meta.onPrev);
-    document.getElementById('viewer-browse-next').classList.toggle('hidden', !meta.onNext);
+    _activeTab.roundLabel.textContent = roundBoardLabel;
+    _activeTab.browsePrev.classList.toggle('hidden', !meta.onPrev);
+    _activeTab.browseNext.classList.toggle('hidden', !meta.onNext);
 
     // Players
-    const whiteNameEl = document.getElementById('viewer-white-name');
-    const blackNameEl = document.getElementById('viewer-black-name');
+    const whiteNameEl = _activeTab.whiteName;
+    const blackNameEl = _activeTab.blackName;
     whiteNameEl.innerHTML = white + (whiteElo ? ` (${whiteElo})` : ' <span class="viewer-unrated">(unr.)</span>');
     whiteNameEl.dataset.player = white;
     blackNameEl.innerHTML = black + (blackElo ? ` (${blackElo})` : ' <span class="viewer-unrated">(unr.)</span>');
     blackNameEl.dataset.player = black;
-    document.getElementById('viewer-white-score').textContent = resultSymbol(result, 'white');
-    document.getElementById('viewer-black-score').textContent = resultSymbol(result, 'black');
-    document.getElementById('viewer-player-white').className = `viewer-player ${resultClass(result, 'white')}`;
-    document.getElementById('viewer-player-black').className = `viewer-player ${resultClass(result, 'black')}`;
+    _activeTab.whiteScore.textContent = resultSymbol(result, 'white');
+    _activeTab.blackScore.textContent = resultSymbol(result, 'black');
+    _activeTab.playerWhite.className = `viewer-player ${resultClass(result, 'white')}`;
+    _activeTab.playerBlack.className = `viewer-player ${resultClass(result, 'black')}`;
 
     // ECO / opening
-    const openingEl = document.getElementById('viewer-opening');
+    const openingEl = _activeTab.opening;
     if (meta.eco && meta.openingName) {
-        document.getElementById('viewer-eco-code').textContent = meta.eco;
-        document.getElementById('viewer-eco-name').textContent = meta.openingName;
+        _activeTab.ecoCode.textContent = meta.eco;
+        _activeTab.ecoName.textContent = meta.openingName;
         openingEl.classList.remove('hidden');
     } else if (ecoCode) {
-        document.getElementById('viewer-eco-code').textContent = ecoCode;
-        document.getElementById('viewer-eco-name').textContent = '';
+        _activeTab.ecoCode.textContent = ecoCode;
+        _activeTab.ecoName.textContent = '';
         openingEl.classList.remove('hidden');
     } else {
         openingEl.classList.add('hidden');
@@ -1828,8 +1893,8 @@ function setClockDisplay(el, text, seconds, active) {
 function updateClocks() {
     const nodes = pgn.getNodes();
     const nodeId = pgn.getCurrentNodeId();
-    const wEl = document.getElementById('viewer-white-clock');
-    const bEl = document.getElementById('viewer-black-clock');
+    const wEl = _activeTab.whiteClock;
+    const bEl = _activeTab.blackClock;
     if (!wEl || !bEl) return;
 
     // Determine whose turn it is (the side that HASN'T just moved)
@@ -2156,7 +2221,7 @@ function highlightMatch(name, query) {
 // ─── 6. DOM Rendering ──────────────────────────────────────────────
 
 function renderExplorerHeader(state) {
-    const el = document.getElementById('explorer-header');
+    const el = _activeTab.explorerHeader;
     const moveHistory = state.explorerMoveHistory;
 
     // Move history (clickable plies)
@@ -2193,7 +2258,7 @@ function renderExplorerHeader(state) {
 }
 
 function renderPgnMoveList() {
-    const container = document.getElementById('viewer-moves');
+    const container = _activeTab.viewerMoves;
     if (!_pgnState) return;
 
     const { nodes, currentNodeId, commentsHidden } = _pgnState;
@@ -2220,7 +2285,7 @@ function renderPgnMoveList() {
 }
 
 function renderExplorerMoveList() {
-    const container = document.getElementById('viewer-moves');
+    const container = _activeTab.viewerMoves;
     const stats = games.getExplorerStats();
     container.innerHTML = renderExplorerMoveListHtml(stats, games.getExplorerMoves());
     _explorerSelectedIdx = stats?.moves?.length ? 0 : -1;
@@ -2228,7 +2293,7 @@ function renderExplorerMoveList() {
 }
 
 function updatePlayButton(isPlaying) {
-    const btn = document.getElementById('viewer-play');
+    const btn = _activeTab.playBtn;
     const pauseSvg = icon('pause');
     const playSvg = icon('play');
     btn.innerHTML = isPlaying ? pauseSvg : playSvg;
@@ -2250,8 +2315,8 @@ function highlightActiveGame(gameId) {
         }
     }
 
-    const viewport = document.getElementById('browser-games-viewport');
-    const container = viewport || document.getElementById('browser-games');
+    const viewport = _activeTab.el.querySelector('.browser-games-viewport');
+    const container = viewport || _activeTab.browserGames;
     if (!container) return;
     container.querySelectorAll('.browser-game-row').forEach((row) => {
         row.classList.toggle('active', row.dataset.gameId === gameId);
@@ -2259,12 +2324,12 @@ function highlightActiveGame(gameId) {
 }
 
 function renderBrowserPanel(state) {
-    const panelEl = document.getElementById('viewer-browser-panel');
+    const panelEl = _activeTab.browserPanel;
     if (!panelEl.offsetHeight) return;
 
     // Sync search bar to player mode state
-    const searchInput = document.getElementById('browser-search-input');
-    const clearBtn = document.getElementById('browser-search-clear');
+    const searchInput = _activeTab.searchInput;
+    const clearBtn = _activeTab.searchClear;
     if (searchInput) {
         if (games.hasPlayer()) {
             searchInput.value = games.getPlayer() || '';
@@ -2283,7 +2348,7 @@ function renderBrowserPanel(state) {
 }
 
 function renderBrowserTitle(panelEl, state) {
-    const titleEl = panelEl.querySelector('#browser-title-panel');
+    const titleEl = panelEl.querySelector('.browser-title-panel');
 
     if (games.hasPlayer()) {
         titleEl.textContent = `${games.getPlayer()}'s Games`;
@@ -2291,7 +2356,7 @@ function renderBrowserTitle(panelEl, state) {
     }
 
     // Don't clobber existing server dropdown (avoids re-render flicker on every onChange)
-    const existingSelect = titleEl.querySelector('#browser-title-select');
+    const existingSelect = titleEl.querySelector('.browser-title-select');
     if (existingSelect && existingSelect.dataset.mode === 'server' && !games.getEvents()) return;
 
     // Multiple events: dropdown with "All Events (N games)" default
@@ -2301,8 +2366,8 @@ function renderBrowserTitle(panelEl, state) {
         const options = localEvents
             .map((e) => `<option value="${e}"${state.event === e ? ' selected' : ''}>${e}</option>`)
             .join('');
-        titleEl.innerHTML = `<select id="browser-title-select" class="browser-title-select" data-mode="local"><option value="">${allLabel}</option>${options}</select>`;
-        titleEl.querySelector('#browser-title-select').addEventListener('change', (e) => {
+        titleEl.innerHTML = `<select class="browser-title-select" data-mode="local"><option value="">${allLabel}</option>${options}</select>`;
+        titleEl.querySelector('.browser-title-select').addEventListener('change', (e) => {
             games.switchDataSource(e.target.value);
         });
         return;
@@ -2323,14 +2388,14 @@ function renderBrowserTitle(panelEl, state) {
         )
         .join('');
 
-    titleEl.innerHTML = `<select id="browser-title-select" class="browser-title-select" data-mode="server">${options}</select>`;
-    titleEl.querySelector('#browser-title-select').addEventListener('change', (e) => {
+    titleEl.innerHTML = `<select class="browser-title-select" data-mode="server">${options}</select>`;
+    titleEl.querySelector('.browser-title-select').addEventListener('change', (e) => {
         games.switchDataSource(e.target.value, slug, { onSwitch: switchTournament });
     });
 }
 
 function renderBrowserChips(panelEl, state) {
-    const container = panelEl.querySelector('#browser-chips');
+    const container = panelEl.querySelector('.browser-chips');
 
     if (!games.hasPlayer()) {
         container.classList.add('hidden');
@@ -2359,7 +2424,7 @@ function renderBrowserChips(panelEl, state) {
 }
 
 function renderBrowserFilters(panelEl, state) {
-    const container = panelEl.querySelector('#browser-filters');
+    const container = panelEl.querySelector('.browser-filters');
     const roundNumbers = games.getRoundNumbers();
     const sectionList = games.getSectionList();
     const hasMultipleEvents = games.getEvents() != null;
@@ -2374,7 +2439,7 @@ function renderBrowserFilters(panelEl, state) {
 
     let html = '';
     if (showRounds) {
-        html += '<select class="browser-round-select" id="browser-round-select">';
+        html += '<select class="browser-round-select">';
         for (const r of roundNumbers) {
             const selected = r === state.round ? ' selected' : '';
             const label = window.innerWidth > 600 ? `Round ${r}` : `R${r}`;
@@ -2406,7 +2471,7 @@ const _vlist = {
 const VLIST_BUFFER = 10;
 
 function renderBrowserGameList(panelEl, state) {
-    const gamesEl = panelEl.querySelector('#browser-games');
+    const gamesEl = panelEl.querySelector('.browser-games');
     _vlist.scrollEl = gamesEl;
 
     const hasGames = state.groupedGames.some((g) => g.games.length > 0);
@@ -2447,7 +2512,7 @@ function renderBrowserGameList(panelEl, state) {
 
     const totalH = items.length * _vlist.rowH;
     gamesEl.style.position = 'relative';
-    gamesEl.innerHTML = `<div id="browser-games-spacer" style="height:${totalH}px;pointer-events:none"></div><div id="browser-games-viewport" style="position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:0.2rem"></div>`;
+    gamesEl.innerHTML = `<div class="browser-games-spacer" style="height:${totalH}px;pointer-events:none"></div><div class="browser-games-viewport" style="position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:0.2rem"></div>`;
 
     if (!_vlist.wired) {
         _vlist.wired = true;
@@ -2487,7 +2552,7 @@ function renderVisibleRows() {
         }
     }
 
-    const viewport = scrollEl.querySelector('#browser-games-viewport');
+    const viewport = scrollEl.querySelector('.browser-games-viewport');
     if (viewport) {
         viewport.style.top = startIdx * rowH + 'px';
         viewport.innerHTML = html;
@@ -2506,10 +2571,10 @@ function wireViewerHeader() {
 
     wireContextMenu();
 
-    const headerEl = document.getElementById('viewer-header');
+    const headerEl = _activeTab.viewerHeader;
 
     headerEl.addEventListener('click', (e) => {
-        if (e.target.closest('#viewer-filter-link') || e.target.closest('#viewer-back-to-browser')) {
+        if (e.target.closest('.viewer-filter-link') || e.target.closest('.viewer-browse-back')) {
             if (!isCombinedWidth()) {
                 showBrowser();
             } else {
@@ -2517,17 +2582,17 @@ function wireViewerHeader() {
             }
             return;
         }
-        if (e.target.closest('#viewer-filter-clear')) {
+        if (e.target.closest('.viewer-filter-clear')) {
             games.clearFilter();
-            const chip = document.querySelector('.viewer-filter-chip');
+            const chip = _activeTab.el.querySelector('.viewer-filter-chip');
             if (chip) chip.remove();
             return;
         }
-        if (e.target.closest('#viewer-browse-prev')) {
+        if (e.target.closest('.viewer-browse-prev')) {
             _panel.onPrev?.();
             return;
         }
-        if (e.target.closest('#viewer-browse-next')) {
+        if (e.target.closest('.viewer-browse-next')) {
             _panel.onNext?.();
             return;
         }
@@ -2544,7 +2609,7 @@ function wireViewerHeader() {
     });
 
     // Explorer header click delegation (ply breadcrumbs)
-    document.getElementById('explorer-header')?.addEventListener('click', (e) => {
+    _activeTab.explorerHeader?.addEventListener('click', (e) => {
         const plyEl = e.target.closest('[data-ply]');
         if (plyEl) {
             const ply = parseInt(plyEl.dataset.ply, 10);
@@ -2553,7 +2618,7 @@ function wireViewerHeader() {
     });
 
     // Move list click delegation (PGN moves, variation toggles, explorer moves)
-    const movesEl = document.getElementById('viewer-moves');
+    const movesEl = _activeTab.viewerMoves;
     movesEl?.addEventListener('click', (e) => {
         const moveEl = e.target.closest('[data-node-id]');
         if (moveEl) {
@@ -2583,9 +2648,9 @@ function wireBrowserListeners(panelEl) {
     _browserListenerAC = new AbortController();
     const signal = _browserListenerAC.signal;
 
-    const searchInput = panelEl.querySelector('#browser-search-input');
-    const autocomplete = panelEl.querySelector('#browser-autocomplete');
-    const clearBtn = panelEl.querySelector('#browser-search-clear');
+    const searchInput = panelEl.querySelector('.browser-search-input');
+    const autocomplete = panelEl.querySelector('.browser-autocomplete');
+    const clearBtn = panelEl.querySelector('.browser-search-clear');
 
     searchInput?.addEventListener(
         'input',
@@ -2594,14 +2659,14 @@ function wireBrowserListeners(panelEl) {
             if (query.length === 0) {
                 autocomplete.classList.add('hidden');
                 searchInput.setAttribute('aria-expanded', 'false');
-                panelEl.querySelector('#browser-filters')?.classList.remove('hidden');
+                panelEl.querySelector('.browser-filters')?.classList.remove('hidden');
                 if (games.hasPlayer()) {
                     games.clearPlayerMode();
                     clearBtn.classList.add('hidden');
                 }
                 return;
             }
-            panelEl.querySelector('#browser-filters')?.classList.add('hidden');
+            panelEl.querySelector('.browser-filters')?.classList.add('hidden');
             const matches = games.searchPlayers(query);
             if (matches.length === 0) {
                 autocomplete.innerHTML = '<div class="browser-ac-empty">No players found</div>';
@@ -2696,7 +2761,7 @@ function wireBrowserListeners(panelEl) {
     panelEl.addEventListener(
         'click',
         (e) => {
-            if (!e.target.closest('#browser-search')) {
+            if (!e.target.closest('.browser-search')) {
                 autocomplete?.classList.add('hidden');
                 searchInput?.setAttribute('aria-expanded', 'false');
             }
@@ -2750,7 +2815,7 @@ function wireBrowserListeners(panelEl) {
     panelEl.addEventListener(
         'change',
         (e) => {
-            if (e.target.id === 'browser-round-select') {
+            if (e.target.classList.contains('browser-round-select')) {
                 games.setFilter('round', parseInt(e.target.value, 10));
             }
             if (e.target.dataset?.chip === 'tournament-select') {
