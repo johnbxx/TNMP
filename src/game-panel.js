@@ -14,6 +14,7 @@ import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn, pgnToGameObject } from './pgn-parser.js';
 import { formatName, resultClass, resultSymbol, scorePercent } from './utils.js';
 import { CONFIG } from './config.js';
+import { refreshScheme } from './style.js';
 import { showToast } from './toast.js';
 import { classifyFen, loadEcoData } from './eco.js';
 import * as games from './games.js';
@@ -58,12 +59,20 @@ function icon(name, size) {
 let _features = { playerProfiles: true, globalPlayerSearch: true, import: true, localEngine: true, explorer: true };
 
 let _activeTab = null;
+let _tabs = [];
+let _tabBar = null;
+let _tabHost = null; // wrapper for tab bar + tab containers
+
+// Tab icon SVGs
+const TAB_ICON_BOARD = `<svg class="tab-icon" width="12" height="12" viewBox="0 0 12 12"><rect width="6" height="6" fill="var(--board-light,#f0d9b5)"/><rect x="6" width="6" height="6" fill="var(--board-dark,#b58863)"/><rect y="6" width="6" height="6" fill="var(--board-dark,#b58863)"/><rect x="6" y="6" width="6" height="6" fill="var(--board-light,#f0d9b5)"/></svg>`;
+const TAB_ICON_EXPLORE = `<svg class="tab-icon" width="12" height="12">${icon('explore', 12).slice(4)}`;
+const TAB_ICON_PLAYER = `<svg class="tab-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M12 13c-4.4 0-8 2-8 4.5V19h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/></svg>`;
 
 function buildTabDOM() {
     const el = document.createElement('div');
-    el.className = 'modal-content modal-content-viewer';
+    el.className = 'modal-content-viewer';
     el.innerHTML = `
-        <button class="viewer-close" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
+        <button class="viewer-close viewer-close-mobile" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
         <div class="viewer-browser-panel hidden">
             <h2 class="browser-title-panel"></h2>
             <div class="browser-content">
@@ -247,6 +256,7 @@ function createTab() {
         playBtn: el.querySelector('.viewer-play-btn'),
         // Per-tab state
         game: null,
+        board: null,
         panel: { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null },
         gamesState: null,
         pgnState: null,
@@ -260,14 +270,135 @@ function createTab() {
         pvInfos: [],
         analysisGen: 0,
         editingComment: false,
+        ctxKey: null,
+        vlist: { items: null, rowH: 0, scrollEl: null, wired: false, rendered: { start: -1, end: -1 } },
         browserListenerAC: null,
     };
 }
 
+// ─── Tab Management ───────────────────────────────────────────────
+
+function addTab() {
+    const tab = createTab();
+    tab.el.classList.add('hidden'); // hidden until switchTab reveals it
+    _tabHost.appendChild(tab.el);
+
+    // Create tab bar button
+    const tabBtn = document.createElement('button');
+    tabBtn.className = 'tab-btn';
+    tabBtn.innerHTML = `${TAB_ICON_EXPLORE}<span class="tab-label">New Tab</span><span class="tab-close" aria-label="Close tab">&times;</span>`;
+    tab.tabBtn = tabBtn;
+
+    const tabList = _tabBar.querySelector('.tab-list');
+    tabList.appendChild(tabBtn);
+
+    _tabs.push(tab);
+    switchTab(tab);
+
+    // Wire listeners for the new tab
+    wireBrowserListeners(tab.browserPanel);
+    wireViewerHeader();
+
+    // Initialize: show browser panel, load explorer
+    tab.browserPanel.classList.remove('hidden');
+    tab.el.classList.add('has-browser');
+    ensureBoard();
+    updateLayout();
+
+    // Clone the current ctx so this tab has independent filters
+    const sourceKey = games.getActiveCtxKey() || games.getLastTournamentKey();
+    if (sourceKey) {
+        tab.ctxKey = games.cloneCtx(sourceKey);
+    }
+    loadExplorer();
+
+    // Apply current theme to the new tab
+    refreshScheme();
+
+    updateTabCloseVisibility();
+    return tab;
+}
+
+function switchTab(tab) {
+    if (_activeTab) {
+        // Pause engine on departing tab
+        if (_activeTab.engineActive && !_activeTab.enginePaused) {
+            engine.stopAnalysis();
+        }
+        _activeTab.el.classList.add('hidden');
+        _activeTab.tabBtn?.classList.remove('tab-active');
+    }
+
+    _activeTab = tab;
+    _activeTab.el.classList.remove('hidden');
+    _activeTab.tabBtn?.classList.add('tab-active');
+
+    // Activate the ctx for this tab
+    if (tab.ctxKey) games.activateCtx(tab.ctxKey);
+
+    // Resume engine on arriving tab
+    if (_activeTab.engineActive && !_activeTab.enginePaused) {
+        const fen = _activeTab.game?.getCurrentFen();
+        if (fen) analyzeCurrentPosition(fen);
+    }
+
+    ensureBoard();
+    _activeTab.board.resize();
+}
+
+function closeTab(tab) {
+    if (_tabs.length <= 1) return; // can't close last tab
+
+    const idx = _tabs.indexOf(tab);
+    if (idx === -1) return;
+
+    // Clean up
+    tab.game?.destroy();
+    if (tab.engineActive) engine.stopAnalysis();
+    tab.el.remove();
+    tab.tabBtn.remove();
+    _tabs.splice(idx, 1);
+
+    // If closing the active tab, switch to adjacent
+    if (tab === _activeTab) {
+        const newIdx = Math.min(idx, _tabs.length - 1);
+        switchTab(_tabs[newIdx]);
+    }
+
+    updateTabCloseVisibility();
+}
+
+function updateTabLabel(tab) {
+    if (!tab?.tabBtn) return;
+    const label = tab.tabBtn.querySelector('.tab-label');
+    const iconEl = tab.tabBtn.querySelector('.tab-icon');
+    if (!label) return;
+
+    if (tab.game) {
+        const h = tab.game.getHeaders();
+        const w = formatName(h.White || '?');
+        const b = formatName(h.Black || '?');
+        const result = h.Result || '';
+        const resultStr = result === '1-0' ? '1-0' : result === '0-1' ? '0-1' : result === '1/2-1/2' ? '½-½' : '';
+        label.textContent = resultStr ? `${w} ${resultStr} ${b}` : `${w} vs ${b}`;
+        if (iconEl) iconEl.outerHTML = TAB_ICON_BOARD;
+    } else {
+        const playerName = games.getPlayer();
+        label.textContent = playerName ? `${playerName}'s Games` : games.getTitle() || 'Explorer';
+        if (iconEl) iconEl.outerHTML = playerName ? TAB_ICON_PLAYER : TAB_ICON_EXPLORE;
+    }
+}
+
+function updateTabCloseVisibility() {
+    const hide = _tabs.length <= 1;
+    for (const tab of _tabs) {
+        const closeBtn = tab.tabBtn?.querySelector('.tab-close');
+        if (closeBtn) closeBtn.classList.toggle('hidden', hide);
+    }
+}
+
 export function initGamePanel(mount, { features } = {}) {
     if (features) _features = { ..._features, ...features };
-
-    _activeTab = createTab();
 
     mount.innerHTML = `
     <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true" data-manual-close>
@@ -275,9 +406,45 @@ export function initGamePanel(mount, { features } = {}) {
         ${ICON_SPRITE}
         </div>`;
 
-    // Insert tab content before the closing </div> of the modal
     const modal = mount.querySelector('#viewer-modal');
-    modal.appendChild(_activeTab.el);
+
+    // Tab host: wraps tab bar + tab containers in a column flex
+    _tabHost = document.createElement('div');
+    _tabHost.className = 'viewer-tab-host';
+    modal.appendChild(_tabHost);
+
+    // Tab bar (desktop only, hidden on mobile via CSS)
+    _tabBar = document.createElement('div');
+    _tabBar.className = 'viewer-tab-bar';
+    _tabBar.innerHTML = `
+        <button class="tab-bar-close" data-action="close-panel" aria-label="Close">${icon('close', 16)}</button>
+        <div class="tab-list"></div>
+        <button class="tab-new" aria-label="New tab" data-tooltip="New tab">+</button>
+    `;
+    _tabHost.appendChild(_tabBar);
+
+    // Wire tab bar clicks
+    _tabBar.addEventListener('click', (e) => {
+        if (e.target.closest('.tab-new')) {
+            addTab();
+            return;
+        }
+        const closeBtn = e.target.closest('.tab-close');
+        if (closeBtn) {
+            const tabEl = closeBtn.closest('.tab-btn');
+            const tab = _tabs.find((t) => t.tabBtn === tabEl);
+            if (tab) closeTab(tab);
+            return;
+        }
+        const tabBtn = e.target.closest('.tab-btn');
+        if (tabBtn) {
+            const tab = _tabs.find((t) => t.tabBtn === tabBtn);
+            if (tab && tab !== _activeTab) switchTab(tab);
+        }
+    });
+
+    // Create first tab
+    addTab();
 
     // Append shared dialogs
     modal.insertAdjacentHTML(
@@ -461,10 +628,6 @@ export function initGamePanel(mount, { features } = {}) {
     `,
     );
 
-    // Wire tab listeners
-    wireBrowserListeners(_activeTab.browserPanel);
-    wireViewerHeader();
-
     onModalClose('viewer-modal', () => {
         games.closeBrowser();
         _activeTab.browserPanel.classList.add('hidden');
@@ -482,7 +645,7 @@ combinedWidthQuery.addEventListener('change', () => {
     const modal = _activeTab.el;
     if (!modal || modal.closest('.modal.hidden')) return;
     updateLayout();
-    board.resize();
+    _activeTab.board.resize();
     positionEnginePanel();
     if (_activeTab.gamesState) renderBrowserPanel(_activeTab.gamesState);
     if (_activeTab.game) renderPgnMoveList();
@@ -520,6 +683,7 @@ function onGameChange(state) {
 }
 
 games.onChange(() => {
+    _activeTab.ctxKey = games.getActiveCtxKey();
     _activeTab.gamesState = {
         round: games.getFilter('round'),
         tournament: games.getFilter('tournament'),
@@ -532,14 +696,16 @@ games.onChange(() => {
         explorerMoveHistory: games.getExplorerMoves(),
     };
     renderBrowserPanel(_activeTab.gamesState);
+    // Update tab label when dataset changes (tournament switch, player select)
+    if (!_activeTab.game) updateTabLabel(_activeTab);
     // Explorer takes over the board/moves only when no game is loaded
     if (_activeTab.gamesState.explorerActive && !_activeTab.game) {
         setToolbarButtons();
         renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
-        board.setPosition(games.getExplorerFen(), true);
-        board.highlightSquares(null, null);
-        board.resize();
+        _activeTab.board.setPosition(games.getExplorerFen(), true);
+        _activeTab.board.highlightSquares(null, null);
+        _activeTab.board.resize();
     }
 });
 
@@ -580,8 +746,8 @@ function onBoardDraw(shapes) {
     _activeTab.game.setShapeAnnotations(nodeId, arrows, squares);
     // Sync: render from PGN annotations as the single source of truth
     const updated = _activeTab.game.getNodes()[nodeId];
-    board.setAutoShapes(annotationsToShapes(updated?.annotations));
-    board.clearDrawnShapes();
+    _activeTab.board.setAutoShapes(annotationsToShapes(updated?.annotations));
+    _activeTab.board.clearDrawnShapes();
 }
 
 // Map PGN annotation color codes to chessground brush names (and reverse)
@@ -617,10 +783,10 @@ function annotationsToShapes(annotations) {
 }
 
 function onPositionChange(fen, from, to, annotations) {
-    board.setPosition(fen, true);
-    board.highlightSquares(from, to);
-    board.setAutoShapes(annotationsToShapes(annotations));
-    board.clearDrawnShapes();
+    _activeTab.board.setPosition(fen, true);
+    _activeTab.board.highlightSquares(from, to);
+    _activeTab.board.setAutoShapes(annotationsToShapes(annotations));
+    _activeTab.board.clearDrawnShapes();
     updateClocks();
     if (_activeTab.engineActive) analyzeCurrentPosition(fen);
 }
@@ -850,7 +1016,7 @@ function renderEvalBar(info, fen) {
     if (!bar) return;
     const fill = bar.querySelector('.eval-bar-fill');
     const label = bar.querySelector('.eval-bar-label');
-    const flipped = board.getOrientation() === 'black';
+    const flipped = _activeTab.board.getOrientation() === 'black';
 
     if (!info) {
         fill.style.height = '50%';
@@ -1079,8 +1245,12 @@ function setToolbarButtons() {
 }
 
 function ensureBoard() {
-    if (!_activeTab.viewerBoard.querySelector('.cg-wrap')) {
-        board.createBoard(_activeTab.viewerBoard, { onMove: onBoardMove, onDraw: onBoardDraw, orientation: 'white' });
+    if (!_activeTab.board) {
+        _activeTab.board = board.createBoard(_activeTab.viewerBoard, {
+            onMove: onBoardMove,
+            onDraw: onBoardDraw,
+            orientation: 'white',
+        });
     }
 }
 
@@ -1095,9 +1265,10 @@ function loadGame(pgnText, orientation = 'white') {
     _activeTab.game.start();
     updateGameHeader(_activeTab.panel.meta);
 
-    board.setOrientation(orientation);
-    board.setPosition(_activeTab.game.getCurrentFen(), false);
-    board.resize();
+    _activeTab.board.setOrientation(orientation);
+    _activeTab.board.setPosition(_activeTab.game.getCurrentFen(), false);
+    _activeTab.board.resize();
+    updateTabLabel(_activeTab);
 }
 
 function loadExplorer({ restoreMoves } = {}) {
@@ -1110,17 +1281,18 @@ function loadExplorer({ restoreMoves } = {}) {
     setToolbarButtons();
     _activeTab.gameHeader?.classList.add('hidden');
     _activeTab.explorerHeader?.classList.remove('hidden');
+    updateTabLabel(_activeTab);
 
-    board.setOrientation(games.getFilter('color') === 'black' ? 'black' : 'white');
-    board.highlightSquares(null, null);
+    _activeTab.board.setOrientation(games.getFilter('color') === 'black' ? 'black' : 'white');
+    _activeTab.board.highlightSquares(null, null);
     if (restoreMoves?.length) {
         games.setExplorerPosition(restoreMoves);
     } else {
         games.ensureExplorer();
         if (_activeTab.gamesState) renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
-        board.setPosition(games.getExplorerFen(), false);
-        board.resize();
+        _activeTab.board.setPosition(games.getExplorerFen(), false);
+        _activeTab.board.resize();
     }
 }
 
@@ -1593,7 +1765,7 @@ export function handlePanelKeydown(e) {
             games.setExplorerPosition([]);
             e.preventDefault();
         } else if (e.key === 'f' || e.key === 'F') {
-            board.flip();
+            _activeTab.board.flip();
         } else if (e.key === 'Escape') {
             closeGamePanel();
         }
@@ -1618,7 +1790,7 @@ export function handlePanelKeydown(e) {
         _activeTab.game.toggleAutoPlay();
         e.preventDefault();
     } else if (e.key === 'f' || e.key === 'F') {
-        board.flip();
+        _activeTab.board.flip();
     } else if (e.key === 'c' || e.key === 'C') {
         const hidden = _activeTab.game.toggleComments();
         _activeTab.commentsBtn?.classList.toggle('active', !hidden);
@@ -2288,13 +2460,13 @@ function highlightActiveGame(gameId) {
     if (!gameId) return;
 
     // If virtual list is active, scroll to the target game first
-    if (_vlist.items && _vlist.scrollEl) {
-        const { items, rowH, scrollEl } = _vlist;
+    if (_activeTab.vlist.items && _activeTab.vlist.scrollEl) {
+        const { items, rowH, scrollEl } = _activeTab.vlist;
         const idx = items.findIndex((i) => i.type === 'game' && i.data.gameId === gameId);
         if (idx !== -1) {
             const target = idx * rowH - scrollEl.clientHeight / 2 + rowH / 2;
             scrollEl.scrollTop = Math.max(0, target);
-            _vlist.rendered = { start: -1, end: -1 };
+            _activeTab.vlist.rendered = { start: -1, end: -1 };
             renderVisibleRows();
         }
     }
@@ -2444,23 +2616,15 @@ function renderBrowserFilters(panelEl, state) {
 // Renders only the ~20 visible rows + buffer. Uses uniform row height
 // (measured from a game row) for O(1) scroll positioning.
 
-const _vlist = {
-    items: null, // flat array: { type: 'game'|'header'|'profile', data }
-    rowH: 0, // measured row height (px), used for all row types
-    scrollEl: null, // the scrollable #browser-games element
-    wired: false, // scroll listener attached
-    rendered: { start: -1, end: -1 },
-};
-
 const VLIST_BUFFER = 10;
 
 function renderBrowserGameList(panelEl, state) {
     const gamesEl = panelEl.querySelector('.browser-games');
-    _vlist.scrollEl = gamesEl;
+    _activeTab.vlist.scrollEl = gamesEl;
 
     const hasGames = state.groupedGames.some((g) => g.games.length > 0);
     if (!hasGames) {
-        _vlist.items = null;
+        _activeTab.vlist.items = null;
         const label = state.explorerActive ? 'No games reached this position.' : 'No games found.';
         gamesEl.innerHTML = `<div class="browser-empty"><p>${label}</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>`;
         return;
@@ -2478,32 +2642,32 @@ function renderBrowserGameList(panelEl, state) {
             items.push({ type: 'game', data: game, label: playerMode ? `${game.round}.${game.board || '?'}` : null });
         }
     }
-    _vlist.items = items;
+    _activeTab.vlist.items = items;
 
     // Measure row height once (game row + gap)
-    if (!_vlist.rowH) {
+    if (!_activeTab.vlist.rowH) {
         const gameItem = items.find((i) => i.type === 'game');
         if (gameItem) {
             gamesEl.innerHTML = renderGameRow(gameItem.data, gameItem.label);
             const style = getComputedStyle(gamesEl.children[0]);
-            _vlist.rowH =
+            _activeTab.vlist.rowH =
                 gamesEl.children[0].offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-            _vlist.rowH += parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.2; // inter-row gap
+            _activeTab.vlist.rowH += parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.2; // inter-row gap
             gamesEl.innerHTML = '';
         }
-        if (!_vlist.rowH) _vlist.rowH = 32;
+        if (!_activeTab.vlist.rowH) _activeTab.vlist.rowH = 32;
     }
 
-    const totalH = items.length * _vlist.rowH;
+    const totalH = items.length * _activeTab.vlist.rowH;
     gamesEl.style.position = 'relative';
     gamesEl.innerHTML = `<div class="browser-games-spacer" style="height:${totalH}px;pointer-events:none"></div><div class="browser-games-viewport" style="position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:0.2rem"></div>`;
 
-    if (!_vlist.wired) {
-        _vlist.wired = true;
+    if (!_activeTab.vlist.wired) {
+        _activeTab.vlist.wired = true;
         gamesEl.addEventListener('scroll', onVirtualScroll, { passive: true });
     }
 
-    _vlist.rendered = { start: -1, end: -1 };
+    _activeTab.vlist.rendered = { start: -1, end: -1 };
     renderVisibleRows();
 }
 
@@ -2512,7 +2676,7 @@ function onVirtualScroll() {
 }
 
 function renderVisibleRows() {
-    const { items, rowH, scrollEl } = _vlist;
+    const { items, rowH, scrollEl } = _activeTab.vlist;
     if (!items || !scrollEl) return;
 
     const startIdx = Math.max(0, Math.floor(scrollEl.scrollTop / rowH) - VLIST_BUFFER);
@@ -2521,8 +2685,8 @@ function renderVisibleRows() {
         Math.ceil((scrollEl.scrollTop + scrollEl.clientHeight) / rowH) + VLIST_BUFFER,
     );
 
-    if (startIdx === _vlist.rendered.start && endIdx === _vlist.rendered.end) return;
-    _vlist.rendered = { start: startIdx, end: endIdx };
+    if (startIdx === _activeTab.vlist.rendered.start && endIdx === _activeTab.vlist.rendered.end) return;
+    _activeTab.vlist.rendered = { start: startIdx, end: endIdx };
 
     let html = '';
     for (let i = startIdx; i < endIdx; i++) {
@@ -2755,7 +2919,7 @@ function wireBrowserListeners(panelEl) {
                     games.setFilter('color', games.getFilter('color') === toggling ? null : toggling);
                     // Orient board when entering a color filter
                     if (!wasActive && !_activeTab.game) {
-                        board.setOrientation(toggling === 'black' ? 'black' : 'white');
+                        _activeTab.board.setOrientation(toggling === 'black' ? 'black' : 'white');
                     }
                 }
                 return;
@@ -2828,12 +2992,13 @@ export const goToNext = () => {
 };
 export const goToEnd = () => _activeTab.game.goToEnd();
 export const flipBoard = () => {
-    board.flip();
+    _activeTab.board.flip();
     // Re-render eval bar to match new orientation
     if (_activeTab.engineActive && _activeTab.pvInfos[0])
         renderEvalBar(_activeTab.pvInfos[0], _activeTab.game.getCurrentFen());
 };
-export const setBoardOrientation = (color) => board.setOrientation(color);
+export const setBoardOrientation = (color) => _activeTab.board.setOrientation(color);
+export const setBoardCoordinates = (show) => _activeTab.board?.setCoordinates(show);
 export const toggleAutoPlay = () => _activeTab.game.toggleAutoPlay();
 export const toggleComments = () => _activeTab.game.toggleComments();
 export const toggleBranchMode = () => _activeTab.game.toggleBranchMode();

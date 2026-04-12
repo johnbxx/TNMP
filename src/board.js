@@ -1,6 +1,9 @@
 /**
  * Board — dumb chess board renderer (chessground).
  *
+ * createBoard(container, opts) returns an isolated board instance.
+ * Multiple instances can coexist (one per tab).
+ *
  * Accepts positions and renders them. Handles drag-and-drop and click-to-move,
  * validates move legality, and reports user moves upstream via onMove callback.
  * Has no knowledge of the PGN tree, game state, or any other module.
@@ -10,13 +13,7 @@ import { Chess } from 'chess.js';
 import { Chessground } from '@lichess-org/chessground';
 import { START_FEN } from './pgn.js';
 
-let _cg = null;
-let _boardEl = null; // the container element passed to createBoard
-let _onMove = null; // callback: (san, from, to) => void
-let _onDraw = null; // callback: (shapes) => void
-let _currentFen = null;
-let _orientation = 'white';
-let _dismissPromotion = null;
+// ─── Pure helpers (shared across all instances) ────────────────────
 
 function computeDests(fen) {
     const engine = new Chess(fen);
@@ -33,95 +30,92 @@ function turnColor(fen) {
     return fen.split(' ')[1] === 'w' ? 'white' : 'black';
 }
 
-function showPromotionPicker(from, to, color) {
-    const picker = document.getElementById('board-promotion');
-    if (!picker) return;
+// ─── Board instance factory ────────────────────────────────────────
 
-    const pieces = ['q', 'r', 'b', 'n'];
-    const fileChar = { q: 'Q', r: 'R', b: 'B', n: 'N' };
-    const altText = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
-    const prefix = color === 'w' ? 'w' : 'b';
-    const btns = picker.querySelectorAll('.promo-btn');
-    btns.forEach((btn, i) => {
-        const p = pieces[i];
-        btn.dataset.piece = p;
-        const img = btn.querySelector('img');
-        img.src = `/pieces/${prefix}${fileChar[p]}.webp`;
-        img.alt = altText[p];
-    });
+export function createBoard(container, { onMove, onDraw, orientation = 'white', fen } = {}) {
+    const el = typeof container === 'string' ? document.getElementById(container) : container;
+    if (!el) return null;
 
-    picker.classList.remove('hidden');
+    let currentFen = fen || START_FEN;
+    let currentOrientation = orientation;
+    let dismissPromotion = null;
 
-    const handler = (e) => {
-        const btn = e.target.closest('.promo-btn');
-        if (btn) {
-            dismiss();
-            makeMove(from, to, btn.dataset.piece);
-        } else if (!picker.contains(e.target)) {
-            dismiss();
+    function showPromotionPicker(from, to, color) {
+        const picker = document.getElementById('board-promotion');
+        if (!picker) return;
+
+        const pieces = ['q', 'r', 'b', 'n'];
+        const fileChar = { q: 'Q', r: 'R', b: 'B', n: 'N' };
+        const altText = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
+        const prefix = color === 'w' ? 'w' : 'b';
+        const btns = picker.querySelectorAll('.promo-btn');
+        btns.forEach((btn, i) => {
+            const p = pieces[i];
+            btn.dataset.piece = p;
+            const img = btn.querySelector('img');
+            img.src = `/pieces/${prefix}${fileChar[p]}.webp`;
+            img.alt = altText[p];
+        });
+
+        picker.classList.remove('hidden');
+
+        const handler = (e) => {
+            const btn = e.target.closest('.promo-btn');
+            if (btn) {
+                dismiss();
+                doMove(from, to, btn.dataset.piece);
+            } else if (!picker.contains(e.target)) {
+                dismiss();
+            }
+        };
+        const dismiss = () => {
+            picker.classList.add('hidden');
+            document.removeEventListener('click', handler, true);
+        };
+        dismissPromotion = dismiss;
+        document.addEventListener('click', handler, true);
+    }
+
+    function doMove(from, to, promotion) {
+        const engine = new Chess(currentFen);
+        const piece = engine.get(from);
+        if (!piece) return false;
+
+        if (
+            !promotion &&
+            piece.type === 'p' &&
+            ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))
+        ) {
+            showPromotionPicker(from, to, piece.color);
+            return true;
         }
-    };
-    const dismiss = () => {
-        picker.classList.add('hidden');
-        document.removeEventListener('click', handler, true);
-    };
-    _dismissPromotion = dismiss;
-    // Use capture so we intercept clicks before anything else (e.g. PGN nav)
-    document.addEventListener('click', handler, true);
-}
 
-function makeMove(from, to, promotion) {
-    const engine = new Chess(_currentFen);
-    const piece = engine.get(from);
-    if (!piece) return false;
+        let move;
+        try {
+            move = engine.move({ from, to, promotion });
+        } catch {
+            return false;
+        }
+        if (!move) return false;
 
-    if (
-        !promotion &&
-        piece.type === 'p' &&
-        ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))
-    ) {
-        showPromotionPicker(from, to, piece.color);
+        currentFen = engine.fen();
+        onMove?.(move.san, move.from, move.to);
         return true;
     }
 
-    let move;
-    try {
-        move = engine.move({ from, to, promotion });
-    } catch {
-        return false;
-    }
-    if (!move) return false;
+    const turn = turnColor(currentFen);
+    const dests = computeDests(currentFen);
 
-    _currentFen = engine.fen();
-    _onMove?.(move.san, move.from, move.to);
-    return true;
-}
-
-export function createBoard(container, { onMove, onDraw, orientation = 'white', fen } = {}) {
-    destroy();
-
-    _onMove = onMove || null;
-    _onDraw = onDraw || null;
-    _currentFen = fen || START_FEN;
-    _orientation = orientation;
-
-    const el = typeof container === 'string' ? document.getElementById(container) : container;
-    if (!el) return null;
-    _boardEl = el;
-
-    const turn = turnColor(_currentFen);
-    const dests = computeDests(_currentFen);
-
-    _cg = Chessground(el, {
-        fen: _currentFen,
-        orientation: _orientation,
+    const cg = Chessground(el, {
+        fen: currentFen,
+        orientation: currentOrientation,
         turnColor: turn,
         movable: {
             free: false,
             color: turn,
             dests,
             showDests: true,
-            events: { after: (from, to) => makeMove(from, to) },
+            events: { after: (from, to) => doMove(from, to) },
             rookCastle: true,
         },
         draggable: { enabled: true, showGhost: true },
@@ -131,72 +125,61 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
         premovable: { enabled: false },
         predroppable: { enabled: false },
         coordinates: localStorage.getItem('boardCoords') === 'true',
-        drawable: { onChange: (shapes) => _onDraw?.(shapes) },
+        drawable: { onChange: (shapes) => onDraw?.(shapes) },
     });
 
-    return _cg;
-}
+    return {
+        setCoordinates(show) {
+            cg.set({ coordinates: show });
+            localStorage.setItem('boardCoords', show);
+        },
 
-export function setCoordinates(show) {
-    if (_cg) _cg.set({ coordinates: show });
-    localStorage.setItem('boardCoords', show);
-}
+        setPosition(fen, animate = true) {
+            dismissPromotion?.();
+            currentFen = fen;
+            const t = turnColor(fen);
+            const d = computeDests(fen);
+            cg.set({
+                fen,
+                turnColor: t,
+                movable: { color: t, dests: d },
+                animation: { enabled: animate },
+            });
+            if (!animate) cg.set({ animation: { enabled: true } });
+        },
 
-export function setPosition(fen, animate = true) {
-    _dismissPromotion?.();
-    _currentFen = fen;
-    const turn = turnColor(fen);
-    const dests = computeDests(fen);
+        highlightSquares(from, to) {
+            cg.set({ lastMove: from && to ? [from, to] : undefined });
+        },
 
-    _cg.set({
-        fen,
-        turnColor: turn,
-        movable: { color: turn, dests },
-        animation: { enabled: animate },
-    });
-    if (!animate) _cg.set({ animation: { enabled: true } });
-}
+        setAutoShapes(shapes) {
+            cg.setAutoShapes(shapes || []);
+        },
 
-export function highlightSquares(from, to) {
-    _cg.set({ lastMove: from && to ? [from, to] : undefined });
-}
+        clearDrawnShapes() {
+            cg.set({ drawable: { shapes: [] } });
+        },
 
-export function setAutoShapes(shapes) {
-    _cg.setAutoShapes(shapes || []);
-}
+        getOrientation() {
+            return currentOrientation;
+        },
 
-export function clearDrawnShapes() {
-    if (_cg) _cg.set({ drawable: { shapes: [] } });
-}
+        flip() {
+            this.setOrientation(currentOrientation === 'white' ? 'black' : 'white');
+        },
 
-export function getOrientation() {
-    return _orientation;
-}
+        setOrientation(color) {
+            currentOrientation = color;
+            cg.set({ orientation: color });
+        },
 
-export function flip() {
-    setOrientation(_orientation === 'white' ? 'black' : 'white');
-}
+        resize() {
+            cg.redrawAll();
+        },
 
-export function setOrientation(color) {
-    _orientation = color;
-    _cg.set({ orientation: color });
-}
-
-export function resize() {
-    _cg.redrawAll();
-}
-
-export function destroy() {
-    if (_cg) {
-        _cg.destroy();
-        _cg = null;
-    }
-
-    // Clear board DOM (cg.destroy() already removes chessground listeners)
-    if (_boardEl) {
-        _boardEl.innerHTML = '';
-    }
-
-    _currentFen = null;
-    _onMove = null;
+        destroy() {
+            cg.destroy();
+            el.innerHTML = '';
+        },
+    };
 }

@@ -651,7 +651,9 @@ html.off-season .meme {
     padding: 0.65rem 1.3rem;
     border-radius: var(--radius-sm);
     border-bottom: 2.5px solid;
-    background: var(--modal-bg);
+    background: linear-gradient(135deg,
+        var(--modal-bg),
+        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
     color: var(--text-primary);
     font-size: 0.9rem;
     font-weight: 500;
@@ -801,7 +803,7 @@ html.off-season .meme {
     animation: modal-backdrop-in 200ms ease-out both;
 }
 .modal:not(.hidden):not(.closing) .modal-content,
-.modal:not(.hidden):not(.closing) .modal-content-viewer {
+.modal:not(.hidden):not(.closing) .viewer-tab-host {
     animation: modal-content-in 250ms ease-out both;
 }
 .modal.closing {
@@ -811,7 +813,7 @@ html.off-season .meme {
     animation: modal-backdrop-out 160ms ease-in both;
 }
 .modal.closing .modal-content,
-.modal.closing .modal-content-viewer {
+.modal.closing .viewer-tab-host {
     animation: modal-content-out 160ms ease-in both;
 }
 
@@ -1194,12 +1196,12 @@ select.editor-header-input option {
 
 /* Game Viewer Modal */
 .modal-content-viewer {
+    position: relative;
     max-width: 560px;
     width: 95%;
     max-height: 98vh;
     max-height: 98dvh;
     overflow: hidden;
-    animation: none;
     display: flex;
     flex-direction: column;
 }
@@ -2432,11 +2434,181 @@ button.viewer-close {
     }
 }
 
+/* ─── Tab Bar ─────────────────────────────────────────────────── */
+
+.viewer-tab-host {
+    display: flex;
+    flex-direction: column;
+    max-height: 98vh;
+    max-height: 98dvh;
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    background: linear-gradient(135deg,
+        var(--modal-bg),
+        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
+}
+@media (min-width: 1000px) {
+    .viewer-tab-host {
+        width: 95vw;
+    }
+}
+
+.viewer-tab-bar {
+    display: none; /* hidden on mobile */
+}
+
+@media (min-width: 1000px) {
+    .viewer-tab-bar {
+        display: flex;
+        align-items: flex-end;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 6px 6px 0 6px;
+        border-radius: var(--radius-card) var(--radius-card) 0 0;
+        gap: 0;
+        min-height: 38px;
+        flex-shrink: 0;
+    }
+    .viewer-tab-bar .tab-list {
+        display: flex;
+        min-width: 0;
+        gap: 3px;
+        overflow: hidden;
+    }
+    .viewer-tab-bar .tab-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 1 200px;
+        min-width: 60px;
+        padding: 6px 10px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        cursor: pointer;
+        border-radius: 12px;
+        margin-bottom: 4px;
+        transition: background var(--transition-fast), color var(--transition-fast);
+    }
+    /* Floating divider between tabs */
+    .viewer-tab-bar .tab-btn + .tab-btn::before {
+        content: '';
+        position: absolute;
+        left: -2px;
+        top: 15%;
+        height: 60%;
+        width: 2px;
+        background: currentColor;
+        opacity: 0.15;
+    }
+    .viewer-tab-bar .tab-btn.tab-active + .tab-btn::before,
+    .viewer-tab-bar .tab-btn:hover::before,
+    .viewer-tab-bar .tab-btn:hover + .tab-btn:not(.tab-active)::before {
+        opacity: 0;
+    }
+    .viewer-tab-bar .tab-btn:hover:not(.tab-active) {
+        background: var(--surface-subtle);
+    }
+    .viewer-tab-bar .tab-btn.tab-active {
+        background: var(--surface-subtle);
+        color: var(--text-primary);
+        position: relative;
+        z-index: 3;
+        border-radius: 12px 12px 0 0;
+        margin-bottom: 0;
+        padding-bottom: 10px;
+    }
+    .viewer-tab-bar .tab-btn.tab-active::before {
+        content: '';
+        position: absolute;
+        top: auto; bottom: 0; left: -15px;
+        width: 15px; height: 15px;
+        background: radial-gradient(circle at 0 0, transparent 15px, var(--surface-subtle) 15px);
+        opacity: 1;
+        z-index: 2;
+    }
+    .viewer-tab-bar .tab-btn.tab-active::after {
+        content: '';
+        position: absolute;
+        bottom: 0; right: -15px;
+        width: 15px; height: 15px;
+        background: radial-gradient(circle at 100% 0, transparent 15px, var(--surface-subtle) 15px);
+        z-index: 2;
+    }
+    .tab-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        text-align: left;
+    }
+    .tab-icon {
+        flex-shrink: 0;
+    }
+    .tab-close {
+        flex-shrink: 0;
+        font-size: 1rem;
+        line-height: 1;
+        opacity: 0;
+        padding: 2px 4px;
+        border-radius: 4px;
+        transition: opacity var(--transition-fast), background var(--transition-fast);
+    }
+    .tab-active .tab-close {
+        opacity: 0.5;
+    }
+    .tab-btn:hover .tab-close {
+        opacity: 0.5;
+    }
+    .tab-close:hover {
+        opacity: 1 !important;
+        background: var(--overlay-light);
+    }
+    .tab-close.hidden {
+        display: none;
+    }
+    .tab-new,
+    .tab-bar-close {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 2px 4px;
+        transition: background var(--transition-fast), color var(--transition-fast);
+    }
+    .tab-new:hover,
+    .tab-bar-close:hover {
+        background: var(--surface-subtle);
+        color: var(--text-primary);
+    }
+    .tab-bar-close {
+        margin-right: 2px;
+    }
+    .tab-new {
+        margin-left: 0; /* stays next to last tab */
+    }
+    /* When tab bar exists, hide the in-tab close button and adjust modal corners */
+    button.viewer-close-mobile {
+        display: none;
+    }
+    .modal-content-viewer {
+        border-radius: 0 0 var(--radius-card) var(--radius-card);
+    }
+}
+
 /* Desktop combined layout: browser + viewer side-by-side */
 @media (min-width: 1000px) {
     .modal-content-viewer.has-browser {
         flex-direction: row;
-        width: 95vw;
+        width: 100%;
         padding: 0;
     }
     .modal-content-viewer.has-browser .viewer-main {
@@ -2781,7 +2953,9 @@ button.viewer-close {
 }
 .editor-import-dialog:not(.hidden) { display: flex; }
 .editor-import-content {
-    background: var(--modal-bg);
+    background: linear-gradient(135deg,
+        var(--modal-bg),
+        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
     border-radius: var(--radius-card);
     padding: 1.25rem;
     width: 90%;
@@ -2829,7 +3003,9 @@ button.viewer-close {
     z-index: 30;
 }
 .confirm-dialog {
-    background: var(--modal-bg);
+    background: linear-gradient(135deg,
+        var(--modal-bg),
+        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
     border-radius: var(--radius-sm);
     padding: 1.25rem 1.5rem;
     max-width: 300px;
@@ -2874,7 +3050,9 @@ button.viewer-close {
 }
 .editor-header-popup:not(.hidden) { display: flex; }
 .editor-header-inner {
-    background: var(--modal-bg);
+    background: linear-gradient(135deg,
+        var(--modal-bg),
+        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-modal);
     padding: 1rem 1.25rem;

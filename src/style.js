@@ -7,7 +7,7 @@
  */
 
 import { openModal } from './modal.js';
-import { setCoordinates } from './board.js';
+import { setBoardCoordinates as setCoordinates } from './game-panel.js';
 
 // --- Piece themes ---
 
@@ -127,6 +127,7 @@ function applyBoardColors(light, dark) {
     }
 
     _boardStyleEl.textContent = `
+        :root { --board-light: ${light}; --board-dark: ${dark}; }
         .cg-wrap cg-board {
             background-color: ${light};
             background-image: url('${buildBoardSvg(light, dark)}');
@@ -156,8 +157,8 @@ export function getSchemeVars() {
 function applyAppScheme(schemeId) {
     const scheme = APP_SCHEMES.find((s) => s.id === schemeId) || APP_SCHEMES[0];
 
-    // Clear previous vars from all modal-content elements
-    const modals = document.querySelectorAll('.modal-content');
+    // Clear previous vars from all modal-content elements and tab host
+    const modals = document.querySelectorAll('.modal-content, .modal-content-viewer, .viewer-tab-host');
     for (const v of _lastSchemeVars) {
         for (const m of modals) m.style.removeProperty(v);
     }
@@ -181,6 +182,12 @@ function applyAppScheme(schemeId) {
     }
 
     localStorage.setItem('appScheme', schemeId);
+}
+
+/** Re-apply current scheme to all modal-content elements (call after adding new tabs). */
+export function refreshScheme() {
+    const schemeId = localStorage.getItem('appScheme') || 'default';
+    applyAppScheme(schemeId);
 }
 
 // --- Preview board (static, no chessground) ---

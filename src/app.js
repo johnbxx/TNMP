@@ -680,10 +680,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => openModal('about-modal'), 500);
     }
 
-    // Dev-only palette editor (Cmd+Shift+P to toggle)
-    if (import.meta.env.DEV) {
-        import('./palette-editor.js').then((m) => m.initPaletteEditor());
-    }
+    // Dev-only palette editor (Cmd+Shift+P to toggle) — disabled
+    // if (import.meta.env.DEV) {
+    //     import('./palette-editor.js').then((m) => m.initPaletteEditor());
+    // }
 
     // App bootstrap
     wrappedCheckPairings();

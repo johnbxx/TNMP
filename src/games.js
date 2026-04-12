@@ -87,6 +87,7 @@ function makeCtx(dataset) {
 }
 
 let _activeCtx = null;
+let _activeCtxKey = null;
 const _ctxCache = new Map();
 
 let _lastTournamentKey = null;
@@ -108,6 +109,7 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     }
     _ctxCache.set(key, ctx);
     _activeCtx = ctx;
+    _activeCtxKey = key;
     if (key.startsWith('tournament:')) _lastTournamentKey = key;
     notifyChange();
     return ctx;
@@ -115,6 +117,9 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
 
 export function getLastTournamentKey() {
     return _lastTournamentKey;
+}
+export function getActiveCtxKey() {
+    return _activeCtxKey;
 }
 
 // ─── Module state ─────────────────────────────────────────────────
@@ -294,6 +299,7 @@ export function clearPlayerMode() {
         activateCtx(_lastTournamentKey);
     } else {
         _activeCtx = null;
+        _activeCtxKey = null;
         notifyChange();
     }
     if (_activeCtx?.explorer) {
@@ -318,6 +324,7 @@ export async function switchDataSource(value, currentSlug, opts = {}) {
 
         if (cached) {
             _activeCtx = cached;
+            _activeCtxKey = cacheKey;
         } else if (opts.onSwitch) {
             await opts.onSwitch(value, currentSlug);
         }
@@ -366,10 +373,34 @@ export function clearFilter() {
     notifyChange();
 }
 
+let _tabCounter = 0;
+
+/**
+ * Clone an existing ctx into a new tab-scoped ctx with independent filters.
+ * Returns the new key.
+ */
+export function cloneCtx(sourceKey) {
+    const source = _ctxCache.get(sourceKey);
+    if (!source) return null;
+    const newKey = `tab:${++_tabCounter}:${sourceKey}`;
+    const ctx = makeCtx(source.dataset);
+    // Copy current filter state
+    ctx.filters = { ...source.filters };
+    ctx.visibleSections = new Set(source.visibleSections);
+    _ctxCache.set(newKey, ctx);
+    _activeCtx = ctx;
+    _activeCtxKey = newKey;
+    notifyChange();
+    return newKey;
+}
+
 export function activateCtx(key) {
     const ctx = _ctxCache.get(key);
     if (ctx) {
         _activeCtx = ctx;
+        _activeCtxKey = key;
+        // Reset player list — tournament tabs fall through to getAllPlayers()
+        _playerList = [];
         notifyChange();
         return true;
     }
@@ -378,6 +409,7 @@ export function activateCtx(key) {
 
 export function closeBrowser() {
     _activeCtx = null;
+    _activeCtxKey = null;
     notifyChange();
 }
 
