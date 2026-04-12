@@ -2442,7 +2442,6 @@ button.viewer-close {
     max-height: 98vh;
     max-height: 98dvh;
     border-radius: var(--radius-card);
-    overflow: hidden;
     background: linear-gradient(135deg,
         var(--modal-bg),
         color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
@@ -2472,13 +2471,12 @@ button.viewer-close {
         display: flex;
         min-width: 0;
         gap: 3px;
-        overflow: hidden;
     }
     .viewer-tab-bar .tab-btn {
         display: flex;
         align-items: center;
         gap: 6px;
-        flex: 0 1 200px;
+        flex: 0 1 250px;
         min-width: 60px;
         padding: 6px 10px;
         border: none;
@@ -2486,6 +2484,7 @@ button.viewer-close {
         color: var(--text-secondary);
         font-size: 0.8rem;
         cursor: pointer;
+        position: relative;
         border-radius: 12px;
         margin-bottom: 4px;
         transition: background var(--transition-fast), color var(--transition-fast);
@@ -2507,7 +2506,7 @@ button.viewer-close {
         opacity: 0;
     }
     .viewer-tab-bar .tab-btn:hover:not(.tab-active) {
-        background: var(--surface-subtle);
+        background: rgb(from var(--accent) r g b / 0.15);
     }
     .viewer-tab-bar .tab-btn.tab-active {
         background: var(--surface-subtle);
@@ -2590,10 +2589,10 @@ button.viewer-close {
         color: var(--text-primary);
     }
     .tab-bar-close {
-        margin-right: 2px;
+        margin-right: 3px;
     }
     .tab-new {
-        margin-left: 0; /* stays next to last tab */
+        margin-left: 3px;
     }
     /* When tab bar exists, hide the in-tab close button and adjust modal corners */
     button.viewer-close-mobile {
