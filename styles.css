@@ -1197,6 +1197,11 @@ select.editor-header-input option {
 /* Game Viewer Modal */
 .modal-content-viewer {
     position: relative;
+    background: linear-gradient(135deg,
+        var(--modal-bg),
+        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-modal);
     max-width: 560px;
     width: 95%;
     max-height: 98vh;
@@ -2446,17 +2451,11 @@ button.viewer-close {
         var(--modal-bg),
         color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
 }
-@media (min-width: 1000px) {
-    .viewer-tab-host {
-        width: 95vw;
-    }
-}
-
 .viewer-tab-bar {
     display: none; /* hidden on mobile */
 }
 
-@media (min-width: 1000px) {
+@media (min-width: 1600px) {
     .viewer-tab-bar {
         display: flex;
         align-items: flex-end;
@@ -2600,6 +2599,9 @@ button.viewer-close {
     }
     .modal-content-viewer {
         border-radius: 0 0 var(--radius-card) var(--radius-card);
+    }
+    .viewer-tab-host {
+        width: 95vw;
     }
 }
 
