@@ -368,10 +368,12 @@ function closeTab(tab) {
 
     // Clean up
     tab.game?.destroy();
-    if (tab.engineActive) engine.stopAnalysis();
+    tab.engineActive = false;
     tab.el.remove();
     tab.tabBtn.remove();
     _tabs.splice(idx, 1);
+    // Destroy engine if no remaining tab needs it
+    if (!_tabs.some((t) => t.engineActive)) engine.destroyEngine();
 
     // If closing the active tab, switch to adjacent
     if (tab === _activeTab) {
@@ -1028,6 +1030,8 @@ export function toggleEngine() {
         _activeTab.evalBar?.classList.add('hidden');
         _activeTab.engineBtn?.classList.remove('active');
         positionEnginePanel();
+        // Destroy engine if no other tab needs it
+        if (!_tabs.some((t) => t.engineActive)) engine.destroyEngine();
         return;
     }
 

@@ -1,9 +1,8 @@
 /**
- * Stockfish engine wrapper using @lichess-org/stockfish-web.
+ * Stockfish engine wrapper.
  *
- * Loads Stockfish 18 as an ES module on the main thread. The engine
- * internally spawns Web Workers for pthreads (multi-threaded when
- * cross-origin isolated, single-threaded otherwise).
+ * Runs stockfish-web inside a dedicated Web Worker so that
+ * worker.terminate() can fully release WASM memory and pthreads.
  *
  * UCI protocol sequence:
  *   uci → uciok → setoption (all) → ucinewgame → isready → readyok → go
@@ -14,7 +13,7 @@
 
 import { Chess } from 'chess.js';
 
-let _sf = null; // stockfish-web instance
+let _worker = null;
 let _ready = false;
 let _loading = false;
 let _variant = null; // 'lite' | 'full'
@@ -36,7 +35,7 @@ export function isLoading() {
     return _loading;
 }
 export function isActive() {
-    return _ready && _sf !== null;
+    return _ready && _worker !== null;
 }
 export function getVariant() {
     return _variant;
@@ -53,17 +52,15 @@ function notify() {
 }
 
 export function getSavedVariant() {
-    return localStorage.getItem('engine-variant'); // kept for settings UI compat
+    return localStorage.getItem('engine-variant');
 }
 
 // ─── Init / Destroy ──────────────────────────────────────────────
 
-/**
- * Initialize the engine. Dynamically imports @lichess-org/stockfish-web,
- * loads NNUE weights, then runs the UCI handshake.
- */
+const NNUE_CACHE = 'tnmp-nnue-v1';
+
 export async function initEngine(variant, options = {}) {
-    if (_sf) destroyEngine();
+    if (_worker) destroyEngine();
     _loading = true;
     _variant = variant || 'lite';
     if (options.hash !== undefined) _options.hash = options.hash;
@@ -72,43 +69,58 @@ export async function initEngine(variant, options = {}) {
     notify();
 
     try {
-        // Dynamic import at runtime — path must bypass Vite's static analysis
-        // 'lite' uses sf_18_smallnet (single small NNUE), 'full' uses sf_18 (dual NNUE)
-        const jsFile = _variant === 'lite' ? 'sf_18_smallnet.js' : 'sf_18.js';
-        const engineOrigin = typeof __EMBED__ !== 'undefined' ? 'https://tnmpairings.com' : window.location.origin;
-        const engineUrl = new URL(`/engine/${jsFile}`, engineOrigin).href;
-        const mod = await import(/* @vite-ignore */ engineUrl);
-        const Sf_18_Web = mod.default;
-        _sf = await Sf_18_Web();
+        // Create worker container
+        _worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
 
-        // Wire the listener
-        _sf.listen = (line) => {
-            if (!_ready && line === 'uciok') {
-                _sendInitOptions();
-                _send('ucinewgame');
-                _send('isready');
-            } else if (!_ready && line === 'readyok') {
-                _ready = true;
-                _loading = false;
-                notify();
-                _initResolve?.();
-                _initResolve = null;
-            } else {
-                _onLine?.(line);
+        // Wait for worker to load the WASM module
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Engine worker init timed out'));
+            }, 15000);
+
+            _worker.onmessage = (e) => {
+                if (e.data.type === 'ready') {
+                    clearTimeout(timeout);
+                    resolve();
+                } else if (e.data.type === 'error') {
+                    clearTimeout(timeout);
+                    reject(new Error(e.data.msg));
+                }
+            };
+
+            const engineOrigin = typeof __EMBED__ !== 'undefined' ? 'https://tnmpairings.com' : window.location.origin;
+            _worker.postMessage({ cmd: 'init', variant: _variant, engineOrigin });
+        });
+
+        // Load NNUE weights (fetched on main thread, transferred to worker)
+        await _loadNnue(_variant);
+
+        // Wire the permanent message handler
+        _worker.onmessage = (e) => {
+            const { type, line } = e.data;
+            if (type === 'line') {
+                if (!_ready && line === 'uciok') {
+                    _sendInitOptions();
+                    _send('ucinewgame');
+                    _send('isready');
+                } else if (!_ready && line === 'readyok') {
+                    _ready = true;
+                    _loading = false;
+                    notify();
+                    _initResolve?.();
+                    _initResolve = null;
+                } else {
+                    _onLine?.(line);
+                }
+            } else if (type === 'error') {
+                console.error('Stockfish error:', e.data.msg);
             }
         };
-        _sf.onError = (msg) => {
-            console.error('Stockfish error:', msg);
-        };
-
-        // Load NNUE weights (not embedded in the lichess-org WASM build)
-        await _loadNnue(_variant);
 
         // Start UCI handshake — wait for readyok
         return new Promise((resolve, reject) => {
             _initResolve = resolve;
             _send('uci');
-            // Timeout safety
             setTimeout(() => {
                 if (!_ready) {
                     _loading = false;
@@ -126,24 +138,28 @@ export async function initEngine(variant, options = {}) {
 
 let _initResolve = null;
 
-/**
- * Load NNUE network file required by the lichess-org stockfish-web build.
- * 'full' variant loads the big net (104MB, max strength).
- * 'lite' variant loads the small net (3.4MB, fast download).
- */
-const NNUE_CACHE = 'tnmp-nnue-v1';
-
 async function _loadNnue(variant) {
-    if (!_sf) return;
-    // 'full' (sf_18) needs both nets; 'lite' (sf_18_smallnet) needs only its single net
+    if (!_worker) return;
     const indices = variant === 'lite' ? [0] : [0, 1];
     const cache = await caches.open(NNUE_CACHE);
 
     for (const index of indices) {
-        const name = _sf.getRecommendedNnue(index);
+        // Ask worker for the recommended NNUE filename
+        const name = await new Promise((resolve) => {
+            const handler = _worker.onmessage;
+            _worker.onmessage = (e) => {
+                if (e.data.type === 'nnue-name' && e.data.index === index) {
+                    _worker.onmessage = handler;
+                    resolve(e.data.name);
+                } else {
+                    handler?.(e);
+                }
+            };
+            _worker.postMessage({ cmd: 'nnue-name', index });
+        });
         if (!name) continue;
-        const url = `https://api.tnmpairings.com/nnue/${name}`;
 
+        const url = `https://api.tnmpairings.com/nnue/${name}`;
         let resp = await cache.match(url);
         if (!resp) {
             resp = await fetch(url);
@@ -152,16 +168,27 @@ async function _loadNnue(variant) {
         }
 
         const buf = new Uint8Array(await resp.arrayBuffer());
-        _sf.setNnueBuffer(buf, index);
+
+        // Transfer buffer to worker (zero-copy)
+        await new Promise((resolve) => {
+            const handler = _worker.onmessage;
+            _worker.onmessage = (e) => {
+                if (e.data.type === 'nnue-loaded' && e.data.index === index) {
+                    _worker.onmessage = handler;
+                    resolve();
+                } else {
+                    handler?.(e);
+                }
+            };
+            _worker.postMessage({ cmd: 'nnue', buffer: buf, index }, [buf.buffer]);
+        });
     }
 }
 
-/** Send a UCI command to the engine. */
 function _send(cmd) {
-    _sf?.uci(cmd);
+    _worker?.postMessage({ cmd: 'uci', line: cmd });
 }
 
-/** Send all setoption commands. Called once between uciok and isready. */
 function _sendInitOptions() {
     const threads = _resolveThreads();
     if (threads > 1) _send(`setoption name Threads value ${threads}`);
@@ -171,17 +198,13 @@ function _sendInitOptions() {
 
 function _resolveThreads() {
     if (_options.threads > 0) return _options.threads;
-    return Math.min(navigator.hardwareConcurrency || 1, 4); // auto
+    return Math.min(navigator.hardwareConcurrency || 1, 4);
 }
 
 export function destroyEngine() {
-    if (_sf) {
-        try {
-            _send('quit');
-        } catch {
-            /* already dead */
-        }
-        _sf = null;
+    if (_worker) {
+        _worker.terminate();
+        _worker = null;
     }
     _ready = false;
     _loading = false;
@@ -198,12 +221,8 @@ export function destroyEngine() {
 
 let _pendingOptions = null;
 
-/**
- * Change engine options mid-session. Follows the safe protocol:
- * stop (if searching) → wait for bestmove → setoption → isready → readyok → callback
- */
 export function setOptions(options) {
-    if (!_ready || !_sf) return Promise.resolve();
+    if (!_ready || !_worker) return Promise.resolve();
     if (options.hash !== undefined) _options.hash = options.hash;
     if (options.threads !== undefined) _options.threads = options.threads;
 
@@ -220,7 +239,7 @@ export function setOptions(options) {
 }
 
 function _applyPendingOptions() {
-    if (!_pendingOptions || !_sf) return;
+    if (!_pendingOptions || !_worker) return;
     const { resolve } = _pendingOptions;
 
     const threads = _resolveThreads();
@@ -252,7 +271,7 @@ export function getCachedEval(fen) {
 }
 
 export function evaluatePosition(fen, { depth = 20, multiPv = 1, onInfo } = {}) {
-    if (!_ready || !_sf) return;
+    if (!_ready || !_worker) return;
 
     if (_searching) {
         _pendingEval = { fen, depth, multiPv, onInfo };
@@ -306,13 +325,13 @@ function startSearch(fen, depth, multiPv, onInfo) {
 
 export function stopAnalysis() {
     _pendingEval = null;
-    if (_sf && _ready && _searching) {
+    if (_worker && _ready && _searching) {
         _send('stop');
     }
 }
 
 export function newGame() {
-    if (_sf && _ready) {
+    if (_worker && _ready) {
         _send('ucinewgame');
         _send('isready');
     }
