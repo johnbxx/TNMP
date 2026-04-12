@@ -11,14 +11,14 @@
 
 import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
-import { nagToHtml, splitPgn, pgnToGameObject, extractMoveText } from './pgn-parser.js';
+import { nagToHtml, splitPgn, pgnToGameObject } from './pgn-parser.js';
 import { formatName, resultClass, resultSymbol, scorePercent } from './utils.js';
-import { CONFIG, SUBMISSIONS_ENABLED } from './config.js';
+import { CONFIG } from './config.js';
 import { showToast } from './toast.js';
 import { classifyFen, loadEcoData } from './eco.js';
 import * as games from './games.js';
 import * as board from './board.js';
-import * as pgn from './pgn.js';
+import { createGame } from './pgn.js';
 import { switchTournament, fetchPlayerGames } from './tnm.js';
 import * as engine from './engine.js';
 
@@ -245,6 +245,7 @@ function createTab() {
         commentsBtn: el.querySelector('.viewer-comments-btn'),
         branchBtn: el.querySelector('.viewer-branch-btn'),
         playBtn: el.querySelector('.viewer-play-btn'),
+        game: null, // PGN game instance (set by loadGame)
     };
 }
 
@@ -468,7 +469,7 @@ combinedWidthQuery.addEventListener('change', () => {
     board.resize();
     positionEnginePanel();
     if (_gamesState) renderBrowserPanel(_gamesState);
-    if (_viewMode === 'game') renderPgnMoveList();
+    if (_activeTab.game) renderPgnMoveList();
 });
 
 // Mobile view toggle: browser-panel vs viewer-main
@@ -493,9 +494,6 @@ let _pgnState = null;
 // Panel identity (set on open, cleared on close)
 let _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
 
-// View mode: 'game' (PGN loaded) or 'explorer' (browsing openings)
-let _viewMode = 'explorer';
-
 // UI-only state
 let _branchChoices = [];
 let _branchSelectedIdx = 0;
@@ -510,22 +508,18 @@ let _ctxTargetNodeId = null;
 let _ctxAnchorEl = null;
 let _longPressTimer = null;
 let _browserListenerAC = null; // AbortController for browser panel listeners
-let _pendingSubmission = null; // { gameId, round, board } when previewing before submit
 let _engineActive = false; // user has toggled engine on
 let _enginePaused = false; // engine loaded but analysis paused
 let _analysisGen = 0; // incremented on each position change to discard stale results
 
 // ─── 2. onChange Handlers ──────────────────────────────────────────
 
-pgn.onChange((state) => {
+function onGameChange(state) {
     _pgnState = state;
-    if (_viewMode === 'game' && !_editingComment) {
-        renderPgnMoveList();
-    }
+    if (!_editingComment) renderPgnMoveList();
     updatePlayButton(state.isPlaying);
-    const headerEl = _activeTab.viewerHeader;
-    if (headerEl && _viewMode === 'game') updateGameHeader(_panel.meta);
-});
+    updateGameHeader(_panel.meta);
+}
 
 games.onChange(() => {
     _gamesState = {
@@ -541,7 +535,7 @@ games.onChange(() => {
     };
     renderBrowserPanel(_gamesState);
     // Explorer takes over the board/moves only when no game is loaded
-    if (_gamesState.explorerActive && _viewMode !== 'game') {
+    if (_gamesState.explorerActive && !_activeTab.game) {
         setToolbarButtons();
         renderExplorerHeader(_gamesState);
         renderExplorerMoveList();
@@ -553,20 +547,20 @@ games.onChange(() => {
 
 function onBoardMove(san) {
     if (_editingComment) document.activeElement?.blur();
-    if (_viewMode === 'explorer' && games.isExplorerActive()) {
+    if (!_activeTab.game && games.isExplorerActive()) {
         games.setExplorerPosition([...games.getExplorerMoves(), san]);
     } else {
-        pgn.playMove(san);
+        _activeTab.game.playMove(san);
     }
 }
 
 function onBoardDraw(shapes) {
-    const nodeId = pgn.getCurrentNodeId();
+    const nodeId = _activeTab.game.getCurrentNodeId();
     if (nodeId < 0) return;
     if (shapes.length === 0) return; // chessground fires onChange([]) on click-to-clear
 
     // Merge new user-drawn shapes with existing PGN annotations
-    const node = pgn.getNodes()[nodeId];
+    const node = _activeTab.game.getNodes()[nodeId];
     const existing = node?.annotations || {};
     const arrows = [...(existing.arrows || [])];
     const squares = [...(existing.squares || [])];
@@ -585,9 +579,9 @@ function onBoardDraw(shapes) {
         }
     }
 
-    pgn.setShapeAnnotations(nodeId, arrows, squares);
+    _activeTab.game.setShapeAnnotations(nodeId, arrows, squares);
     // Sync: render from PGN annotations as the single source of truth
-    const updated = pgn.getNodes()[nodeId];
+    const updated = _activeTab.game.getNodes()[nodeId];
     board.setAutoShapes(annotationsToShapes(updated?.annotations));
     board.clearDrawnShapes();
 }
@@ -738,7 +732,7 @@ function activateEngine() {
         linesSelect.onchange = () => {
             _engineNumLines = parseInt(linesSelect.value);
             localStorage.setItem('engine-lines', _engineNumLines);
-            const fen = pgn.getCurrentFen();
+            const fen = _activeTab.game.getCurrentFen();
             if (fen) analyzeCurrentPosition(fen);
         };
     }
@@ -747,7 +741,7 @@ function activateEngine() {
     const pvContainer = _activeTab.enginePvLines;
     if (pvContainer) pvContainer.onclick = handlePvClick;
 
-    const fen = pgn.getCurrentFen();
+    const fen = _activeTab.game.getCurrentFen();
     if (fen) analyzeCurrentPosition(fen);
 }
 
@@ -761,7 +755,7 @@ export function toggleEnginePause() {
     if (_enginePaused) {
         engine.stopAnalysis();
     } else {
-        const fen = pgn.getCurrentFen();
+        const fen = _activeTab.game.getCurrentFen();
         if (fen) analyzeCurrentPosition(fen);
     }
 }
@@ -897,9 +891,9 @@ function handlePvClick(e) {
     const moveIdx = parseInt(moveEl.dataset.pvIdx);
     const info = _pvInfos[lineIdx];
     if (!info?.pv?.length) return;
-    const fen = pgn.getCurrentFen();
+    const fen = _activeTab.game.getCurrentFen();
     const sanMoves = engine.pvToSan(fen, info.pv.slice(0, moveIdx + 1));
-    for (const san of sanMoves) pgn.playMove(san);
+    for (const san of sanMoves) _activeTab.game.playMove(san);
 }
 
 // ─── Engine settings ─────────────────────────────────────────────
@@ -989,7 +983,7 @@ export function applyEngineSettings() {
     } else if (engine.isReady()) {
         // Safe mid-session option change: stop → bestmove → setoption → isready → readyok
         engine.setOptions({ hash: newHash, threads: newThreads }).then(() => {
-            const fen = pgn.getCurrentFen();
+            const fen = _activeTab.game.getCurrentFen();
             if (fen && _engineActive) analyzeCurrentPosition(fen);
         });
     }
@@ -1058,7 +1052,7 @@ export function openGamePanel(opts = {}) {
 }
 
 export function closeGamePanel() {
-    if (pgn.isDirty()) {
+    if (_activeTab.game?.isDirty()) {
         _pendingAction = forceCloseGamePanel;
         document.getElementById('editor-dirty-dialog')?.classList.remove('hidden');
         return;
@@ -1078,15 +1072,14 @@ function forceCloseGamePanel() {
         _activeTab.evalBar?.classList.add('hidden');
         _activeTab.engineBtn?.classList.remove('active');
     }
-    pgn.destroyGame();
+    _activeTab.game?.destroy();
+    _activeTab.game = null;
     closeModal('viewer-modal');
     onCloseCallback?.();
 }
 
 function setToolbarButtons() {
-    _activeTab.toolbar?.classList.toggle('hidden', _viewMode !== 'game');
-    const submitBtn = _activeTab.el.querySelector('.viewer-submit');
-    if (submitBtn) submitBtn.classList.toggle('hidden', !SUBMISSIONS_ENABLED || !_pendingSubmission);
+    _activeTab.toolbar?.classList.toggle('hidden', !_activeTab.game);
 }
 
 function ensureBoard() {
@@ -1096,27 +1089,26 @@ function ensureBoard() {
 }
 
 function loadGame(pgnText, orientation = 'white') {
-    _viewMode = 'game';
-    _pendingSubmission = null;
     showViewer();
     updateLayout();
-    setToolbarButtons();
     _activeTab.gameHeader?.classList.remove('hidden');
     _activeTab.explorerHeader?.classList.add('hidden');
+    _activeTab.toolbar?.classList.remove('hidden');
 
-    pgn.initGame(pgnText, { onPositionChange });
+    _activeTab.game = createGame(pgnText, { onPositionChange, onChange: onGameChange });
+    _activeTab.game.start();
     updateGameHeader(_panel.meta);
 
     board.setOrientation(orientation);
-    board.setPosition(pgn.getCurrentFen(), false);
+    board.setPosition(_activeTab.game.getCurrentFen(), false);
     board.resize();
 }
 
 function loadExplorer({ restoreMoves } = {}) {
-    const wasGame = _viewMode === 'game';
-    if (wasGame) pgn.destroyGame();
-    _viewMode = 'explorer';
-    _pendingSubmission = null;
+    if (_activeTab.game) {
+        _activeTab.game.destroy();
+        _activeTab.game = null;
+    }
     showViewer();
     updateLayout();
     setToolbarButtons();
@@ -1153,7 +1145,7 @@ export function explorerBackToBrowser() {
 
 // Dirty dialog
 export function resolveDirtyDialog(action) {
-    if (action === 'copy-leave') navigator.clipboard?.writeText(pgn.getPgn()).catch(() => {});
+    if (action === 'copy-leave') navigator.clipboard?.writeText(_activeTab.game.getPgn()).catch(() => {});
     document.getElementById('editor-dirty-dialog')?.classList.add('hidden');
     if (action !== 'cancel') _pendingAction?.();
     _pendingAction = null;
@@ -1181,7 +1173,7 @@ function syncNagButtons(elId, selector, nodeId) {
     const el = document.getElementById(elId);
     if (el && !el.classList.contains('hidden') && nodeId != null) {
         el.querySelectorAll(selector).forEach((btn) => {
-            btn.classList.toggle('nag-active', pgn.nodeHasNag(nodeId, parseInt(btn.dataset.nag, 10)));
+            btn.classList.toggle('nag-active', _activeTab.game.nodeHasNag(nodeId, parseInt(btn.dataset.nag, 10)));
         });
     }
 }
@@ -1213,7 +1205,7 @@ function showContextMenu(nodeId, anchorEl) {
     _ctxAnchorEl = anchorEl;
     menu.classList.remove('hidden');
 
-    const nodes = pgn.getNodes();
+    const nodes = _activeTab.game.getNodes();
     const node = nodes[nodeId];
     const parent = node ? nodes[node.parentId] : null;
 
@@ -1317,7 +1309,7 @@ function startCommentEdit(nodeId) {
         commentEl.contentEditable = 'false';
         commentEl.classList.remove('comment-editing');
         const text = commentEl.textContent.trim();
-        pgn.setComment(nodeId, text);
+        _activeTab.game.setComment(nodeId, text);
         // setComment triggers notifyChange → re-render, which replaces this span
     }
 
@@ -1415,7 +1407,7 @@ function wireContextMenu() {
     menu?.addEventListener('click', (e) => {
         const nagBtn = e.target.closest('.ctx-nag');
         if (nagBtn && _ctxTargetNodeId != null) {
-            pgn.toggleNag(_ctxTargetNodeId, parseInt(nagBtn.dataset.nag, 10));
+            _activeTab.game.toggleNag(_ctxTargetNodeId, parseInt(nagBtn.dataset.nag, 10));
             refreshNagHighlights();
             return;
         }
@@ -1433,24 +1425,24 @@ function wireContextMenu() {
             showNagPicker(targetId, anchor);
         } else if (action === 'explore') {
             if (_ctxTargetNodeId != null && _ctxTargetNodeId > 0) {
-                const moves = pgn.getMovesTo(_ctxTargetNodeId);
+                const moves = _activeTab.game.getMovesTo(_ctxTargetNodeId);
                 hideContextMenu();
                 loadExplorer({ restoreMoves: moves });
             }
         } else if (action === 'delete-comment') {
             if (_ctxTargetNodeId != null && _ctxTargetNodeId > 0) {
-                pgn.setComment(_ctxTargetNodeId, null);
+                _activeTab.game.setComment(_ctxTargetNodeId, null);
                 hideContextMenu();
                 showToast('Comment deleted');
             }
         } else if (action === 'delete') {
             if (_ctxTargetNodeId != null && _ctxTargetNodeId !== 0) {
                 const targetId = _ctxTargetNodeId;
-                const count = countMoves(pgn.getNodes(), targetId);
+                const count = countMoves(_activeTab.game.getNodes(), targetId);
                 hideContextMenu();
                 const doDelete = () => {
-                    pgn.goToMove(targetId);
-                    pgn.deleteFromHere();
+                    _activeTab.game.goToMove(targetId);
+                    _activeTab.game.deleteFromHere();
                     showToast(`${count} ${count === 1 ? 'move' : 'moves'} deleted`);
                 };
                 if (count >= 5) {
@@ -1463,9 +1455,9 @@ function wireContextMenu() {
             }
         } else if (action === 'mainline') {
             if (_ctxTargetNodeId != null) {
-                pgn.goToMove(_ctxTargetNodeId);
+                _activeTab.game.goToMove(_ctxTargetNodeId);
                 hideContextMenu();
-                pgn.promoteVariation();
+                _activeTab.game.promoteVariation();
             }
         }
     });
@@ -1549,7 +1541,7 @@ export function launchExplorer({ restore = false } = {}) {
 }
 
 export function getGamePgn() {
-    return pgn.getPgn();
+    return _activeTab.game.getPgn();
 }
 
 // ─── 4. Keyboard Dispatch ──────────────────────────────────────────
@@ -1573,14 +1565,14 @@ export function handlePanelKeydown(e) {
             e.preventDefault();
         } else if (e.key === 'ArrowLeft' || e.key === 'Escape') {
             dismissBranchPopover();
-            pgn.goToPrev();
+            _activeTab.game.goToPrev();
             e.preventDefault();
         }
         return;
     }
 
     // Explorer mode keyboard (only when explorer view is active, not while viewing a game)
-    if (_viewMode === 'explorer' && games.isExplorerActive()) {
+    if (!_activeTab.game && games.isExplorerActive()) {
         const moves = games.getExplorerStats()?.moves;
         if (e.key === 'ArrowDown' && moves?.length) {
             _explorerSelectedIdx = Math.min(_explorerSelectedIdx + 1, moves.length - 1);
@@ -1612,37 +1604,37 @@ export function handlePanelKeydown(e) {
 
     // PGN navigation
     if (e.key === 'ArrowLeft') {
-        pgn.goToPrev();
+        _activeTab.game.goToPrev();
         e.preventDefault();
     } else if (e.key === 'ArrowRight') {
-        const choices = pgn.goToNext();
+        const choices = _activeTab.game.goToNext();
         if (choices) showBranchPopover(choices);
         e.preventDefault();
     } else if (e.key === 'Home') {
-        pgn.goToStart();
+        _activeTab.game.goToStart();
         e.preventDefault();
     } else if (e.key === 'End') {
-        pgn.goToEnd();
+        _activeTab.game.goToEnd();
         e.preventDefault();
     } else if (e.key === ' ') {
-        pgn.toggleAutoPlay();
+        _activeTab.game.toggleAutoPlay();
         e.preventDefault();
     } else if (e.key === 'f' || e.key === 'F') {
         board.flip();
     } else if (e.key === 'c' || e.key === 'C') {
-        const hidden = pgn.toggleComments();
+        const hidden = _activeTab.game.toggleComments();
         _activeTab.commentsBtn?.classList.toggle('active', !hidden);
     } else if (e.key === 'b' || e.key === 'B') {
-        const active = pgn.toggleBranchMode();
+        const active = _activeTab.game.toggleBranchMode();
         _activeTab.branchBtn?.classList.toggle('active', active);
     } else if (e.key === 'a' || e.key === 'A') {
         toggleEngine();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        const nodeId = pgn.getCurrentNodeId();
+        const nodeId = _activeTab.game.getCurrentNodeId();
         if (nodeId > 0) {
-            const count = countMoves(pgn.getNodes(), nodeId);
+            const count = countMoves(_activeTab.game.getNodes(), nodeId);
             const doDelete = () => {
-                pgn.deleteFromHere();
+                _activeTab.game.deleteFromHere();
                 showToast(`${count} ${count === 1 ? 'move' : 'moves'} deleted`);
             };
             if (count >= 5) {
@@ -1665,7 +1657,7 @@ function showBranchPopover(childIds) {
     _branchChoices = childIds;
     _branchSelectedIdx = 0;
 
-    const nodes = pgn.getNodes();
+    const nodes = _activeTab.game.getNodes();
     const btns = childIds
         .map((cid, i) => {
             const main = nodes[nodes[cid].parentId]?.mainChild === cid ? ' branch-main' : '';
@@ -1684,7 +1676,7 @@ function showBranchPopover(childIds) {
         const btn = e.target.closest('[data-node-id]');
         if (btn) {
             dismissBranchPopover();
-            pgn.goToMove(+btn.dataset.nodeId);
+            _activeTab.game.goToMove(+btn.dataset.nodeId);
         } else if (e.target.classList.contains('branch-overlay')) dismissBranchPopover();
     });
 }
@@ -1699,7 +1691,7 @@ function branchPopoverNavigate(action) {
     if (action === 'select') {
         const nodeId = _branchChoices[_branchSelectedIdx];
         dismissBranchPopover();
-        pgn.goToMove(nodeId);
+        _activeTab.game.goToMove(nodeId);
         return;
     }
     const delta = action === 'up' ? -1 : 1;
@@ -1720,7 +1712,7 @@ function updateExplorerSelection() {
 // ─── 5. HTML Builders ──────────────────────────────────────────────
 
 function updateGameHeader(meta) {
-    const h = pgn.getHeaders();
+    const h = _activeTab.game.getHeaders();
     const white = formatName(h.White || '');
     const black = formatName(h.Black || '');
     const whiteElo = h.WhiteElo || '';
@@ -1891,8 +1883,8 @@ function setClockDisplay(el, text, seconds, active) {
 }
 
 function updateClocks() {
-    const nodes = pgn.getNodes();
-    const nodeId = pgn.getCurrentNodeId();
+    const nodes = _activeTab.game.getNodes();
+    const nodeId = _activeTab.game.getCurrentNodeId();
     const wEl = _activeTab.whiteClock;
     const bEl = _activeTab.blackClock;
     if (!wEl || !bEl) return;
@@ -2185,7 +2177,7 @@ function renderGameRow(game, boardLabel = null) {
     const isPairing = !hasPgn && game.result === '*';
 
     return `
-        <div class="browser-game-row" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" data-pairing="${isPairing}" role="${hasPgn || SUBMISSIONS_ENABLED ? 'button' : 'listitem'}" ${hasPgn || SUBMISSIONS_ENABLED ? 'tabindex="0"' : ''}>
+        <div class="browser-game-row" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" data-pairing="${isPairing}" role="${hasPgn ? 'button' : 'listitem'}" ${hasPgn ? 'tabindex="0"' : ''}>
             <span class="browser-board">${boardLabel || game.board || '?'}</span>
             <div class="browser-player browser-player-white">
                 <span class="browser-name">${game.white}</span>
@@ -2264,13 +2256,6 @@ function renderPgnMoveList() {
     const { nodes, currentNodeId, commentsHidden } = _pgnState;
     if (!nodes || nodes.length === 0) {
         container.innerHTML = '';
-        return;
-    }
-
-    // Empty game (just root node, no moves) — show "Add Moves" prompt if submissions enabled
-    if (SUBMISSIONS_ENABLED && nodes[0].mainChild === null && _panel.meta?.hasPgn === false) {
-        container.innerHTML =
-            '<div class="viewer-add-moves"><button class="viewer-add-moves-btn" data-action="submit-add-moves">Add Moves</button><p>Paste or upload a PGN to contribute moves for this game.</p></div>';
         return;
     }
 
@@ -2622,7 +2607,7 @@ function wireViewerHeader() {
     movesEl?.addEventListener('click', (e) => {
         const moveEl = e.target.closest('[data-node-id]');
         if (moveEl) {
-            pgn.goToMove(parseInt(moveEl.dataset.nodeId, 10));
+            _activeTab.game.goToMove(parseInt(moveEl.dataset.nodeId, 10));
             return;
         }
         const varEl = e.target.closest('[data-var-node]');
@@ -2773,7 +2758,7 @@ function wireBrowserListeners(panelEl) {
                     const wasActive = games.getFilter('color') === toggling;
                     games.setFilter('color', games.getFilter('color') === toggling ? null : toggling);
                     // Orient board when entering a color filter
-                    if (!wasActive && _viewMode === 'explorer') {
+                    if (!wasActive && !_activeTab.game) {
                         board.setOrientation(toggling === 'black' ? 'black' : 'white');
                     }
                 }
@@ -2802,7 +2787,7 @@ function wireBrowserListeners(panelEl) {
             if (row) {
                 const gameId = row.dataset.gameId;
                 const hasPgn = row.dataset.hasPgn === '1';
-                if (hasPgn || SUBMISSIONS_ENABLED) {
+                if (hasPgn) {
                     openGameFromBrowser(gameId);
                 } else if (gameId) {
                     showToast('No moves yet for this game', 'info');
@@ -2839,34 +2824,33 @@ function doSelectPlayer(name, searchInput, autocomplete, clearBtn, norm) {
 // ─── Re-exports for app.js action dispatch ─────────────────────────
 
 // Viewer toolbar → pgn.js delegations
-export const goToStart = () => pgn.goToStart();
-export const goToPrev = () => pgn.goToPrev();
+export const goToStart = () => _activeTab.game.goToStart();
+export const goToPrev = () => _activeTab.game.goToPrev();
 export const goToNext = () => {
-    const c = pgn.goToNext();
+    const c = _activeTab.game.goToNext();
     if (c) showBranchPopover(c);
 };
-export const goToEnd = () => pgn.goToEnd();
+export const goToEnd = () => _activeTab.game.goToEnd();
 export const flipBoard = () => {
     board.flip();
     // Re-render eval bar to match new orientation
-    if (_engineActive && _pvInfos[0]) renderEvalBar(_pvInfos[0], pgn.getCurrentFen());
+    if (_engineActive && _pvInfos[0]) renderEvalBar(_pvInfos[0], _activeTab.game.getCurrentFen());
 };
 export const setBoardOrientation = (color) => board.setOrientation(color);
-export const toggleAutoPlay = () => pgn.toggleAutoPlay();
-export const toggleComments = () => pgn.toggleComments();
-export const toggleBranchMode = () => pgn.toggleBranchMode();
-export const getGameMoves = () => pgn.getReadablePgn() || null;
+export const toggleAutoPlay = () => _activeTab.game.toggleAutoPlay();
+export const toggleComments = () => _activeTab.game.toggleComments();
+export const toggleBranchMode = () => _activeTab.game.toggleBranchMode();
+export const getGameMoves = () => _activeTab.game?.getReadablePgn() || null;
 export const toggleNag = (nagNum) => {
     const nodeId = _nagTargetNodeId || _pgnState?.currentNodeId || 0;
     if (nodeId > 0) {
-        pgn.toggleNag(nodeId, nagNum);
+        _activeTab.game.toggleNag(nodeId, nagNum);
         refreshNagHighlights();
     }
 };
 
-// Import / Submit dialog
+// Import dialog
 let _importWired = false;
-let _submitMode = false; // true = submitting moves for an existing game
 
 function wireImportDialog() {
     if (_importWired) return;
@@ -2905,22 +2889,12 @@ function wireImportDialog() {
     });
 }
 
-function setImportDialogMode(submit) {
-    _submitMode = submit;
-    const titleEl = document.querySelector('#editor-import-dialog h3');
-    const okBtn = document.querySelector('[data-action="editor-import-ok"]');
-    if (titleEl) titleEl.textContent = submit ? 'Submit Moves' : 'Import PGN';
-    if (okBtn) okBtn.textContent = submit ? 'Submit' : 'Import';
-}
-
-export function showImportDialog(submit = false) {
+export function showImportDialog() {
     const dialog = document.getElementById('editor-import-dialog');
     const textarea = document.getElementById('editor-import-text');
     if (!dialog || !textarea) return;
     wireImportDialog();
-    setImportDialogMode(submit);
     textarea.value = '';
-    if (submit) textarea.placeholder = 'Paste movetext or PGN here, or drag a .pgn file...';
     dialog.classList.remove('hidden');
     wirePopupDismiss(dialog);
     textarea.focus();
@@ -2936,7 +2910,6 @@ export function hideImportDialog() {
         textarea.value = '';
         textarea.placeholder = 'Paste PGN text here, or drag .pgn files...';
     }
-    _submitMode = false;
 }
 
 function importFromTexts(texts) {
@@ -2953,8 +2926,6 @@ function importFromTexts(texts) {
 }
 
 export function doImport() {
-    if (_submitMode) return doPreview();
-
     const textarea = document.getElementById('editor-import-text');
     let text = textarea?.value?.trim();
     if (!text) return;
@@ -2976,54 +2947,11 @@ export function doImport() {
     importFromTexts([text]);
 }
 
-function doPreview() {
-    const textarea = document.getElementById('editor-import-text');
-    let text = textarea?.value?.trim();
-    if (!text) return;
-
-    const meta = _panel.meta;
-    const game = games.getCachedGame(_panel.gameId);
-    if (!game) return;
-
-    hideImportDialog();
-
-    // Extract just the movetext if pasted text includes headers
-    const moveText = extractMoveText(text.startsWith('[') ? splitPgn(text)[0] || text : text);
-    const headers = [`[White "${game.white}"]`, `[Black "${game.black}"]`, `[Result "${game.result}"]`];
-    const fullPgn = headers.join('\n') + '\n\n' + moveText;
-
-    // Load into viewer for review — user can annotate before submitting
-    loadGame(fullPgn, 'white');
-    _pendingSubmission = { gameId: _panel.gameId, round: meta.round, board: meta.board };
-    setToolbarButtons(); // re-sync after setting _pendingSubmission
-    showToast('Review and annotate, then hit Submit.');
-}
-
-export async function submitGame() {
-    if (!_pendingSubmission) return;
-
-    // Grab the current PGN (includes any annotations the user added)
-    const fullPgn = pgn.getPgn();
-    const { round, board: boardNum } = _pendingSubmission;
-
-    // TODO: POST to /submit-game when feature is live
-    // For now, dummy mode — mark locally and toast
-    console.log('[Submit] Would POST:', { pgn: fullPgn, round, board: boardNum, submittedBy: CONFIG.playerName });
-    const game = games.getCachedGame(_pendingSubmission.gameId);
-    if (game) game.submission = { status: 'pending', submittedBy: CONFIG.playerName };
-    // updateCachedGame triggers notifyChange → browser re-renders with green icon
-    games.updateCachedGame(_pendingSubmission.gameId, {});
-    showToast('(Demo) Submission received! Pending review.');
-
-    _pendingSubmission = null;
-    setToolbarButtons();
-}
-
 // Header editor (read-only display of all PGN headers)
 export function showHeaderEditor() {
     const popup = document.getElementById('editor-header-popup');
     const fields = document.getElementById('editor-header-fields');
-    const headers = pgn.getHeaders();
+    const headers = _activeTab.game.getHeaders();
 
     // Skip internal/redundant/empty headers
     const skip = new Set(['FEN', 'SetUp', 'GameId']);
@@ -3140,5 +3068,5 @@ function wirePopupDismiss(popup) {
 }
 
 // Board-core compat (used by viewer-analysis action in app.js)
-export const getCurrentNodeId = () => pgn.getCurrentNodeId();
-export const getNodes = () => pgn.getNodes();
+export const getCurrentNodeId = () => _activeTab.game.getCurrentNodeId();
+export const getNodes = () => _activeTab.game.getNodes();

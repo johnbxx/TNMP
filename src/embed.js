@@ -65,7 +65,6 @@ import {
     showImportDialog,
     hideImportDialog,
     doImport,
-    submitGame,
     showHeaderEditor,
     showTournamentInfo,
     saveHeaderEditor,
@@ -235,12 +234,6 @@ const ACTIONS = {
     },
     'browser-import': () => {
         if (FEAT.import) showImportDialog();
-    },
-    'submit-add-moves': () => {
-        if (FEAT.import) showImportDialog(true);
-    },
-    'viewer-submit': () => {
-        if (FEAT.import) submitGame();
     },
     'editor-headers': showHeaderEditor,
     'header-save': saveHeaderEditor,
@@ -466,8 +459,6 @@ function init() {
     // Hide UI for disabled features
     if (!FEAT.import) {
         document.querySelector('.browser-action-btn[data-action="browser-import"]')?.classList.add('hidden');
-        document.querySelector('[data-action="viewer-submit"]')?.classList.add('hidden');
-        document.querySelector('[data-action="submit-add-moves"]')?.classList.add('hidden');
     }
     if (!FEAT.explorer) {
         document.querySelector('.browser-action-btn[data-action="browser-explore"]')?.classList.add('hidden');
