@@ -2514,7 +2514,6 @@ button.viewer-close {
         background: rgb(from var(--accent) r g b / 0.15);
     }
     .viewer-tab-bar .tab-btn.tab-active {
-        background: light-dark(var(--modal-bg), var(--surface-subtle));
         color: var(--text-primary);
         opacity: 1;
         position: relative;
@@ -2528,7 +2527,7 @@ button.viewer-close {
         position: absolute;
         top: auto; bottom: 0; left: -15px;
         width: 15px; height: 15px;
-        background: radial-gradient(circle at 0 0, transparent 15px, light-dark(var(--modal-bg), var(--surface-subtle)) 15px);
+        background: radial-gradient(circle at 0 0, transparent 15px, var(--tab-left, light-dark(var(--modal-bg), var(--surface-subtle))) 15px);
         opacity: 1;
         z-index: 2;
     }
@@ -2537,7 +2536,7 @@ button.viewer-close {
         position: absolute;
         bottom: 0; right: -15px;
         width: 15px; height: 15px;
-        background: radial-gradient(circle at 100% 0, transparent 15px, light-dark(var(--modal-bg), var(--surface-subtle)) 15px);
+        background: radial-gradient(circle at 100% 0, transparent 15px, var(--tab-right, light-dark(var(--modal-bg), var(--surface-subtle))) 15px);
         z-index: 2;
     }
     .tab-label {

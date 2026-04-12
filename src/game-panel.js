@@ -321,6 +321,7 @@ function addTab({ sourceCtxKey } = {}) {
         tab.ctxKey = games.cloneCtx(sourceKey);
     }
     loadExplorer();
+    if (!isCombinedWidth()) showBrowser();
 
     // Apply current theme to the new tab
     refreshScheme();
@@ -337,11 +338,14 @@ function switchTab(tab) {
         }
         _activeTab.el.classList.add('hidden');
         _activeTab.tabBtn?.classList.remove('tab-active');
+        if (_activeTab.tabBtn) _activeTab.tabBtn.style.background = '';
     }
 
     _activeTab = tab;
     _activeTab.el.classList.remove('hidden');
     _activeTab.tabBtn?.classList.add('tab-active');
+
+    updateActiveTabGradient();
 
     // Activate the ctx for this tab
     if (tab.ctxKey) games.activateCtx(tab.ctxKey);
@@ -456,6 +460,21 @@ function showBrowserContextMenu(gameId, anchor) {
 function hideBrowserContextMenu() {
     document.getElementById('browser-context-menu')?.classList.add('hidden');
     _browserCtxGameId = null;
+}
+
+function updateActiveTabGradient() {
+    if (!_activeTab?.tabBtn || !_tabHost) return;
+    const x = _activeTab.tabBtn.offsetLeft;
+    const w = _activeTab.tabBtn.offsetWidth;
+    const W = _tabHost.offsetWidth;
+    const H = _tabHost.offsetHeight;
+    if (!W) return; // not in layout yet
+    const a = ((42 * x) / (W + H)).toFixed(1);
+    const b = ((42 * (x + w)) / (W + H)).toFixed(1);
+    const mix = `light-dark(white, black)`;
+    _activeTab.tabBtn.style.background = `linear-gradient(90deg, color-mix(in srgb, var(--modal-bg), ${mix} ${a}%), color-mix(in srgb, var(--modal-bg), ${mix} ${b}%))`;
+    _activeTab.tabBtn.style.setProperty('--tab-left', `color-mix(in srgb, var(--modal-bg), ${mix} ${a}%)`);
+    _activeTab.tabBtn.style.setProperty('--tab-right', `color-mix(in srgb, var(--modal-bg), ${mix} ${b}%)`);
 }
 
 function updateTabCloseVisibility() {
@@ -1369,6 +1388,8 @@ export function openPanel() {
     updateLayout();
     // Render browser panel if state was pushed while panel was invisible
     if (_activeTab.gamesState && panelEl?.offsetHeight) renderBrowserPanel(_activeTab.gamesState);
+    // Reapply active tab gradient (needs layout to compute position)
+    if (_activeTab.tabBtn && _tabBar) updateActiveTabGradient();
 }
 
 export function openGamePanel(opts = {}) {
