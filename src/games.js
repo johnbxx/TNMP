@@ -195,8 +195,8 @@ export function getEvents() {
     return _activeCtx?.events ?? null;
 }
 
-function notifyChange() {
-    if (_activeCtx) _activeCtx.treeDirty = true;
+function notifyChange(dirtyTrie = true) {
+    if (_activeCtx && dirtyTrie) _activeCtx.treeDirty = true;
     _onChange?.();
 }
 
@@ -379,18 +379,29 @@ let _tabCounter = 0;
  * Clone an existing ctx into a new tab-scoped ctx with independent filters.
  * Returns the new key.
  */
-export function cloneCtx(sourceKey) {
+export function cloneCtx(sourceKey, { copyFilters = true } = {}) {
     const source = _ctxCache.get(sourceKey);
     if (!source) return null;
-    const newKey = `tab:${++_tabCounter}:${sourceKey}`;
+    // Always reference original source, not a clone chain
+    const baseKey = sourceKey.replace(/^(tab:\d+:)+/, '');
+    const newKey = `tab:${++_tabCounter}:${baseKey}`;
     const ctx = makeCtx(source.dataset);
-    // Copy current filter state
-    ctx.filters = { ...source.filters };
-    ctx.visibleSections = new Set(source.visibleSections);
+    if (copyFilters) {
+        ctx.filters = { ...source.filters };
+        ctx.visibleSections = new Set(source.visibleSections);
+        // Share trie from source — same dataset + filters = same trie
+        if (source.trie && !source.treeDirty) {
+            ctx.trie = source.trie;
+            ctx.treeDirty = false;
+        }
+    } else if (ctx.rounds.length > 0) {
+        // Fresh tab: default to latest round (same as initial ingestDataset)
+        ctx.filters.round = ctx.rounds[ctx.rounds.length - 1];
+    }
     _ctxCache.set(newKey, ctx);
     _activeCtx = ctx;
     _activeCtxKey = newKey;
-    notifyChange();
+    notifyChange(false); // don't dirty trie — data hasn't changed
     return newKey;
 }
 
@@ -401,10 +412,14 @@ export function activateCtx(key) {
         _activeCtxKey = key;
         // Reset player list — tournament tabs fall through to getAllPlayers()
         _playerList = [];
-        notifyChange();
+        notifyChange(false); // don't dirty trie — ctx data hasn't changed
         return true;
     }
     return false;
+}
+
+export function deleteCtx(key) {
+    _ctxCache.delete(key);
 }
 
 export function closeBrowser() {

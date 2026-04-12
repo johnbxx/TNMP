@@ -315,10 +315,10 @@ function addTab({ sourceCtxKey } = {}) {
     ensureBoard();
     updateLayout();
 
-    // Clone ctx — use specified source, or default to last tournament for + button
+    // Clone ctx — explicit source copies filters, + button gets fresh defaults
     const sourceKey = sourceCtxKey || games.getLastTournamentKey() || games.getActiveCtxKey();
     if (sourceKey) {
-        tab.ctxKey = games.cloneCtx(sourceKey);
+        tab.ctxKey = games.cloneCtx(sourceKey, { copyFilters: !!sourceCtxKey });
     }
     loadExplorer();
     if (!isCombinedWidth()) showBrowser();
@@ -347,8 +347,12 @@ function switchTab(tab) {
 
     updateActiveTabGradient();
 
-    // Activate the ctx for this tab
-    if (tab.ctxKey) games.activateCtx(tab.ctxKey);
+    // Activate the ctx for this tab (skip re-render — DOM is preserved)
+    if (tab.ctxKey) {
+        _switchingTab = true;
+        games.activateCtx(tab.ctxKey);
+        _switchingTab = false;
+    }
 
     // Resume engine on arriving tab
     if (_activeTab.engineActive && !_activeTab.enginePaused) {
@@ -369,6 +373,10 @@ function closeTab(tab) {
     // Clean up
     tab.game?.destroy();
     tab.engineActive = false;
+    // Delete cloned ctx if no remaining tab references it (preserve original source contexts)
+    if (tab.ctxKey?.startsWith('tab:') && !_tabs.some((t) => t.ctxKey === tab.ctxKey)) {
+        games.deleteCtx(tab.ctxKey);
+    }
     tab.el.remove();
     tab.tabBtn.remove();
     _tabs.splice(idx, 1);
@@ -889,6 +897,7 @@ let _nagTargetNodeId = null;
 let _ctxTargetNodeId = null;
 let _ctxAnchorEl = null;
 let _longPressTimer = null;
+let _switchingTab = false;
 
 // ─── 2. onChange Handlers ──────────────────────────────────────────
 
@@ -903,6 +912,7 @@ function onGameChange(state) {
 }
 
 games.onChange(() => {
+    if (_switchingTab) return; // DOM is preserved, skip re-render
     _activeTab.ctxKey = games.getActiveCtxKey();
     _activeTab.gamesState = {
         round: games.getFilter('round'),
@@ -1906,7 +1916,7 @@ export function openImportedGames(importedGames) {
     if (!importedGames || importedGames.length === 0) return;
     openPanel();
     if (isCombinedWidth()) {
-        games.ensureExplorer();
+        loadExplorer();
     } else {
         const first = importedGames.find((g) => g.hasPgn && g.gameId);
         if (first) openGameFromBrowser(first.gameId);
@@ -3309,6 +3319,8 @@ function importFromTexts(texts) {
     const importedGames = pgnStrings.map((p, i) => pgnToGameObject(p, i));
     hideImportDialog();
 
+    // Delete old cloned ctx to free trie memory before importing new dataset
+    if (_activeTab.ctxKey?.startsWith('tab:')) games.deleteCtx(_activeTab.ctxKey);
     games.setGamesData({ games: importedGames, query: { local: true } });
     openImportedGames(importedGames);
     showToast(`${importedGames.length} game${importedGames.length !== 1 ? 's' : ''} imported`, 'success');
