@@ -504,6 +504,19 @@ function groupGames(games) {
         }
         map.get(key).push(g);
     }
+
+    // Player mode: sort tournament groups reverse-chronologically, games by round desc
+    if (ds?.playerName) {
+        groups.sort((a, b) => {
+            const da = a.games[0]?.date || '';
+            const db = b.games[0]?.date || '';
+            return db.localeCompare(da);
+        });
+        for (const g of groups) {
+            g.games.sort((a, b) => (b.round || 0) - (a.round || 0));
+        }
+    }
+
     return groups;
 }
 

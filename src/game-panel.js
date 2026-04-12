@@ -245,7 +245,22 @@ function createTab() {
         commentsBtn: el.querySelector('.viewer-comments-btn'),
         branchBtn: el.querySelector('.viewer-branch-btn'),
         playBtn: el.querySelector('.viewer-play-btn'),
-        game: null, // PGN game instance (set by loadGame)
+        // Per-tab state
+        game: null,
+        panel: { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null },
+        gamesState: null,
+        pgnState: null,
+        branchChoices: [],
+        branchSelectedIdx: 0,
+        varToggled: new Set(),
+        explorerLastEco: null,
+        explorerSelectedIdx: -1,
+        engineActive: false,
+        enginePaused: false,
+        pvInfos: [],
+        analysisGen: 0,
+        editingComment: false,
+        browserListenerAC: null,
     };
 }
 
@@ -446,8 +461,9 @@ export function initGamePanel(mount, { features } = {}) {
     `,
     );
 
-    // Wire browser listeners once (scaffold is now permanent)
+    // Wire tab listeners
     wireBrowserListeners(_activeTab.browserPanel);
+    wireViewerHeader();
 
     onModalClose('viewer-modal', () => {
         games.closeBrowser();
@@ -468,7 +484,7 @@ combinedWidthQuery.addEventListener('change', () => {
     updateLayout();
     board.resize();
     positionEnginePanel();
-    if (_gamesState) renderBrowserPanel(_gamesState);
+    if (_activeTab.gamesState) renderBrowserPanel(_activeTab.gamesState);
     if (_activeTab.game) renderPgnMoveList();
 });
 
@@ -478,7 +494,7 @@ function showBrowser() {
     if (modal && !isCombinedWidth()) {
         modal.classList.add('browser-only');
         requestAnimationFrame(() => {
-            if (_gamesState) renderBrowserPanel(_gamesState);
+            if (_activeTab.gamesState) renderBrowserPanel(_activeTab.gamesState);
         });
     }
 }
@@ -487,42 +503,24 @@ function showViewer() {
     if (modal) modal.classList.remove('browser-only');
 }
 
-// Stashed state from onChange callbacks (NEVER call getters for rendering)
-let _gamesState = null;
-let _pgnState = null;
-
-// Panel identity (set on open, cleared on close)
-let _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
-
-// UI-only state
-let _branchChoices = [];
-let _branchSelectedIdx = 0;
-const _varToggled = new Set();
 const MIN_COLLAPSIBLE = 6;
 let _pendingAction = null;
-let _explorerLastEco = null;
-let _explorerSelectedIdx = -1; // -1 = no selection
-let _headerWired = false;
 let _nagTargetNodeId = null;
 let _ctxTargetNodeId = null;
 let _ctxAnchorEl = null;
 let _longPressTimer = null;
-let _browserListenerAC = null; // AbortController for browser panel listeners
-let _engineActive = false; // user has toggled engine on
-let _enginePaused = false; // engine loaded but analysis paused
-let _analysisGen = 0; // incremented on each position change to discard stale results
 
 // ─── 2. onChange Handlers ──────────────────────────────────────────
 
 function onGameChange(state) {
-    _pgnState = state;
-    if (!_editingComment) renderPgnMoveList();
+    _activeTab.pgnState = state;
+    if (!_activeTab.editingComment) renderPgnMoveList();
     updatePlayButton(state.isPlaying);
-    updateGameHeader(_panel.meta);
+    updateGameHeader(_activeTab.panel.meta);
 }
 
 games.onChange(() => {
-    _gamesState = {
+    _activeTab.gamesState = {
         round: games.getFilter('round'),
         tournament: games.getFilter('tournament'),
         color: games.getFilter('color'),
@@ -533,11 +531,11 @@ games.onChange(() => {
         explorerFen: games.getExplorerFen(),
         explorerMoveHistory: games.getExplorerMoves(),
     };
-    renderBrowserPanel(_gamesState);
+    renderBrowserPanel(_activeTab.gamesState);
     // Explorer takes over the board/moves only when no game is loaded
-    if (_gamesState.explorerActive && !_activeTab.game) {
+    if (_activeTab.gamesState.explorerActive && !_activeTab.game) {
         setToolbarButtons();
-        renderExplorerHeader(_gamesState);
+        renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
         board.setPosition(games.getExplorerFen(), true);
         board.highlightSquares(null, null);
@@ -546,7 +544,7 @@ games.onChange(() => {
 });
 
 function onBoardMove(san) {
-    if (_editingComment) document.activeElement?.blur();
+    if (_activeTab.editingComment) document.activeElement?.blur();
     if (!_activeTab.game && games.isExplorerActive()) {
         games.setExplorerPosition([...games.getExplorerMoves(), san]);
     } else {
@@ -624,21 +622,20 @@ function onPositionChange(fen, from, to, annotations) {
     board.setAutoShapes(annotationsToShapes(annotations));
     board.clearDrawnShapes();
     updateClocks();
-    if (_engineActive) analyzeCurrentPosition(fen);
+    if (_activeTab.engineActive) analyzeCurrentPosition(fen);
 }
 
 // ─── Engine integration ──────────────────────────────────────────
 
 let _engineNumLines = parseInt(localStorage.getItem('engine-lines')) || 3;
-let _pvInfos = []; // latest info per PV index
 let _engineDepth = parseInt(localStorage.getItem('engine-depth')) || 30;
 let _engineInfinite = localStorage.getItem('engine-infinite') === 'true';
 let _engineHash = parseInt(localStorage.getItem('engine-hash')) || 256;
 let _engineThreads = parseInt(localStorage.getItem('engine-threads')) || 0; // 0 = auto
 
 export function toggleEngine() {
-    if (_engineActive) {
-        _engineActive = false;
+    if (_activeTab.engineActive) {
+        _activeTab.engineActive = false;
         engine.stopAnalysis();
         _activeTab.enginePanel?.classList.add('hidden');
         _activeTab.evalBar?.classList.add('hidden');
@@ -701,7 +698,7 @@ function positionEnginePanel() {
     const hasBrowser = browserPanel && !browserPanel.classList.contains('hidden');
     const isTablet = window.matchMedia('(min-width: 1000px) and (max-width: 1599px)').matches;
 
-    if (_engineActive && hasBrowser && isTablet) {
+    if (_activeTab.engineActive && hasBrowser && isTablet) {
         // Move under browser panel
         if (panel.parentElement !== browserPanel) browserPanel.appendChild(panel);
     } else {
@@ -711,7 +708,7 @@ function positionEnginePanel() {
 }
 
 function activateEngine() {
-    _engineActive = true;
+    _activeTab.engineActive = true;
     const panel = _activeTab.enginePanel;
     panel?.classList.remove('hidden');
     _activeTab.evalBar?.classList.remove('hidden');
@@ -719,7 +716,7 @@ function activateEngine() {
     positionEnginePanel();
 
     // Set variant badge
-    _enginePaused = false;
+    _activeTab.enginePaused = false;
     const badge = _activeTab.engineVariantBadge;
     if (badge) badge.textContent = engine.getVariant() === 'full' ? 'Full' : 'Lite';
     const pauseBtn = _activeTab.enginePauseBtn;
@@ -746,13 +743,13 @@ function activateEngine() {
 }
 
 export function toggleEnginePause() {
-    if (!_engineActive || !engine.isReady()) return;
-    _enginePaused = !_enginePaused;
+    if (!_activeTab.engineActive || !engine.isReady()) return;
+    _activeTab.enginePaused = !_activeTab.enginePaused;
     const btn = _activeTab.enginePauseBtn;
     if (btn) {
-        btn.innerHTML = _enginePaused ? icon('play', 14) : icon('pause', 14);
+        btn.innerHTML = _activeTab.enginePaused ? icon('play', 14) : icon('pause', 14);
     }
-    if (_enginePaused) {
+    if (_activeTab.enginePaused) {
         engine.stopAnalysis();
     } else {
         const fen = _activeTab.game.getCurrentFen();
@@ -761,16 +758,16 @@ export function toggleEnginePause() {
 }
 
 function analyzeCurrentPosition(fen) {
-    if (!engine.isReady() || _enginePaused) return;
-    const gen = ++_analysisGen;
-    _pvInfos = [];
+    if (!engine.isReady() || _activeTab.enginePaused) return;
+    const gen = ++_activeTab.analysisGen;
+    _activeTab.pvInfos = [];
 
     engine.evaluatePosition(fen, {
         depth: _engineInfinite ? 99 : _engineDepth,
         multiPv: _engineNumLines,
         onInfo: (info) => {
-            if (gen !== _analysisGen) return;
-            _pvInfos[info.multiPvIndex - 1] = info;
+            if (gen !== _activeTab.analysisGen) return;
+            _activeTab.pvInfos[info.multiPvIndex - 1] = info;
             renderEnginePanel(fen);
         },
     });
@@ -780,7 +777,7 @@ function renderEnginePanel(fen) {
     // Depth + speed display
     const depthEl = _activeTab.engineDepth;
     const npsEl = _activeTab.engineNps;
-    const best = _pvInfos[0];
+    const best = _activeTab.pvInfos[0];
     if (depthEl && best) {
         const target = _engineInfinite ? '\u221E' : _engineDepth;
         depthEl.textContent = `depth ${best.depth}/${target}`;
@@ -807,7 +804,7 @@ function renderEnginePanel(fen) {
 
     const rows = [];
     for (let i = 0; i < _engineNumLines; i++) {
-        const info = _pvInfos[i];
+        const info = _activeTab.pvInfos[i];
         if (!info?.pv?.length) {
             rows.push('<div class="engine-pv-row engine-pv-empty"></div>');
             continue;
@@ -889,7 +886,7 @@ function handlePvClick(e) {
     if (!moveEl) return;
     const lineIdx = parseInt(moveEl.dataset.pvLine);
     const moveIdx = parseInt(moveEl.dataset.pvIdx);
-    const info = _pvInfos[lineIdx];
+    const info = _activeTab.pvInfos[lineIdx];
     if (!info?.pv?.length) return;
     const fen = _activeTab.game.getCurrentFen();
     const sanMoves = engine.pvToSan(fen, info.pv.slice(0, moveIdx + 1));
@@ -978,13 +975,13 @@ export function applyEngineSettings() {
     const currentVariant = engine.getVariant();
     if (newVariant !== currentVariant && engine.isReady()) {
         engine.destroyEngine();
-        _engineActive = false;
+        _activeTab.engineActive = false;
         startEngine(newVariant);
     } else if (engine.isReady()) {
         // Safe mid-session option change: stop → bestmove → setoption → isready → readyok
         engine.setOptions({ hash: newHash, threads: newThreads }).then(() => {
             const fen = _activeTab.game.getCurrentFen();
-            if (fen && _engineActive) analyzeCurrentPosition(fen);
+            if (fen && _activeTab.engineActive) analyzeCurrentPosition(fen);
         });
     }
 }
@@ -992,7 +989,6 @@ export function applyEngineSettings() {
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
 
 export function openPanel() {
-    wireViewerHeader();
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
     if (!alreadyOpen) openModal('viewer-modal');
@@ -1004,12 +1000,12 @@ export function openPanel() {
     ensureBoard();
     updateLayout();
     // Render browser panel if state was pushed while panel was invisible
-    if (_gamesState && panelEl?.offsetHeight) renderBrowserPanel(_gamesState);
+    if (_activeTab.gamesState && panelEl?.offsetHeight) renderBrowserPanel(_activeTab.gamesState);
 }
 
 export function openGamePanel(opts = {}) {
     const game = opts.game;
-    _varToggled.clear();
+    _activeTab.varToggled.clear();
     dismissBranchPopover();
 
     const meta = { ...opts.meta };
@@ -1021,15 +1017,15 @@ export function openGamePanel(opts = {}) {
         if (game.gameId) meta.gameId = game.gameId;
         if (game.hasPgn != null) meta.hasPgn = game.hasPgn;
     }
-    _panel = {
+    _activeTab.panel = {
         gameId: game?.gameId || null,
         meta,
         onPrev: opts.onPrev || null,
         onNext: opts.onNext || null,
         onClose: opts.onClose || null,
     };
-    meta.onPrev = _panel.onPrev;
-    meta.onNext = _panel.onNext;
+    meta.onPrev = _activeTab.panel.onPrev;
+    meta.onNext = _activeTab.panel.onNext;
 
     openPanel();
 
@@ -1061,12 +1057,12 @@ export function closeGamePanel() {
 }
 
 function forceCloseGamePanel() {
-    const onCloseCallback = _panel.onClose;
-    _panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
+    const onCloseCallback = _activeTab.panel.onClose;
+    _activeTab.panel = { gameId: null, meta: {}, onPrev: null, onNext: null, onClose: null };
     _pendingAction = null;
     // Stop engine analysis (but keep worker alive for re-use)
-    if (_engineActive) {
-        _engineActive = false;
+    if (_activeTab.engineActive) {
+        _activeTab.engineActive = false;
         engine.stopAnalysis();
         _activeTab.enginePanel?.classList.add('hidden');
         _activeTab.evalBar?.classList.add('hidden');
@@ -1097,7 +1093,7 @@ function loadGame(pgnText, orientation = 'white') {
 
     _activeTab.game = createGame(pgnText, { onPositionChange, onChange: onGameChange });
     _activeTab.game.start();
-    updateGameHeader(_panel.meta);
+    updateGameHeader(_activeTab.panel.meta);
 
     board.setOrientation(orientation);
     board.setPosition(_activeTab.game.getCurrentFen(), false);
@@ -1121,7 +1117,7 @@ function loadExplorer({ restoreMoves } = {}) {
         games.setExplorerPosition(restoreMoves);
     } else {
         games.ensureExplorer();
-        if (_gamesState) renderExplorerHeader(_gamesState);
+        if (_activeTab.gamesState) renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
         board.setPosition(games.getExplorerFen(), false);
         board.resize();
@@ -1271,8 +1267,6 @@ function hideContextMenu() {
 
 // ─── Inline comment editing ─────────────────────────────────────
 
-let _editingComment = false; // suppress re-render while editing
-
 function startCommentEdit(nodeId) {
     const container = _activeTab.viewerMoves;
     if (!container) return;
@@ -1289,7 +1283,7 @@ function startCommentEdit(nodeId) {
         moveEl.after(commentEl);
     }
 
-    _editingComment = true;
+    _activeTab.editingComment = true;
     commentEl.contentEditable = 'true';
     commentEl.classList.add('comment-editing');
     commentEl.focus();
@@ -1304,8 +1298,8 @@ function startCommentEdit(nodeId) {
     }
 
     function commit() {
-        if (!_editingComment) return;
-        _editingComment = false;
+        if (!_activeTab.editingComment) return;
+        _activeTab.editingComment = false;
         commentEl.contentEditable = 'false';
         commentEl.classList.remove('comment-editing');
         const text = commentEl.textContent.trim();
@@ -1319,7 +1313,7 @@ function startCommentEdit(nodeId) {
             e.preventDefault();
             commentEl.blur(); // triggers commit via blur handler
         } else if (e.key === 'Escape') {
-            _editingComment = false;
+            _activeTab.editingComment = false;
             commentEl.contentEditable = 'false';
             commentEl.classList.remove('comment-editing');
             // Revert: re-render without saving
@@ -1553,7 +1547,7 @@ export function handlePanelKeydown(e) {
     if (active.isContentEditable) return;
 
     // Branch popover intercepts arrow keys when open
-    if (_branchChoices.length > 0) {
+    if (_activeTab.branchChoices.length > 0) {
         if (e.key === 'ArrowUp') {
             branchPopoverNavigate('up');
             e.preventDefault();
@@ -1575,15 +1569,19 @@ export function handlePanelKeydown(e) {
     if (!_activeTab.game && games.isExplorerActive()) {
         const moves = games.getExplorerStats()?.moves;
         if (e.key === 'ArrowDown' && moves?.length) {
-            _explorerSelectedIdx = Math.min(_explorerSelectedIdx + 1, moves.length - 1);
+            _activeTab.explorerSelectedIdx = Math.min(_activeTab.explorerSelectedIdx + 1, moves.length - 1);
             updateExplorerSelection();
             e.preventDefault();
         } else if (e.key === 'ArrowUp' && moves?.length) {
-            _explorerSelectedIdx = Math.max(_explorerSelectedIdx - 1, 0);
+            _activeTab.explorerSelectedIdx = Math.max(_activeTab.explorerSelectedIdx - 1, 0);
             updateExplorerSelection();
             e.preventDefault();
-        } else if ((e.key === 'Enter' || e.key === 'ArrowRight') && moves?.length && _explorerSelectedIdx >= 0) {
-            games.setExplorerPosition([...games.getExplorerMoves(), moves[_explorerSelectedIdx].san]);
+        } else if (
+            (e.key === 'Enter' || e.key === 'ArrowRight') &&
+            moves?.length &&
+            _activeTab.explorerSelectedIdx >= 0
+        ) {
+            games.setExplorerPosition([...games.getExplorerMoves(), moves[_activeTab.explorerSelectedIdx].san]);
             e.preventDefault();
         } else if (e.key === 'ArrowRight') {
             explorerGoForward();
@@ -1654,8 +1652,8 @@ export function handlePanelKeydown(e) {
 // Branch popover
 function showBranchPopover(childIds) {
     dismissBranchPopover();
-    _branchChoices = childIds;
-    _branchSelectedIdx = 0;
+    _activeTab.branchChoices = childIds;
+    _activeTab.branchSelectedIdx = 0;
 
     const nodes = _activeTab.game.getNodes();
     const btns = childIds
@@ -1683,27 +1681,28 @@ function showBranchPopover(childIds) {
 
 function dismissBranchPopover() {
     _activeTab.el.querySelector('.branch-overlay')?.remove();
-    _branchChoices = [];
-    _branchSelectedIdx = 0;
+    _activeTab.branchChoices = [];
+    _activeTab.branchSelectedIdx = 0;
 }
 
 function branchPopoverNavigate(action) {
     if (action === 'select') {
-        const nodeId = _branchChoices[_branchSelectedIdx];
+        const nodeId = _activeTab.branchChoices[_activeTab.branchSelectedIdx];
         dismissBranchPopover();
         _activeTab.game.goToMove(nodeId);
         return;
     }
     const delta = action === 'up' ? -1 : 1;
-    _branchSelectedIdx = (_branchSelectedIdx + delta + _branchChoices.length) % _branchChoices.length;
+    _activeTab.branchSelectedIdx =
+        (_activeTab.branchSelectedIdx + delta + _activeTab.branchChoices.length) % _activeTab.branchChoices.length;
     _activeTab.el.querySelectorAll('.branch-option').forEach((btn, i) => {
-        btn.classList.toggle('branch-selected', i === _branchSelectedIdx);
+        btn.classList.toggle('branch-selected', i === _activeTab.branchSelectedIdx);
     });
 }
 
 function updateExplorerSelection() {
     _activeTab.el.querySelectorAll('.explorer-row[data-explorer-san]').forEach((btn, i) => {
-        btn.classList.toggle('explorer-row-selected', i === _explorerSelectedIdx);
+        btn.classList.toggle('explorer-row-selected', i === _activeTab.explorerSelectedIdx);
     });
     const selected = _activeTab.el.querySelector('.explorer-row-selected');
     if (selected) selected.scrollIntoView({ block: 'nearest' });
@@ -2120,7 +2119,7 @@ function renderMovesInlineHtml(nodes, currentNodeId, startId, isVariation) {
 
 function renderVarBlock(nodes, nodeId, cls, renderInner) {
     const collapsible = nodeId !== undefined && varLength(nodes, nodeId) >= MIN_COLLAPSIBLE;
-    if (collapsible && _varToggled.has(nodeId)) {
+    if (collapsible && _activeTab.varToggled.has(nodeId)) {
         return `<span class="${cls} collapsed" data-var-node="${nodeId}"><span class="var-toggle">\u25B8</span>(${formatLinePreview(nodes, nodeId, 4)})</span> `;
     }
     const toggle = collapsible ? `<span class="var-toggle">\u25BE</span>` : '';
@@ -2234,12 +2233,12 @@ function renderExplorerHeader(state) {
     // ECO classification (sticky — keeps last known when out of book)
     if (moveHistory.length > 0) {
         const eco = classifyFen(state.explorerFen);
-        if (eco) _explorerLastEco = eco;
+        if (eco) _activeTab.explorerLastEco = eco;
     } else {
-        _explorerLastEco = null;
+        _activeTab.explorerLastEco = null;
     }
-    const ecoPrefix = _explorerLastEco
-        ? `<span class="explorer-eco">${_explorerLastEco.eco} ${_explorerLastEco.name}: </span>`
+    const ecoPrefix = _activeTab.explorerLastEco
+        ? `<span class="explorer-eco">${_activeTab.explorerLastEco.eco} ${_activeTab.explorerLastEco.name}: </span>`
         : '';
 
     el.innerHTML = `
@@ -2251,9 +2250,9 @@ function renderExplorerHeader(state) {
 
 function renderPgnMoveList() {
     const container = _activeTab.viewerMoves;
-    if (!_pgnState) return;
+    if (!_activeTab.pgnState) return;
 
-    const { nodes, currentNodeId, commentsHidden } = _pgnState;
+    const { nodes, currentNodeId, commentsHidden } = _activeTab.pgnState;
     if (!nodes || nodes.length === 0) {
         container.innerHTML = '';
         return;
@@ -2273,7 +2272,7 @@ function renderExplorerMoveList() {
     const container = _activeTab.viewerMoves;
     const stats = games.getExplorerStats();
     container.innerHTML = renderExplorerMoveListHtml(stats, games.getExplorerMoves());
-    _explorerSelectedIdx = stats?.moves?.length ? 0 : -1;
+    _activeTab.explorerSelectedIdx = stats?.moves?.length ? 0 : -1;
     updateExplorerSelection();
 }
 
@@ -2329,7 +2328,7 @@ function renderBrowserPanel(state) {
     renderBrowserChips(panelEl, state);
     renderBrowserFilters(panelEl, state);
     renderBrowserGameList(panelEl, state);
-    if (_panel.gameId) highlightActiveGame(_panel.gameId);
+    if (_activeTab.panel.gameId) highlightActiveGame(_activeTab.panel.gameId);
 }
 
 function renderBrowserTitle(panelEl, state) {
@@ -2541,8 +2540,8 @@ function renderVisibleRows() {
     if (viewport) {
         viewport.style.top = startIdx * rowH + 'px';
         viewport.innerHTML = html;
-        if (_panel.gameId) {
-            const row = viewport.querySelector(`[data-game-id="${_panel.gameId}"]`);
+        if (_activeTab.panel.gameId) {
+            const row = viewport.querySelector(`[data-game-id="${_activeTab.panel.gameId}"]`);
             if (row) row.classList.add('active');
         }
     }
@@ -2551,9 +2550,6 @@ function renderVisibleRows() {
 // ─── 7. Event Wiring ──────────────────────────────────────────────
 
 function wireViewerHeader() {
-    if (_headerWired) return;
-    _headerWired = true;
-
     wireContextMenu();
 
     const headerEl = _activeTab.viewerHeader;
@@ -2574,11 +2570,11 @@ function wireViewerHeader() {
             return;
         }
         if (e.target.closest('.viewer-browse-prev')) {
-            _panel.onPrev?.();
+            _activeTab.panel.onPrev?.();
             return;
         }
         if (e.target.closest('.viewer-browse-next')) {
-            _panel.onNext?.();
+            _activeTab.panel.onNext?.();
             return;
         }
         const playerEl = e.target.closest('[data-player]');
@@ -2613,8 +2609,8 @@ function wireViewerHeader() {
         const varEl = e.target.closest('[data-var-node]');
         if (varEl) {
             const nodeId = parseInt(varEl.dataset.varNode, 10);
-            if (_varToggled.has(nodeId)) _varToggled.delete(nodeId);
-            else _varToggled.add(nodeId);
+            if (_activeTab.varToggled.has(nodeId)) _activeTab.varToggled.delete(nodeId);
+            else _activeTab.varToggled.add(nodeId);
             const scrollTop = movesEl.scrollTop;
             renderPgnMoveList();
             movesEl.scrollTop = scrollTop;
@@ -2629,9 +2625,9 @@ function wireViewerHeader() {
 
 function wireBrowserListeners(panelEl) {
     // Abort any previous listeners on the persistent panelEl container
-    _browserListenerAC?.abort();
-    _browserListenerAC = new AbortController();
-    const signal = _browserListenerAC.signal;
+    _activeTab.browserListenerAC?.abort();
+    _activeTab.browserListenerAC = new AbortController();
+    const signal = _activeTab.browserListenerAC.signal;
 
     const searchInput = panelEl.querySelector('.browser-search-input');
     const autocomplete = panelEl.querySelector('.browser-autocomplete');
@@ -2834,7 +2830,8 @@ export const goToEnd = () => _activeTab.game.goToEnd();
 export const flipBoard = () => {
     board.flip();
     // Re-render eval bar to match new orientation
-    if (_engineActive && _pvInfos[0]) renderEvalBar(_pvInfos[0], _activeTab.game.getCurrentFen());
+    if (_activeTab.engineActive && _activeTab.pvInfos[0])
+        renderEvalBar(_activeTab.pvInfos[0], _activeTab.game.getCurrentFen());
 };
 export const setBoardOrientation = (color) => board.setOrientation(color);
 export const toggleAutoPlay = () => _activeTab.game.toggleAutoPlay();
@@ -2842,7 +2839,7 @@ export const toggleComments = () => _activeTab.game.toggleComments();
 export const toggleBranchMode = () => _activeTab.game.toggleBranchMode();
 export const getGameMoves = () => _activeTab.game?.getReadablePgn() || null;
 export const toggleNag = (nagNum) => {
-    const nodeId = _nagTargetNodeId || _pgnState?.currentNodeId || 0;
+    const nodeId = _nagTargetNodeId || _activeTab.pgnState?.currentNodeId || 0;
     if (nodeId > 0) {
         _activeTab.game.toggleNag(nodeId, nagNum);
         refreshNagHighlights();
