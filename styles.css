@@ -2442,14 +2442,19 @@ button.viewer-close {
 /* ─── Tab Bar ─────────────────────────────────────────────────── */
 
 .viewer-tab-host {
-    display: flex;
-    flex-direction: column;
-    max-height: 98vh;
-    max-height: 98dvh;
-    border-radius: var(--radius-card);
-    background: linear-gradient(135deg,
-        var(--modal-bg),
-        color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
+    display: contents;
+}
+@media (min-width: 1600px) {
+    .viewer-tab-host {
+        display: flex;
+        flex-direction: column;
+        max-height: 98vh;
+        max-height: 98dvh;
+        border-radius: var(--radius-card);
+        background: linear-gradient(135deg,
+            var(--modal-bg),
+            color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
+    }
 }
 .viewer-tab-bar {
     display: none; /* hidden on mobile */

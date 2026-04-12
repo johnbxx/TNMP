@@ -57,7 +57,14 @@ function icon(name, size) {
 }
 
 // Embed feature flags (set via initGamePanel options, defaults = full app)
-let _features = { playerProfiles: true, globalPlayerSearch: true, import: true, localEngine: true, explorer: true };
+let _features = {
+    playerProfiles: true,
+    globalPlayerSearch: true,
+    import: true,
+    localEngine: true,
+    explorer: true,
+    tabs: true,
+};
 
 let _activeTab = null;
 let _tabs = [];
@@ -399,15 +406,17 @@ function openGameInNewTab(gameId) {
 
 /** Find or create a tab for a specific game. */
 export function openGameInTab(gameId, opts = {}) {
-    // Already open in a tab? Switch to it.
-    const existing = _tabs.find((t) => t.panel.gameId === gameId);
-    if (existing) {
-        switchTab(existing);
-        openPanel();
-        return;
+    if (_features.tabs) {
+        // Already open in a tab? Switch to it.
+        const existing = _tabs.find((t) => t.panel.gameId === gameId);
+        if (existing) {
+            switchTab(existing);
+            openPanel();
+            return;
+        }
+        // Create new tab and open the game
+        addTab();
     }
-    // Create new tab and open the game
-    addTab();
     openPanel();
     const game = games.getCachedGame(gameId);
     if (game) {
@@ -417,15 +426,17 @@ export function openGameInTab(gameId, opts = {}) {
 
 /** Find or create a tab for the tournament explorer. */
 export function openExplorerInTab(ctxKey) {
-    // Already have an explorer tab for this tournament? Switch to it.
-    const existing = _tabs.find((t) => !t.game && (t.ctxKey === ctxKey || t.ctxKey?.endsWith(':' + ctxKey)));
-    if (existing) {
-        switchTab(existing);
-        openPanel();
-        return;
+    if (_features.tabs) {
+        // Already have an explorer tab for this tournament? Switch to it.
+        const existing = _tabs.find((t) => !t.game && (t.ctxKey === ctxKey || t.ctxKey?.endsWith(':' + ctxKey)));
+        if (existing) {
+            switchTab(existing);
+            openPanel();
+            return;
+        }
+        // Create new tab from the specified ctx
+        addTab({ sourceCtxKey: ctxKey });
     }
-    // Create new tab from the specified ctx (not the currently active one)
-    addTab({ sourceCtxKey: ctxKey });
     openPanel();
 }
 
@@ -468,160 +479,161 @@ export function initGamePanel(mount, { features } = {}) {
     _tabHost.className = 'viewer-tab-host';
     modal.appendChild(_tabHost);
 
-    // Tab bar (desktop only, hidden on mobile via CSS)
-    _tabBar = document.createElement('div');
-    _tabBar.className = 'viewer-tab-bar';
-    _tabBar.innerHTML = `
-        <button class="tab-bar-close" data-action="close-panel" aria-label="Close">${icon('close', 16)}</button>
-        <div class="tab-list"></div>
-        <button class="tab-new" aria-label="New tab" data-tooltip="New tab">+</button>
-    `;
-    _tabHost.appendChild(_tabBar);
+    if (_features.tabs) {
+        // Tab bar (desktop only, hidden on mobile via CSS)
+        _tabBar = document.createElement('div');
+        _tabBar.className = 'viewer-tab-bar';
+        _tabBar.innerHTML = `
+            <button class="tab-bar-close" data-action="close-panel" aria-label="Close">${icon('close', 16)}</button>
+            <div class="tab-list"></div>
+            <button class="tab-new" aria-label="New tab" data-tooltip="New tab">+</button>
+        `;
+        _tabHost.appendChild(_tabBar);
 
-    // Wire tab bar clicks
-    _tabBar.addEventListener('click', (e) => {
-        if (e.target.closest('.tab-new')) {
-            addTab();
-            return;
+        // Wire tab bar clicks
+        _tabBar.addEventListener('click', (e) => {
+            if (e.target.closest('.tab-new')) {
+                addTab();
+                return;
+            }
+            const closeBtn = e.target.closest('.tab-close');
+            if (closeBtn) {
+                const tabEl = closeBtn.closest('.tab-btn');
+                const tab = _tabs.find((t) => t.tabBtn === tabEl);
+                if (tab) closeTab(tab);
+                return;
+            }
+            const tabBtn = e.target.closest('.tab-btn');
+            if (tabBtn) {
+                const tab = _tabs.find((t) => t.tabBtn === tabBtn);
+                if (tab && tab !== _activeTab) {
+                    hideTabPreview();
+                    switchTab(tab);
+                    tabBtn.blur();
+                }
+            }
+        });
+
+        // Wire browser context menu (open in new tab)
+        modal.addEventListener('click', (e) => {
+            const browserCtxMenu = document.getElementById('browser-context-menu');
+            if (!browserCtxMenu) return;
+            const action = e.target.closest('[data-browser-action]')?.dataset.browserAction;
+            if (action === 'open-new-tab' && _browserCtxGameId) {
+                const gameId = _browserCtxGameId;
+                hideBrowserContextMenu();
+                openGameInNewTab(gameId);
+                return;
+            }
+            if (!browserCtxMenu.classList.contains('hidden') && !browserCtxMenu.contains(e.target)) {
+                hideBrowserContextMenu();
+            }
+        });
+
+        // Tab hover preview
+        const tabPreview = document.createElement('div');
+        tabPreview.className = 'tab-preview hidden';
+        tabPreview.innerHTML = '<div class="tab-preview-board"></div><div class="tab-preview-label"></div>';
+        modal.appendChild(tabPreview);
+
+        let _previewTimer = null;
+        let _previewTab = null;
+        let _previewCg = null;
+        let _previewActive = false;
+
+        function showTabPreview(tab) {
+            if (tab === _activeTab || !tab.tabBtn) return;
+            _previewTab = tab;
+
+            const fen = tab.currentFen;
+            const orientation = tab.board?.getOrientation() || 'white';
+
+            const rect = tab.tabBtn.getBoundingClientRect();
+            const modalRect = modal.getBoundingClientRect();
+            const previewW = 260;
+            let left = rect.left + rect.width / 2 - previewW / 2 - modalRect.left;
+            left = Math.max(8, Math.min(left, modalRect.width - previewW - 8));
+            tabPreview.style.left = `${left}px`;
+            tabPreview.style.top = `${rect.bottom - modalRect.top + 4}px`;
+
+            const labelEl = tabPreview.querySelector('.tab-preview-label');
+            labelEl.textContent = tab.tabBtn.querySelector('.tab-label')?.textContent || '';
+
+            const boardEl = tabPreview.querySelector('.tab-preview-board');
+            if (_previewCg) {
+                _previewCg.set({
+                    fen,
+                    orientation,
+                    lastMove: tab.lastMove || undefined,
+                    animation: { enabled: false },
+                });
+            } else {
+                _previewCg = Chessground(boardEl, {
+                    fen,
+                    orientation,
+                    lastMove: tab.lastMove || undefined,
+                    viewOnly: true,
+                    coordinates: false,
+                    animation: { enabled: false },
+                    highlight: { lastMove: true },
+                    drawable: { enabled: false },
+                });
+            }
+
+            tabPreview.classList.remove('hidden');
         }
-        const closeBtn = e.target.closest('.tab-close');
-        if (closeBtn) {
-            const tabEl = closeBtn.closest('.tab-btn');
-            const tab = _tabs.find((t) => t.tabBtn === tabEl);
-            if (tab) closeTab(tab);
-            return;
-        }
-        const tabBtn = e.target.closest('.tab-btn');
-        if (tabBtn) {
-            const tab = _tabs.find((t) => t.tabBtn === tabBtn);
-            if (tab && tab !== _activeTab) {
-                hideTabPreview();
-                switchTab(tab);
-                tabBtn.blur();
+
+        function hideTabPreview() {
+            clearTimeout(_previewTimer);
+            _previewTimer = null;
+            _previewTab = null;
+            _previewActive = false;
+            tabPreview.classList.add('hidden');
+            if (_previewCg) {
+                _previewCg.destroy();
+                _previewCg = null;
+                tabPreview.querySelector('.tab-preview-board').innerHTML = '';
             }
         }
-    });
 
-    // Wire browser context menu
-    modal.addEventListener('click', (e) => {
-        const browserCtxMenu = document.getElementById('browser-context-menu');
-        if (!browserCtxMenu) return;
-        const action = e.target.closest('[data-browser-action]')?.dataset.browserAction;
-        if (action === 'open-new-tab' && _browserCtxGameId) {
-            const gameId = _browserCtxGameId;
-            hideBrowserContextMenu();
-            openGameInNewTab(gameId);
-            return;
-        }
-        if (!browserCtxMenu.classList.contains('hidden') && !browserCtxMenu.contains(e.target)) {
-            hideBrowserContextMenu();
-        }
-    });
-
-    // Tab hover preview
-    const tabPreview = document.createElement('div');
-    tabPreview.className = 'tab-preview hidden';
-    tabPreview.innerHTML = '<div class="tab-preview-board"></div><div class="tab-preview-label"></div>';
-    modal.appendChild(tabPreview);
-
-    let _previewTimer = null;
-    let _previewTab = null;
-    let _previewCg = null;
-    let _previewActive = false; // true once the first preview has shown
-
-    function showTabPreview(tab) {
-        if (tab === _activeTab || !tab.tabBtn) return;
-        _previewTab = tab;
-
-        const fen = tab.currentFen;
-        const orientation = tab.board?.getOrientation() || 'white';
-
-        // Position below the tab button
-        const rect = tab.tabBtn.getBoundingClientRect();
-        const modalRect = modal.getBoundingClientRect();
-        const previewW = 260;
-        let left = rect.left + rect.width / 2 - previewW / 2 - modalRect.left;
-        // Clamp to modal bounds
-        left = Math.max(8, Math.min(left, modalRect.width - previewW - 8));
-        tabPreview.style.left = `${left}px`;
-        tabPreview.style.top = `${rect.bottom - modalRect.top + 4}px`;
-
-        // Label
-        const labelEl = tabPreview.querySelector('.tab-preview-label');
-        labelEl.textContent = tab.tabBtn.querySelector('.tab-label')?.textContent || '';
-
-        // Create or update chessground
-        const boardEl = tabPreview.querySelector('.tab-preview-board');
-        if (_previewCg) {
-            _previewCg.set({ fen, orientation, lastMove: tab.lastMove || undefined, animation: { enabled: false } });
-        } else {
-            _previewCg = Chessground(boardEl, {
-                fen,
-                orientation,
-                lastMove: tab.lastMove || undefined,
-                viewOnly: true,
-                coordinates: false,
-                animation: { enabled: false },
-                highlight: { lastMove: true },
-                drawable: { enabled: false },
-            });
-        }
-
-        tabPreview.classList.remove('hidden');
-    }
-
-    function hideTabPreview() {
-        clearTimeout(_previewTimer);
-        _previewTimer = null;
-        _previewTab = null;
-        _previewActive = false;
-        tabPreview.classList.add('hidden');
-        if (_previewCg) {
-            _previewCg.destroy();
-            _previewCg = null;
-            tabPreview.querySelector('.tab-preview-board').innerHTML = '';
-        }
-    }
-
-    _tabBar.addEventListener('mouseover', (e) => {
-        const tabBtn = e.target.closest('.tab-btn');
-        if (!tabBtn) {
-            if (!e.target.closest('.tab-preview')) {
+        _tabBar.addEventListener('mouseover', (e) => {
+            const tabBtn = e.target.closest('.tab-btn');
+            if (!tabBtn) {
+                if (!e.target.closest('.tab-preview')) {
+                    clearTimeout(_previewTimer);
+                    _previewTimer = setTimeout(hideTabPreview, 150);
+                }
+                return;
+            }
+            const tab = _tabs.find((t) => t.tabBtn === tabBtn);
+            if (!tab || tab === _activeTab) {
                 clearTimeout(_previewTimer);
                 _previewTimer = setTimeout(hideTabPreview, 150);
+                return;
             }
-            return;
-        }
-        const tab = _tabs.find((t) => t.tabBtn === tabBtn);
-        if (!tab || tab === _activeTab) {
+            clearTimeout(_previewTimer);
+            if (_previewActive && _previewTab !== tab) {
+                showTabPreview(tab);
+            } else if (!_previewActive) {
+                _previewTimer = setTimeout(() => {
+                    _previewActive = true;
+                    showTabPreview(tab);
+                }, 500);
+            }
+        });
+
+        _tabBar.addEventListener('mouseleave', () => {
             clearTimeout(_previewTimer);
             _previewTimer = setTimeout(hideTabPreview, 150);
-            return;
-        }
-        clearTimeout(_previewTimer);
-        if (_previewActive && _previewTab !== tab) {
-            // Already showing a preview — snap instantly
-            showTabPreview(tab);
-        } else if (!_previewActive) {
-            // First hover — delay
-            _previewTimer = setTimeout(() => {
-                _previewActive = true;
-                showTabPreview(tab);
-            }, 500);
-        }
-    });
+        });
 
-    _tabBar.addEventListener('mouseleave', () => {
-        clearTimeout(_previewTimer);
-        _previewTimer = setTimeout(hideTabPreview, 150);
-    });
-
-    tabPreview.addEventListener('mouseenter', () => {
-        clearTimeout(_previewTimer);
-    });
-    tabPreview.addEventListener('mouseleave', () => {
-        _previewTimer = setTimeout(hideTabPreview, 150);
-    });
+        tabPreview.addEventListener('mouseenter', () => {
+            clearTimeout(_previewTimer);
+        });
+        tabPreview.addEventListener('mouseleave', () => {
+            _previewTimer = setTimeout(hideTabPreview, 150);
+        });
+    }
 
     // Create first tab
     addTab();

@@ -27,6 +27,7 @@ const FEAT = {
     import: typeof __FEAT_IMPORT__ !== 'undefined' ? __FEAT_IMPORT__ : true,
     localEngine: typeof __FEAT_LOCAL_ENGINE__ !== 'undefined' ? __FEAT_LOCAL_ENGINE__ : true,
     explorer: typeof __FEAT_EXPLORER__ !== 'undefined' ? __FEAT_EXPLORER__ : true,
+    tabs: false, // embed is always single-tab
 };
 
 // Viewer + data layer (same modules as the main app)
