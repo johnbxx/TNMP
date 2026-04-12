@@ -281,7 +281,7 @@ function createTab() {
 
 // ─── Tab Management ───────────────────────────────────────────────
 
-function addTab() {
+function addTab({ sourceCtxKey } = {}) {
     const tab = createTab();
     tab.el.classList.add('hidden'); // hidden until switchTab reveals it
     _tabHost.appendChild(tab.el);
@@ -308,8 +308,8 @@ function addTab() {
     ensureBoard();
     updateLayout();
 
-    // Clone the current ctx so this tab has independent filters
-    const sourceKey = games.getActiveCtxKey() || games.getLastTournamentKey();
+    // Clone ctx — use specified source, or default to last tournament for + button
+    const sourceKey = sourceCtxKey || games.getLastTournamentKey() || games.getActiveCtxKey();
     if (sourceKey) {
         tab.ctxKey = games.cloneCtx(sourceKey);
     }
@@ -393,7 +393,7 @@ function updateTabLabel(tab) {
 }
 
 function openGameInNewTab(gameId) {
-    addTab();
+    addTab({ sourceCtxKey: _activeTab.ctxKey });
     openGameFromBrowser(gameId);
 }
 
@@ -418,14 +418,14 @@ export function openGameInTab(gameId, opts = {}) {
 /** Find or create a tab for the tournament explorer. */
 export function openExplorerInTab(ctxKey) {
     // Already have an explorer tab for this tournament? Switch to it.
-    const existing = _tabs.find((t) => t.ctxKey?.includes(ctxKey) && !t.game);
+    const existing = _tabs.find((t) => !t.game && (t.ctxKey === ctxKey || t.ctxKey?.endsWith(':' + ctxKey)));
     if (existing) {
         switchTab(existing);
         openPanel();
         return;
     }
-    // Create new tab
-    addTab();
+    // Create new tab from the specified ctx (not the currently active one)
+    addTab({ sourceCtxKey: ctxKey });
     openPanel();
 }
 
