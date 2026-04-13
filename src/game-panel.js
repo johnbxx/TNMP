@@ -28,11 +28,11 @@ loadEcoData();
 
 // SVG icon sprite — each icon defined once, referenced via <use href="#i-name"/>
 const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
-<symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></symbol>
+<symbol id="i-play" viewBox="-0.5 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></symbol>
 <symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></symbol>
 <symbol id="i-start" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="5" width="2.5" height="14"/><polygon points="20,5 9,12 20,19"/></symbol>
-<symbol id="i-prev" viewBox="0 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></symbol>
-<symbol id="i-next" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></symbol>
+<symbol id="i-prev" viewBox="2 0 24 24" fill="currentColor"><polygon points="18,5 7,12 18,19"/></symbol>
+<symbol id="i-next" viewBox="-2 0 24 24" fill="currentColor"><polygon points="6,5 17,12 6,19"/></symbol>
 <symbol id="i-end" viewBox="0 0 24 24" fill="currentColor"><polygon points="4,5 15,12 4,19"/><rect x="17.5" y="5" width="2.5" height="14"/></symbol>
 <symbol id="i-flip" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4 A8 8 0 0 1 19 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="21,14 19,19 15,15"/><path d="M12 20 A8 8 0 0 1 5 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><polygon points="3,10 5,5 9,9"/></symbol>
 <symbol id="i-comments" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></symbol>
@@ -2865,6 +2865,7 @@ function renderBrowserTitle(panelEl, state) {
         titleEl.innerHTML = `<select class="browser-title-select" data-mode="local"><option value="">${allLabel}</option>${options}</select>`;
         titleEl.querySelector('.browser-title-select').addEventListener('change', (e) => {
             games.switchDataSource(e.target.value);
+            e.target.blur();
         });
         return;
     }
@@ -2887,6 +2888,7 @@ function renderBrowserTitle(panelEl, state) {
     titleEl.innerHTML = `<select class="browser-title-select" data-mode="server">${options}</select>`;
     titleEl.querySelector('.browser-title-select').addEventListener('change', (e) => {
         games.switchDataSource(e.target.value, slug, { onSwitch: switchTournament });
+        e.target.blur();
     });
 }
 
