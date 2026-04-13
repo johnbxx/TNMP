@@ -17,12 +17,6 @@ export async function loadEcoData() {
     if (_ecoData) return;
 
     try {
-        localStorage.removeItem('eco-epd-data');
-    } catch {
-        /* */
-    }
-
-    try {
         const cached = localStorage.getItem(STORAGE_KEY);
         if (cached) {
             _ecoData = JSON.parse(cached);

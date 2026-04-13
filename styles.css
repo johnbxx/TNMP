@@ -39,9 +39,6 @@
     /* ── Derived: shadows ────────────────────────────────── */
     --shadow-color: rgb(from var(--shadow) r g b / 0.3);
     --shadow-text: 2px 2px 4px var(--shadow-color);
-    --shadow-sm: 0 1px 4px var(--shadow-color);
-    --shadow-md: 0 6px 20px rgb(from var(--shadow) r g b / 0.45);
-    --shadow-modal: 0 20px 60px rgb(from var(--shadow) r g b / 0.5);
 
     /* ── Derived: win/loss/draw ───────────────────────────── */
     --win: color-mix(in srgb, #00ff00, light-dark(black, white) 30%);
@@ -113,6 +110,88 @@
     
 }
 
+/* Stacked elevation shadows — dark-mode: inset light illusion + drop stack */
+html.tnmp {
+    --shadow-sm:
+        inset 0 1px 0 0    rgba(255,255,255,0.08),
+        inset 0 0 0 1px    rgba(255,255,255,0.04),
+              0 0 0 1px    rgba(0,0,0,0.16),
+              0 1px 1px -0.5px rgba(0,0,0,0.18),
+              0 3px 3px -1.5px rgba(0,0,0,0.18),
+              0 6px 6px   -3px rgba(0,0,0,0.18),
+              0 12px 12px  -6px rgba(0,0,0,0.18);
+
+    --shadow-md:
+        inset 0 1px 0 0    rgba(255,255,255,0.11),
+        inset 0 0 0 1px    rgba(255,255,255,0.06),
+              0 0 0 1px    rgba(0,0,0,0.20),
+              0 1px 1px -0.5px rgba(0,0,0,0.18),
+              0 3px 3px -1.5px rgba(0,0,0,0.18),
+              0 6px 6px   -3px rgba(0,0,0,0.18),
+              0 12px 12px  -6px rgba(0,0,0,0.18),
+              0 24px 24px -12px rgba(0,0,0,0.18),
+              0 48px 48px -24px rgba(0,0,0,0.18);
+
+    --shadow-modal:
+        inset 0 1px 0 0    rgba(255,255,255,0.11),
+        inset 0 0 0 1px    rgba(255,255,255,0.06),
+              0 0 0 1px    rgba(0,0,0,0.20),
+              0 1px 1px -0.5px rgba(0,0,0,0.18),
+              0 3px 3px -1.5px rgba(0,0,0,0.18),
+              0 6px 6px   -3px rgba(0,0,0,0.18),
+              0 12px 12px  -6px rgba(0,0,0,0.18),
+              0 24px 24px -12px rgba(0,0,0,0.18),
+              0 48px 48px -24px rgba(0,0,0,0.18),
+              0 64px 64px -32px rgba(0,0,0,0.18);
+}
+
+/* Light-scheme overrides — re-derive all foreground-based vars for light */
+.light-scheme {
+    --foreground: black;
+    --text-primary: var(--foreground);
+    --text-muted: rgb(from var(--foreground) r g b / 0.85);
+    --text-subtle: rgb(from var(--foreground) r g b / 0.7);
+    --text-faint: rgb(from var(--foreground) r g b / 0.6);
+    --text-link-hover: rgb(from var(--foreground) r g b / 0.8);
+    --surface: rgb(from var(--foreground) r g b / 0.06);
+    --surface-subtle: rgb(from var(--foreground) r g b / 0.08);
+    --border-color: rgb(from var(--foreground) r g b / 0.15);
+    --overlay-light: rgb(from var(--foreground) r g b / 0.2);
+    --overlay-light-hover: rgb(from var(--foreground) r g b / 0.3);
+    --surface-primary: var(--modal-bg);
+    --popup-bg: rgb(from var(--modal-bg) r g b / 0.97);
+    --raised-panel-bg: rgba(0,0,0,0.03);
+    --toolbar-icon: rgb(from var(--foreground) r g b / 0.85);
+    --close-btn-bg: rgba(0,0,0,0.06);
+    --close-btn-bg-hover: rgba(0,0,0,0.12);
+
+    --shadow-sm:
+        0 0 0 1px rgb(0 0 0 / 0.08),
+        0 1px 1px -0.5px rgb(0 0 0 / 0.08),
+        0 3px 3px -1.5px rgb(0 0 0 / 0.08),
+        0 6px 6px   -3px rgb(0 0 0 / 0.08),
+        0 12px 12px  -6px rgb(0 0 0 / 0.08);
+
+    --shadow-md:
+        0 0 0 1px rgb(0 0 0 / 0.08),
+        0 1px 1px -0.5px rgb(0 0 0 / 0.08),
+        0 3px 3px -1.5px rgb(0 0 0 / 0.08),
+        0 6px 6px   -3px rgb(0 0 0 / 0.08),
+        0 12px 12px  -6px rgb(0 0 0 / 0.08),
+        0 24px 24px -12px rgb(0 0 0 / 0.08),
+        0 48px 48px -24px rgb(0 0 0 / 0.08);
+
+    --shadow-modal:
+        0 0 0 1px rgb(0 0 0 / 0.08),
+        0 1px 1px -0.5px rgb(0 0 0 / 0.08),
+        0 3px 3px -1.5px rgb(0 0 0 / 0.08),
+        0 6px 6px   -3px rgb(0 0 0 / 0.08),
+        0 12px 12px  -6px rgb(0 0 0 / 0.08),
+        0 24px 24px -12px rgb(0 0 0 / 0.08),
+        0 48px 48px -24px rgb(0 0 0 / 0.08),
+        0 64px 64px -32px rgb(0 0 0 / 0.08);
+}
+
 .tnmp {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: normal;
@@ -154,7 +233,6 @@
 
 /* Shared patterns */
 .viewer-player-name,
-.editor-eco,
 .browser-name,
 .profile-row-name,
 .explorer-title {
@@ -1368,7 +1446,6 @@ button.viewer-close {
     background: var(--raised-panel-bg);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
 }
 
 .viewer-eco-code {
@@ -1511,11 +1588,39 @@ button.viewer-close {
     min-height: 0;
 }
 
+.viewer-board-col {
+    position: relative;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+}
+.viewer-board-col::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-sm);
+    box-shadow:
+        inset 0 1px 0 0    rgba(255,255,255,0.08),
+        inset 0 0 0 1px    rgba(255,255,255,0.04);
+    pointer-events: none;
+    z-index: 4;
+}
+.light-scheme .viewer-board-col {
+    box-shadow:
+        0 1px 1px -0.5px rgb(0 0 0 / 0.08),
+        0 3px 3px -1.5px rgb(0 0 0 / 0.08),
+        0 6px 6px   -3px rgb(0 0 0 / 0.08),
+        0 12px 12px  -6px rgb(0 0 0 / 0.08);
+}
+.light-scheme .viewer-board-col::after {
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+}
 .viewer-board {
     width: 100%;
     max-width: 400px;
     aspect-ratio: 1;
     flex-shrink: 1;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
     min-height: 0;
 }
 
@@ -1560,7 +1665,6 @@ button.viewer-close {
     color: var(--text-muted);
     line-height: 1.8;
     box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
 }
 
 /* Engine analysis panel */
@@ -1568,7 +1672,6 @@ button.viewer-close {
     background: var(--raised-panel-bg);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
     font-size: 0.8rem;
 }
 .engine-panel-header {
@@ -1930,7 +2033,6 @@ button.viewer-close {
     flex-direction: column;
     gap: 2px;
     background: var(--popup-bg);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 4px;
     min-width: 100px;
@@ -1966,7 +2068,6 @@ button.viewer-close {
     background: var(--raised-panel-bg);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
 }
 
 /* Toolbar: full-width dark bar spanning modal bottom */
@@ -2140,7 +2241,6 @@ button.viewer-close {
     display: flex;
     flex-direction: column;
     background: var(--surface-primary);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
     z-index: 100;
@@ -2184,7 +2284,6 @@ button.viewer-close {
     display: flex;
     flex-direction: column;
     background: var(--surface-primary);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
     z-index: 100;
@@ -2243,7 +2342,6 @@ button.viewer-close {
     background: var(--overlay-light);
     color: var(--text-primary);
     box-shadow: var(--shadow-sm);
-    border: 1px solid var(--surface-subtle);
 }
 
 .viewer-play-btn:hover {
@@ -2855,7 +2953,6 @@ button.viewer-close {
     position: fixed;
     z-index: 2001;
     background: var(--popup-bg);
-    border: 1px solid var(--overlay-light);
     border-radius: var(--radius-sm);
     padding: 6px;
     max-height: min(70vh, 500px);
@@ -2916,7 +3013,6 @@ button.viewer-close {
     position: fixed;
     z-index: 2001;
     background: var(--popup-bg);
-    border: 1px solid var(--overlay-light);
     border-radius: var(--radius-sm);
     padding: 6px;
     box-shadow: var(--shadow-md);
@@ -3401,7 +3497,6 @@ input.browser-search-input {
     z-index: 10;
     margin-top: 0.2rem;
     background: var(--popup-bg);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-modal);
     max-height: 16rem;
@@ -3581,12 +3676,6 @@ input.browser-search-input {
 }
 
 /* Editor ECO display */
-.editor-eco {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    padding: 2px 8px;
-    text-align: center;
-}
 
 .browser-games-wrap {
     flex: 1;
@@ -4498,14 +4587,14 @@ input.browser-search-input {
     padding: 0.4rem 0.6rem;
     background: var(--surface);
     color: var(--text-primary);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     font-size: 0.85rem;
     cursor: pointer;
     text-align: left;
 }
 .style-dropdown-trigger:hover {
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: var(--overlay-light-hover);
 }
 .style-dropdown.open .style-dropdown-trigger {
     border-color: var(--accent);
@@ -4523,7 +4612,6 @@ input.browser-search-input {
     top: calc(100% + 4px);
     z-index: 20;
     background: var(--popup-bg);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     max-height: 240px;
     overflow-y: auto;

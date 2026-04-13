@@ -70,6 +70,3 @@ export function getAppState() {
 export function updateAppState(partial) {
     _appState = { ..._appState, ...partial };
 }
-
-// Feature gates
-export const SUBMISSIONS_ENABLED = false;

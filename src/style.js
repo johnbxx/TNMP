@@ -181,6 +181,10 @@ function applyAppScheme(schemeId) {
         }
     }
 
+    // Toggle light-scheme class for shadow elevation overrides
+    const isLight = scheme.vars['color-scheme'] === 'light';
+    for (const m of modals) m.classList.toggle('light-scheme', isLight);
+
     localStorage.setItem('appScheme', schemeId);
 }
 
@@ -248,16 +252,19 @@ function initDropdown(id, onSelect) {
         const wasOpen = el.classList.contains('open');
         closeAllDropdowns();
         if (!wasOpen) {
-            el.classList.add('open');
             // Flip above if menu would overflow viewport bottom
-            const menuRect = menu.getBoundingClientRect();
-            el.classList.toggle('dropup', menuRect.bottom > window.innerHeight - 8);
+            const triggerRect = trigger.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - triggerRect.bottom - 8;
+            el.classList.toggle('dropup', spaceBelow < 240);
+            el.classList.add('open');
         }
     });
 
     menu.addEventListener('click', (e) => {
         const item = e.target.closest('[data-value]');
         if (!item) return;
+        menu.querySelector('.active')?.classList.remove('active');
+        item.classList.add('active');
         onSelect(item.dataset.value);
         el.classList.remove('open');
     });
@@ -279,7 +286,7 @@ function boardSwatchHtml(light, dark) {
 }
 
 function schemeSwatchHtml(scheme) {
-    return `<span class="style-scheme-swatch" style="background:linear-gradient(135deg, ${scheme.bg}, ${scheme.bgEnd})">
+    return `<span class="style-scheme-swatch" style="background:${scheme.bg}">
         <span style="background:${scheme.accent}"></span>
     </span>`;
 }

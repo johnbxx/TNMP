@@ -135,7 +135,6 @@ function buildTabDOM() {
             <div class="viewer-layout">
                 <div class="viewer-board-col">
                     <div class="viewer-board"></div>
-                    <div class="editor-eco hidden"></div>
                 </div>
                 <div class="eval-bar hidden">
                     <div class="eval-bar-fill"></div>
@@ -249,10 +248,10 @@ function createTab() {
         opening: el.querySelector('.viewer-opening'),
         ecoCode: el.querySelector('.viewer-eco-code'),
         ecoName: el.querySelector('.viewer-eco-name'),
+        boardCol: el.querySelector('.viewer-board-col'),
         viewerBoard: el.querySelector('.viewer-board'),
         viewerMoves: el.querySelector('.viewer-moves'),
         evalBar: el.querySelector('.eval-bar'),
-        editorEco: el.querySelector('.editor-eco'),
         enginePanel: el.querySelector('.engine-panel'),
         enginePvLines: el.querySelector('.engine-pv-lines'),
         engineVariantBadge: el.querySelector('.engine-variant-badge'),
@@ -1564,6 +1563,25 @@ function setToolbarButtons() {
     _activeTab.toolbar?.classList.toggle('hidden', !_activeTab.game);
 }
 
+// Snap board container to chessground's 8-device-pixel grid so cg-wrap fills it exactly.
+// Without this, chessground rounds down to the nearest quantum, leaving a 1-3px gap.
+const _boardObservers = new WeakMap();
+function snapBoardSize(tab) {
+    const col = tab.boardCol;
+    if (!col || _boardObservers.has(col)) return;
+    const quantum = 8 / (window.devicePixelRatio || 1);
+    const snap = () => {
+        col.style.height = '';
+        requestAnimationFrame(() => {
+            const h = col.getBoundingClientRect().height;
+            col.style.height = Math.floor(h / quantum) * quantum + 'px';
+        });
+    };
+    const ro = new ResizeObserver(snap);
+    ro.observe(col.parentElement);
+    _boardObservers.set(col, ro);
+}
+
 function ensureBoard() {
     if (!_activeTab.board) {
         _activeTab.board = board.createBoard(_activeTab.viewerBoard, {
@@ -1571,6 +1589,7 @@ function ensureBoard() {
             onDraw: onBoardDraw,
             orientation: 'white',
         });
+        snapBoardSize(_activeTab);
     }
 }
 
