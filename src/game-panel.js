@@ -731,14 +731,14 @@ export function initGamePanel(mount, { features } = {}) {
             if (!tabBtn) {
                 if (!e.target.closest('.tab-preview')) {
                     clearTimeout(_previewTimer);
-                    _previewTimer = setTimeout(hideTabPreview, 150);
+                    _previewTimer = setTimeout(hideTabPreview, 400);
                 }
                 return;
             }
             const tab = _tabs.find((t) => t.tabBtn === tabBtn);
             if (!tab || tab === _activeTab) {
                 clearTimeout(_previewTimer);
-                _previewTimer = setTimeout(hideTabPreview, 150);
+                _previewTimer = setTimeout(hideTabPreview, 400);
                 return;
             }
             clearTimeout(_previewTimer);
@@ -754,14 +754,14 @@ export function initGamePanel(mount, { features } = {}) {
 
         _tabBar.addEventListener('mouseleave', () => {
             clearTimeout(_previewTimer);
-            _previewTimer = setTimeout(hideTabPreview, 150);
+            _previewTimer = setTimeout(hideTabPreview, 400);
         });
 
         tabPreview.addEventListener('mouseenter', () => {
             clearTimeout(_previewTimer);
         });
         tabPreview.addEventListener('mouseleave', () => {
-            _previewTimer = setTimeout(hideTabPreview, 150);
+            _previewTimer = setTimeout(hideTabPreview, 400);
         });
     }
 
