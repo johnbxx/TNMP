@@ -1909,10 +1909,11 @@ button.viewer-close {
     flex-shrink: 0;
     border-radius: var(--radius-sm);
     background: #2a2a2a;
-    border: 1px solid var(--border-color);
+    border: none;
     position: relative;
     overflow: hidden;
     align-self: stretch;
+    box-shadow: var(--shadow-sm);
 }
 .eval-bar.hidden { display: none; }
 .eval-bar-fill {
