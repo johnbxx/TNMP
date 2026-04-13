@@ -70,6 +70,9 @@ let _activeTab = null;
 let _tabs = [];
 let _tabBar = null;
 let _tabHost = null; // wrapper for tab bar + tab containers
+let _dragTab = null; // tab being dragged for reorder
+let _dragOffset = 0;
+let _dragLastX = 0;
 
 // Tab icon SVGs
 const TAB_ICON_BOARD = `<svg class="tab-icon" width="12" height="12" viewBox="0 0 12 12"><rect width="6" height="6" fill="var(--board-light,#f0d9b5)"/><rect x="6" width="6" height="6" fill="var(--board-dark,#b58863)"/><rect y="6" width="6" height="6" fill="var(--board-dark,#b58863)"/><rect x="6" y="6" width="6" height="6" fill="var(--board-light,#f0d9b5)"/></svg>`;
@@ -299,8 +302,81 @@ function addTab({ sourceCtxKey } = {}) {
     tabBtn.innerHTML = `${TAB_ICON_EXPLORE}<span class="tab-label">New Tab</span><span class="tab-close" aria-label="Close tab">&times;</span>`;
     tab.tabBtn = tabBtn;
 
+    // Drag-to-reorder via pointer events
+    tabBtn.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || _tabs.length < 2) return;
+        if (e.target.closest('.tab-close')) return;
+        _dragTab = tab;
+        _dragOffset = 0;
+        _dragLastX = e.clientX;
+        tabBtn.classList.add('tab-dragging');
+        document.addEventListener('pointermove', onDragMove);
+        document.addEventListener('pointerup', onDragEnd);
+    });
+    function onDragMove(e) {
+        if (_dragTab !== tab) return;
+        _dragOffset += e.clientX - _dragLastX;
+        _dragLastX = e.clientX;
+        tabBtn.style.transform = `translateX(${_dragOffset}px)`;
+
+        const list = tabBtn.parentNode;
+        const listLeft = list.getBoundingClientRect().left;
+        const mid = listLeft + tabBtn.offsetLeft + tabBtn.offsetWidth / 2 + _dragOffset;
+        const prev = tabBtn.previousElementSibling;
+        const next = tabBtn.nextElementSibling;
+
+        if (prev && mid < listLeft + prev.offsetLeft + prev.offsetWidth) {
+            const nOld = prev.offsetLeft;
+            const oldLeft = tabBtn.offsetLeft;
+            list.insertBefore(tabBtn, prev);
+            _dragOffset += oldLeft - tabBtn.offsetLeft;
+            tabBtn.style.transform = `translateX(${_dragOffset}px)`;
+            animateNeighbor(prev, nOld);
+        } else if (next && mid > listLeft + next.offsetLeft) {
+            const nOld = next.offsetLeft;
+            const oldLeft = tabBtn.offsetLeft;
+            list.insertBefore(tabBtn, next.nextSibling);
+            _dragOffset += oldLeft - tabBtn.offsetLeft;
+            tabBtn.style.transform = `translateX(${_dragOffset}px)`;
+            animateNeighbor(next, nOld);
+        }
+    }
+    function onDragEnd() {
+        if (_dragTab !== tab) return;
+        document.removeEventListener('pointermove', onDragMove);
+        document.removeEventListener('pointerup', onDragEnd);
+        tabBtn.classList.remove('tab-dragging');
+        tabBtn.animate([{ transform: `translateX(${_dragOffset}px)` }, { transform: 'translateX(0)' }], {
+            duration: 200,
+            easing: 'ease',
+        });
+        tabBtn.style.transform = '';
+        const btns = [..._tabBar.querySelector('.tab-list').children];
+        _tabs.sort((a, b) => btns.indexOf(a.tabBtn) - btns.indexOf(b.tabBtn));
+        _dragTab = null;
+        updateActiveTabGradient();
+    }
+
     const tabList = _tabBar.querySelector('.tab-list');
+
+    // Animate tab sliding in
+    const openTransition = 'max-width 200ms ease, opacity 200ms ease';
+    tabBtn.style.transition = openTransition;
+    tabBtn.style.maxWidth = '0';
+    tabBtn.style.opacity = '0';
     tabList.appendChild(tabBtn);
+    requestAnimationFrame(() => {
+        tabBtn.style.maxWidth = '';
+        tabBtn.style.opacity = '';
+    });
+    tabBtn.addEventListener(
+        'transitionend',
+        () => {
+            tabBtn.style.transition = '';
+            updateActiveTabGradient();
+        },
+        { once: true },
+    );
 
     _tabs.push(tab);
     switchTab(tab);
@@ -378,7 +454,6 @@ function closeTab(tab) {
         games.deleteCtx(tab.ctxKey);
     }
     tab.el.remove();
-    tab.tabBtn.remove();
     _tabs.splice(idx, 1);
     // Destroy engine if no remaining tab needs it
     if (!_tabs.some((t) => t.engineActive)) engine.destroyEngine();
@@ -390,6 +465,21 @@ function closeTab(tab) {
     }
 
     updateTabCloseVisibility();
+
+    // Animate tab button out, then remove
+    tab.tabBtn.style.transition = 'max-width 200ms ease, opacity 200ms ease, padding 200ms ease, margin 200ms ease';
+    tab.tabBtn.style.maxWidth = '0';
+    tab.tabBtn.style.opacity = '0';
+    tab.tabBtn.style.padding = '0';
+    tab.tabBtn.style.margin = '0';
+    tab.tabBtn.addEventListener(
+        'transitionend',
+        () => {
+            tab.tabBtn.remove();
+            updateActiveTabGradient();
+        },
+        { once: true },
+    );
 }
 
 function updateTabLabel(tab) {
@@ -485,6 +575,14 @@ function updateActiveTabGradient() {
     _activeTab.tabBtn.style.background = `linear-gradient(90deg, color-mix(in srgb, var(--modal-bg), ${mix} ${a}%), color-mix(in srgb, var(--modal-bg), ${mix} ${b}%))`;
     _activeTab.tabBtn.style.setProperty('--tab-left', `color-mix(in srgb, var(--modal-bg), ${mix} ${a}%)`);
     _activeTab.tabBtn.style.setProperty('--tab-right', `color-mix(in srgb, var(--modal-bg), ${mix} ${b}%)`);
+}
+
+function animateNeighbor(el, oldOffsetLeft) {
+    const dx = oldOffsetLeft - el.offsetLeft;
+    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }], {
+        duration: 200,
+        easing: 'ease',
+    });
 }
 
 function updateTabCloseVisibility() {
@@ -666,9 +764,6 @@ export function initGamePanel(mount, { features } = {}) {
             _previewTimer = setTimeout(hideTabPreview, 150);
         });
     }
-
-    // Create first tab
-    addTab();
 
     // Append shared dialogs
     modal.insertAdjacentHTML(
@@ -1390,6 +1485,8 @@ export function applyEngineSettings() {
 // ─── 3. Lifecycle ──────────────────────────────────────────────────
 
 export function openPanel() {
+    // Create first tab lazily (after prefetch has loaded tournament data)
+    if (_tabs.length === 0) addTab();
     const viewerModal = document.getElementById('viewer-modal');
     const alreadyOpen = viewerModal && !viewerModal.classList.contains('hidden');
     if (!alreadyOpen) openModal('viewer-modal');
@@ -1514,7 +1611,8 @@ function loadExplorer({ restoreMoves } = {}) {
         games.ensureExplorer();
         if (_activeTab.gamesState) renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
-        _activeTab.board.setPosition(games.getExplorerFen(), false);
+        const fen = games.getExplorerFen() || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        _activeTab.board.setPosition(fen, false);
         _activeTab.board.resize();
     }
 }

@@ -2474,14 +2474,14 @@ button.viewer-close {
     .viewer-tab-bar .tab-list {
         display: flex;
         min-width: 0;
-        gap: 3px;
     }
     .viewer-tab-bar .tab-btn {
         display: flex;
         align-items: center;
         gap: 6px;
         flex: 0 1 250px;
-        min-width: 60px;
+        min-width: 0;
+        max-width: 250px;
         padding: 6px 10px;
         border: none;
         background: transparent;
@@ -2493,6 +2493,9 @@ button.viewer-close {
         border-radius: 12px;
         margin-bottom: 4px;
         transition: background var(--transition-fast), color var(--transition-fast);
+    }
+    .viewer-tab-bar .tab-btn + .tab-btn {
+        margin-left: 3px;
     }
     /* Floating divider between tabs */
     .viewer-tab-bar .tab-btn + .tab-btn::before {
@@ -2513,14 +2516,20 @@ button.viewer-close {
     .viewer-tab-bar .tab-btn:hover:not(.tab-active) {
         background: rgb(from var(--accent) r g b / 0.15);
     }
+    .viewer-tab-bar .tab-btn.tab-dragging {
+        z-index: 20;
+        cursor: grabbing;
+    }
     .viewer-tab-bar .tab-btn.tab-active {
         color: var(--text-primary);
         opacity: 1;
         position: relative;
         z-index: 3;
         border-radius: 12px 12px 0 0;
+        margin-top: auto;
+        height: 36px;
         margin-bottom: 0;
-        padding-bottom: 10px;
+        padding-top: 2px;
     }
     .viewer-tab-bar .tab-btn.tab-active::before {
         content: '';
