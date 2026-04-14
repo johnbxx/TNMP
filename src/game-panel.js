@@ -939,6 +939,7 @@ export function initGamePanel(mount, { features } = {}) {
             <button class="ctx-item ctx-comment" data-ctx-action="comment">Add comment</button>
             <button class="ctx-item ctx-delete-comment hidden" data-ctx-action="delete-comment">Delete comment</button>
             <button class="ctx-item" data-ctx-action="annotate">More annotations...</button>
+            <button class="ctx-item" data-ctx-action="copy-fen">Copy FEN</button>
             <button class="ctx-item" data-ctx-action="explore">Explore from here</button>
             <button class="ctx-item" data-ctx-action="delete">Delete from here</button>
             <button class="ctx-item ctx-mainline" data-ctx-action="mainline">Make mainline</button>
@@ -1929,6 +1930,16 @@ function wireContextMenu() {
             const targetId = _ctxTargetNodeId;
             hideContextMenu();
             showNagPicker(targetId, anchor);
+        } else if (action === 'copy-fen') {
+            const nodes = _activeTab.game.getNodes();
+            const fen = nodes[_ctxTargetNodeId]?.fen;
+            hideContextMenu();
+            if (fen) {
+                navigator.clipboard.writeText(fen).then(
+                    () => showToast('FEN copied!', 'success'),
+                    () => showToast('Could not copy to clipboard', 'error'),
+                );
+            }
         } else if (action === 'explore') {
             if (_ctxTargetNodeId != null && _ctxTargetNodeId > 0) {
                 const moves = _activeTab.game.getMovesTo(_ctxTargetNodeId);
