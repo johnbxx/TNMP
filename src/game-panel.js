@@ -283,7 +283,7 @@ function createTab() {
         analysisGen: 0,
         editingComment: false,
         ctxKey: null,
-        vlist: { items: null, rowH: 0, scrollEl: null, wired: false, rendered: { start: -1, end: -1 } },
+        vlist: { items: null, rowH: 0, scrollEl: null, wired: false, assigned: null, free: {} },
         browserListenerAC: null,
     };
 }
@@ -390,10 +390,14 @@ function addTab({ sourceCtxKey } = {}) {
     ensureBoard();
     updateLayout();
 
-    // Clone ctx — explicit source copies filters, + button gets fresh defaults
-    const sourceKey = sourceCtxKey || games.getLastTournamentKey() || games.getActiveCtxKey();
-    if (sourceKey) {
-        tab.ctxKey = games.cloneCtx(sourceKey, { copyFilters: !!sourceCtxKey });
+    // Clone ctx from the current tournament (always — regardless of what the active tab shows)
+    const tournamentKey = games.getLastTournamentKey();
+    if (sourceCtxKey) {
+        // "Open in new tab" copies the source tab's filters
+        tab.ctxKey = games.cloneCtx(sourceCtxKey, { copyFilters: true });
+    } else if (tournamentKey) {
+        // New tab (+) always starts with the current tournament, fresh filters
+        tab.ctxKey = games.cloneCtx(tournamentKey, { copyFilters: false });
     }
     loadExplorer();
     if (!isCombinedWidth()) showBrowser();
@@ -445,16 +449,18 @@ function closeTab(tab) {
     const idx = _tabs.indexOf(tab);
     if (idx === -1) return;
 
-    // Clean up
+    // Clean up: stop timers, disconnect observers, free shared resources
     tab.game?.destroy();
-    tab.engineActive = false;
-    // Delete cloned ctx if no remaining tab references it (preserve original source contexts)
-    if (tab.ctxKey?.startsWith('tab:') && !_tabs.some((t) => t.ctxKey === tab.ctxKey)) {
+    tab.board?.destroy();
+    if (
+        tab.ctxKey &&
+        !tab.ctxKey.startsWith('tournament:') &&
+        !_tabs.some((t) => t !== tab && t.ctxKey === tab.ctxKey)
+    ) {
         games.deleteCtx(tab.ctxKey);
     }
     tab.el.remove();
     _tabs.splice(idx, 1);
-    // Destroy engine if no remaining tab needs it
     if (!_tabs.some((t) => t.engineActive)) engine.destroyEngine();
 
     // If closing the active tab, switch to adjacent
@@ -718,11 +724,6 @@ export function initGamePanel(mount, { features } = {}) {
             _previewTab = null;
             _previewActive = false;
             tabPreview.classList.add('hidden');
-            if (_previewCg) {
-                _previewCg.destroy();
-                _previewCg = null;
-                tabPreview.querySelector('.tab-preview-board').innerHTML = '';
-            }
         }
 
         _tabBar.addEventListener('mouseover', (e) => {
@@ -962,8 +963,9 @@ const isCombinedWidth = () => combinedWidthQuery.matches;
 
 // Re-evaluate layout when crossing the mobile/desktop breakpoint
 combinedWidthQuery.addEventListener('change', () => {
+    if (!_activeTab?.el) return;
     const modal = _activeTab.el;
-    if (!modal || modal.closest('.modal.hidden')) return;
+    if (modal.closest('.modal.hidden')) return;
     updateLayout();
     _activeTab.board.resize();
     positionEnginePanel();
@@ -1007,7 +1009,7 @@ function onGameChange(state) {
 }
 
 games.onChange(() => {
-    if (_switchingTab) return; // DOM is preserved, skip re-render
+    if (_switchingTab || !_activeTab) return;
     _activeTab.ctxKey = games.getActiveCtxKey();
     _activeTab.gamesState = {
         round: games.getFilter('round'),
@@ -1504,6 +1506,8 @@ export function openPanel() {
 }
 
 export function openGamePanel(opts = {}) {
+    openPanel(); // ensure tab exists before accessing _activeTab
+
     const game = opts.game;
     _activeTab.varToggled.clear();
     dismissBranchPopover();
@@ -1526,8 +1530,6 @@ export function openGamePanel(opts = {}) {
     };
     meta.onPrev = _activeTab.panel.onPrev;
     meta.onNext = _activeTab.panel.onNext;
-
-    openPanel();
 
     // No game specified — explorer mode (default)
     if (!game && !opts.pgn) {
@@ -2472,18 +2474,20 @@ function renderExplorerMoveListHtml(stats, moveHistory) {
     if (stats && stats.moves.length > 0) {
         html += '<div class="explorer-table">';
         html +=
-            '<div class="explorer-table-header"><span class="explorer-col-move">Move</span><span class="explorer-col-games">Games</span><span class="explorer-col-bar">Result</span><span class="explorer-col-score">Score</span></div>';
+            '<div class="explorer-table-header"><span class="explorer-col-move">Move</span><span class="explorer-col-games">Games</span><span class="explorer-col-pos">\u2192Pos</span><span class="explorer-col-bar">Result</span><span class="explorer-col-score">Score</span></div>';
         for (const move of stats.moves) {
-            const pct = scorePercent(move.whiteWins, move.draws, move.blackWins);
+            const pct = move.total > 0 ? scorePercent(move.whiteWins, move.draws, move.blackWins) : '\u2014';
             const wPct = move.total > 0 ? (move.whiteWins / move.total) * 100 : 0;
             const dPct = move.total > 0 ? (move.draws / move.total) * 100 : 0;
             const bPct = move.total > 0 ? (move.blackWins / move.total) * 100 : 0;
-            html += `<button class="explorer-row" data-explorer-san="${move.san}">`;
+            const isTransposition = move.total === 0;
+            html += `<button class="explorer-row${isTransposition ? ' explorer-row-transposition' : ''}" data-explorer-san="${move.san}">`;
             html += `<span class="explorer-tip"><span class="explorer-tip-w">+${move.whiteWins}</span> <span class="explorer-tip-d">=${move.draws}</span> <span class="explorer-tip-b">\u2212${move.blackWins}</span></span>`;
             html += `<span class="explorer-col-move explorer-san">${move.san}</span>`;
-            html += `<span class="explorer-col-games">${move.total}</span>`;
-            html += `<span class="explorer-col-bar"><span class="explorer-bar"><span class="explorer-bar-w" style="width:${wPct}%"></span><span class="explorer-bar-d" style="width:${dPct}%"></span><span class="explorer-bar-b" style="width:${bPct}%"></span></span></span>`;
-            html += `<span class="explorer-col-score">${pct}%</span>`;
+            html += `<span class="explorer-col-games">${move.total || '\u2014'}</span>`;
+            html += `<span class="explorer-col-pos">${move.posTotal ?? ''}</span>`;
+            html += `<span class="explorer-col-bar">${move.total > 0 ? `<span class="explorer-bar"><span class="explorer-bar-w" style="width:${wPct}%"></span><span class="explorer-bar-d" style="width:${dPct}%"></span><span class="explorer-bar-b" style="width:${bPct}%"></span></span>` : ''}</span>`;
+            html += `<span class="explorer-col-score">${pct}${pct !== '\u2014' ? '%' : ''}</span>`;
             html += '</button>';
         }
         // Summary row
@@ -2495,6 +2499,7 @@ function renderExplorerMoveListHtml(stats, moveHistory) {
         html += `<span class="explorer-tip"><span class="explorer-tip-w">+${stats.whiteWins}</span> <span class="explorer-tip-d">=${stats.draws}</span> <span class="explorer-tip-b">\u2212${stats.blackWins}</span></span>`;
         html += '<span class="explorer-col-move explorer-all-label">All</span>';
         html += `<span class="explorer-col-games">${stats.total}</span>`;
+        html += '<span class="explorer-col-pos"></span>';
         html += `<span class="explorer-col-bar"><span class="explorer-bar"><span class="explorer-bar-w" style="width:${wPct}%"></span><span class="explorer-bar-d" style="width:${dPct}%"></span><span class="explorer-bar-b" style="width:${bPct}%"></span></span></span>`;
         html += `<span class="explorer-col-score">${pct}%</span>`;
         html += '</div>';
@@ -2694,35 +2699,6 @@ function varLength(nodes, startId) {
     return count;
 }
 
-function renderGameRow(game, boardLabel = null) {
-    const hasPgn = game.hasPgn ?? !!game.pgn;
-    const isPairing = !hasPgn && game.result === '*';
-
-    return `
-        <div class="browser-game-row" data-game-id="${game.gameId || ''}" data-has-pgn="${hasPgn ? '1' : ''}" data-pairing="${isPairing}" role="${hasPgn ? 'button' : 'listitem'}" ${hasPgn ? 'tabindex="0"' : ''}>
-            <span class="browser-board">${boardLabel || game.board || '?'}</span>
-            <div class="browser-player browser-player-white">
-                <span class="browser-name">${game.white}</span>
-                <span class="browser-elo">${game.whiteElo || ''}</span>
-            </div>
-            <div class="browser-result-center">
-                <div class="browser-result-half ${resultClass(game.result, 'white', 'browser')}">
-                    <img class="browser-piece-icon" src="/pieces/wK.webp" alt="White">
-                    <span class="browser-score">${resultSymbol(game.result, 'white')}</span>
-                </div>
-                <span class="browser-vs">vs.</span>
-                <div class="browser-result-half ${resultClass(game.result, 'black', 'browser')}">
-                    <span class="browser-score">${resultSymbol(game.result, 'black')}</span>
-                    <img class="browser-piece-icon" src="/pieces/bK.webp" alt="Black">
-                </div>
-            </div>
-            <div class="browser-player browser-player-black">
-                <span class="browser-elo">${game.blackElo || ''}</span>
-                <span class="browser-name">${game.black}</span>
-            </div>
-        </div>`;
-}
-
 function highlightMatch(name, query) {
     const idx = name.toLowerCase().indexOf(query);
     if (idx === -1) return name;
@@ -2809,25 +2785,24 @@ function updatePlayButton(isPlaying) {
 
 function highlightActiveGame(gameId) {
     if (!gameId) return;
+    const vl = _activeTab.vlist;
 
-    // If virtual list is active, scroll to the target game first
-    if (_activeTab.vlist.items && _activeTab.vlist.scrollEl) {
-        const { items, rowH, scrollEl } = _activeTab.vlist;
+    if (vl.items && vl.scrollEl) {
+        const { items, rowH, scrollEl } = vl;
         const idx = items.findIndex((i) => i.type === 'game' && i.data.gameId === gameId);
         if (idx !== -1) {
             const target = idx * rowH - scrollEl.clientHeight / 2 + rowH / 2;
             scrollEl.scrollTop = Math.max(0, target);
-            _activeTab.vlist.rendered = { start: -1, end: -1 };
-            renderVisibleRows();
+            syncPool();
         }
     }
 
-    const viewport = _activeTab.el.querySelector('.browser-games-viewport');
-    const container = viewport || _activeTab.browserGames;
-    if (!container) return;
-    container.querySelectorAll('.browser-game-row').forEach((row) => {
-        row.classList.toggle('active', row.dataset.gameId === gameId);
-    });
+    // Update active class on visible pool elements
+    if (vl.assigned) {
+        for (const [, pe] of vl.assigned) {
+            pe.el.classList.toggle('active', pe.el.dataset.gameId === gameId);
+        }
+    }
 }
 
 function renderBrowserPanel(state) {
@@ -2966,18 +2941,146 @@ function renderBrowserFilters(panelEl, state) {
 }
 
 // ─── Virtual Game List ─────────────────────────────────────────────
-// Renders only the ~20 visible rows + buffer. Uses uniform row height
-// (measured from a game row) for O(1) scroll positioning.
+// Pool-based virtual scroll: pre-creates a fixed pool of DOM elements
+// and recycles them as the user scrolls. Zero innerHTML, zero GC during scroll.
+// Each pool element has the full game-row structure; header/profile items
+// hide the game internals and show a text overlay instead.
 
-const VLIST_BUFFER = 10;
+const VLIST_BUFFER = 5;
+
+const POOL_GAME_HTML = `<div class="browser-game-row" data-game-id="" data-has-pgn="" data-pairing="false" role="listitem">
+            <span class="browser-board"></span>
+            <div class="browser-player browser-player-white">
+                <span class="browser-name"></span>
+                <span class="browser-elo"></span>
+            </div>
+            <div class="browser-result-center">
+                <div class="browser-result-half">
+                    <img class="browser-piece-icon" src="/pieces/wK.webp" alt="White">
+                    <span class="browser-score"></span>
+                </div>
+                <span class="browser-vs">vs.</span>
+                <div class="browser-result-half">
+                    <span class="browser-score"></span>
+                    <img class="browser-piece-icon" src="/pieces/bK.webp" alt="Black">
+                </div>
+            </div>
+            <div class="browser-player browser-player-black">
+                <span class="browser-elo"></span>
+                <span class="browser-name"></span>
+            </div>
+        </div>`;
+
+const POOL_HEADER_HTML = `<div class="browser-section-header"></div>`;
+const POOL_PROFILE_HTML = `<button type="button" class="browser-profile-link" data-profile-player=""></button>`;
+
+let _gameTemplate = null;
+let _headerTemplate = null;
+let _profileTemplate = null;
+
+function getTemplate(type) {
+    if (type === 'game') {
+        if (!_gameTemplate) {
+            const d = document.createElement('div');
+            d.innerHTML = POOL_GAME_HTML;
+            _gameTemplate = d.firstElementChild;
+        }
+        return _gameTemplate;
+    } else if (type === 'header') {
+        if (!_headerTemplate) {
+            const d = document.createElement('div');
+            d.innerHTML = POOL_HEADER_HTML;
+            _headerTemplate = d.firstElementChild;
+        }
+        return _headerTemplate;
+    } else {
+        if (!_profileTemplate) {
+            const d = document.createElement('div');
+            d.innerHTML = POOL_PROFILE_HTML;
+            _profileTemplate = d.firstElementChild;
+        }
+        return _profileTemplate;
+    }
+}
+
+function createGamePoolElement() {
+    const el = getTemplate('game').cloneNode(true);
+    el.style.position = 'absolute';
+    el.style.left = '0';
+    el.style.right = '0';
+    const halves = el.querySelectorAll('.browser-result-half');
+    return {
+        el,
+        type: 'game',
+        idx: -1,
+        board: el.querySelector('.browser-board'),
+        whiteName: el.querySelector('.browser-player-white .browser-name'),
+        whiteElo: el.querySelector('.browser-player-white .browser-elo'),
+        blackName: el.querySelector('.browser-player-black .browser-name'),
+        blackElo: el.querySelector('.browser-player-black .browser-elo'),
+        whiteHalf: halves[0],
+        blackHalf: halves[1],
+        whiteScore: halves[0].querySelector('.browser-score'),
+        blackScore: halves[1].querySelector('.browser-score'),
+    };
+}
+
+function createHeaderPoolElement() {
+    const el = getTemplate('header').cloneNode(true);
+    el.style.position = 'absolute';
+    el.style.left = '0';
+    el.style.right = '0';
+    return { el, type: 'header', idx: -1 };
+}
+
+function createProfilePoolElement() {
+    const el = getTemplate('profile').cloneNode(true);
+    el.style.position = 'absolute';
+    el.style.left = '0';
+    el.style.right = '0';
+    return { el, type: 'profile', idx: -1 };
+}
+
+function populatePoolElement(pe, item, activeGameId) {
+    if (item.type === 'game') {
+        const game = item.data;
+        const hasPgn = game.hasPgn ?? !!game.pgn;
+        const isPairing = !hasPgn && game.result === '*';
+        pe.el.className = 'browser-game-row' + (game.gameId === activeGameId ? ' active' : '');
+        pe.el.dataset.gameId = game.gameId || '';
+        pe.el.dataset.hasPgn = hasPgn ? '1' : '';
+        pe.el.dataset.pairing = isPairing;
+        pe.el.setAttribute('role', hasPgn ? 'button' : 'listitem');
+        pe.el.tabIndex = hasPgn ? 0 : -1;
+        pe.board.textContent = item.label || game.board || '?';
+        pe.whiteName.textContent = game.white;
+        pe.whiteElo.textContent = game.whiteElo || '';
+        pe.blackName.textContent = game.black;
+        pe.blackElo.textContent = game.blackElo || '';
+        pe.whiteScore.textContent = resultSymbol(game.result, 'white');
+        pe.blackScore.textContent = resultSymbol(game.result, 'black');
+        pe.whiteHalf.className = 'browser-result-half ' + resultClass(game.result, 'white', 'browser');
+        pe.blackHalf.className = 'browser-result-half ' + resultClass(game.result, 'black', 'browser');
+    } else if (item.type === 'header') {
+        pe.el.textContent = item.data;
+    } else if (item.type === 'profile') {
+        pe.el.textContent = `View all-time profile`;
+        pe.el.dataset.profilePlayer = item.data;
+    }
+}
 
 function renderBrowserGameList(panelEl, state) {
     const gamesEl = panelEl.querySelector('.browser-games');
-    _activeTab.vlist.scrollEl = gamesEl;
+    const vl = _activeTab.vlist;
+    vl.scrollEl = gamesEl;
 
     const hasGames = state.groupedGames.some((g) => g.games.length > 0);
     if (!hasGames) {
-        _activeTab.vlist.items = null;
+        vl.items = null;
+        if (vl.assigned) {
+            vl.assigned.clear();
+        }
+        vl.free = {};
         const label = state.explorerActive ? 'No games reached this position.' : 'No games found.';
         gamesEl.innerHTML = `<div class="browser-empty"><p>${label}</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>`;
         return;
@@ -2995,41 +3098,71 @@ function renderBrowserGameList(panelEl, state) {
             items.push({ type: 'game', data: game, label: playerMode ? `${game.round}.${game.board || '?'}` : null });
         }
     }
-    _activeTab.vlist.items = items;
+    vl.items = items;
 
-    // Measure row height once (game row + gap)
-    if (!_activeTab.vlist.rowH) {
-        const gameItem = items.find((i) => i.type === 'game');
-        if (gameItem) {
-            gamesEl.innerHTML = renderGameRow(gameItem.data, gameItem.label);
-            const style = getComputedStyle(gamesEl.children[0]);
-            _activeTab.vlist.rowH =
-                gamesEl.children[0].offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-            _activeTab.vlist.rowH += parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.2; // inter-row gap
-            gamesEl.innerHTML = '';
-        }
-        if (!_activeTab.vlist.rowH) _activeTab.vlist.rowH = 32;
+    // Measure row height from the first game row in the current data
+    const probeItem = items.find((i) => i.type === 'game');
+    if (probeItem) {
+        gamesEl.style.position = 'relative';
+        const probe = createGamePoolElement();
+        populatePoolElement(probe, probeItem, '');
+        probe.el.style.top = '0';
+        gamesEl.appendChild(probe.el);
+        vl.rowH = probe.el.offsetHeight + 3;
+        gamesEl.removeChild(probe.el);
     }
+    if (!vl.rowH) vl.rowH = 32;
 
-    const totalH = items.length * _activeTab.vlist.rowH;
+    // Set up container
+    const totalH = items.length * vl.rowH;
     gamesEl.style.position = 'relative';
-    gamesEl.innerHTML = `<div class="browser-games-spacer" style="height:${totalH}px;pointer-events:none"></div><div class="browser-games-viewport" style="position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:0.2rem"></div>`;
 
-    if (!_activeTab.vlist.wired) {
-        _activeTab.vlist.wired = true;
-        gamesEl.addEventListener('scroll', onVirtualScroll, { passive: true });
+    // Create or reuse spacer
+    let spacer = gamesEl.querySelector('.browser-games-spacer');
+    if (!spacer) {
+        gamesEl.innerHTML = '';
+        spacer = document.createElement('div');
+        spacer.className = 'browser-games-spacer';
+        spacer.style.pointerEvents = 'none';
+        gamesEl.appendChild(spacer);
+    }
+    spacer.style.height = totalH + 'px';
+
+    // Wire scroll once
+    if (!vl.wired) {
+        vl.wired = true;
+        let raf = 0;
+        gamesEl.addEventListener(
+            'scroll',
+            () => {
+                if (!raf)
+                    raf = requestAnimationFrame(() => {
+                        raf = 0;
+                        syncPool();
+                    });
+            },
+            { passive: true },
+        );
     }
 
-    _activeTab.vlist.rendered = { start: -1, end: -1 };
-    renderVisibleRows();
+    // Free all assigned elements and re-sync
+    if (vl.assigned) {
+        for (const [, pe] of vl.assigned) {
+            pe.el.style.display = 'none';
+            pe.idx = -1;
+            if (!vl.free[pe.type]) vl.free[pe.type] = [];
+            vl.free[pe.type].push(pe);
+        }
+        vl.assigned.clear();
+    }
+    syncPool();
 }
 
-function onVirtualScroll() {
-    renderVisibleRows();
-}
+const _creators = { game: createGamePoolElement, header: createHeaderPoolElement, profile: createProfilePoolElement };
 
-function renderVisibleRows() {
-    const { items, rowH, scrollEl } = _activeTab.vlist;
+function syncPool() {
+    const vl = _activeTab.vlist;
+    const { items, rowH, scrollEl } = vl;
     if (!items || !scrollEl) return;
 
     const startIdx = Math.max(0, Math.floor(scrollEl.scrollTop / rowH) - VLIST_BUFFER);
@@ -3037,30 +3170,41 @@ function renderVisibleRows() {
         items.length,
         Math.ceil((scrollEl.scrollTop + scrollEl.clientHeight) / rowH) + VLIST_BUFFER,
     );
+    const activeGameId = _activeTab.panel.gameId || '';
 
-    if (startIdx === _activeTab.vlist.rendered.start && endIdx === _activeTab.vlist.rendered.end) return;
-    _activeTab.vlist.rendered = { start: startIdx, end: endIdx };
+    // Index → pool element assignment map (keyed by index for O(1) lookup)
+    const assigned = vl.assigned || (vl.assigned = new Map());
 
-    let html = '';
-    for (let i = startIdx; i < endIdx; i++) {
-        const item = items[i];
-        if (item.type === 'header') {
-            html += `<div class="browser-section-header">${item.data}</div>`;
-        } else if (item.type === 'profile') {
-            html += `<button type="button" class="browser-profile-link" data-profile-player="${item.data}">View all-time profile</button>`;
-        } else {
-            html += renderGameRow(item.data, item.label);
+    // Free elements that are no longer in range
+    for (const [idx, pe] of assigned) {
+        if (idx < startIdx || idx >= endIdx) {
+            pe.el.style.display = 'none';
+            pe.idx = -1;
+            // Return to typed free list
+            if (!vl.free[pe.type]) vl.free[pe.type] = [];
+            vl.free[pe.type].push(pe);
+            assigned.delete(idx);
         }
     }
 
-    const viewport = scrollEl.querySelector('.browser-games-viewport');
-    if (viewport) {
-        viewport.style.top = startIdx * rowH + 'px';
-        viewport.innerHTML = html;
-        if (_activeTab.panel.gameId) {
-            const row = viewport.querySelector(`[data-game-id="${_activeTab.panel.gameId}"]`);
-            if (row) row.classList.add('active');
+    // Assign elements to indices that need them
+    for (let i = startIdx; i < endIdx; i++) {
+        if (assigned.has(i)) continue;
+        const item = items[i];
+        const type = item.type;
+
+        // Try to reuse a free element of the same type
+        let pe = vl.free[type]?.pop();
+        if (!pe) {
+            pe = _creators[type]();
+            scrollEl.appendChild(pe.el);
         }
+
+        pe.idx = i;
+        pe.el.style.display = '';
+        pe.el.style.top = i * rowH + 'px';
+        populatePoolElement(pe, item, activeGameId);
+        assigned.set(i, pe);
     }
 }
 

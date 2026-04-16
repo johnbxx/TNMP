@@ -376,8 +376,9 @@ export function initPlayerProfile(mount) {
             const playerNorm = currentPlayerNorm;
             const profileData = _profileData;
             closePlayerProfile();
+            openViewer();
 
-            // Set all data state BEFORE opening panel
+            // Set player data after panel exists — onChange renders it into the active tab
             selectPlayer(playerName, {
                 data: profileData,
                 norm: playerNorm,
@@ -387,9 +388,6 @@ export function initPlayerProfile(mount) {
                 opponentNorm: query.opponentNorm,
                 openingFamily: query.ecoLabel || null,
             });
-
-            // Now open panel — it reads the correct state
-            openViewer();
 
             if (query.color === 'black') setBoardOrientation('black');
         }

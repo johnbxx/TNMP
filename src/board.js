@@ -174,7 +174,10 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
         },
 
         resize() {
-            cg.redrawAll();
+            // Clear cached bounds so chessground recalculates on next render.
+            // Don't call redrawAll() — it rebuilds the entire DOM, orphaning
+            // the old cg-container (84 nodes leaked per call).
+            cg.state.dom.bounds.clear();
         },
 
         destroy() {

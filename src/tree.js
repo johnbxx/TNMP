@@ -1,6 +1,7 @@
-// 0x88 replay engine with Zobrist hashing for explorer tree building.
+// 0x88 replay engine with split-32 Zobrist hashing for explorer tree building.
 // Replays trusted SAN moves without legality checks.
 // ReplayEngine: board-centric, zero allocation per move.
+// Hash stored as two Int32 (hi/lo) — avoids BigInt overhead in hot paths.
 // Exports ReplayEngine (for tree building) and hashFen (for position lookups).
 
 // ─── Piece Encoding ─────────────────────────────────────────────────
@@ -27,7 +28,9 @@ const PIECE_OFFSETS = {
     [K]: [-17, -16, -15, 1, 17, 16, 15, -1],
 };
 
-// ─── Zobrist Keys ───────────────────────────────────────────────────
+// ─── Zobrist Keys (split-32) ───────────────────────────────────────
+// PRNG generates 64-bit keys via BigInt at module init, then splits to
+// paired Int32 typed arrays. No BigInt touches the hot path.
 
 function splitmix64(seed) {
     let state = BigInt(seed);
@@ -37,25 +40,32 @@ function splitmix64(seed) {
         let z = state;
         z = ((z ^ (z >> 30n)) * 0xbf58476d1ce4e5b9n) & 0xffffffffffffffffn;
         z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & 0xffffffffffffffffn;
-        return (z ^ (z >> 31n)) & 0xffffffffffffffffn;
+        z = (z ^ (z >> 31n)) & 0xffffffffffffffffn;
+        return [Number(z >> 32n) | 0, Number(z & 0xffffffffn) | 0];
     };
 }
 
 const rand = splitmix64(0x12345678);
 
-const PIECE_KEYS = Array.from({ length: 2 }, () =>
-    Array.from({ length: 7 }, () => Array.from({ length: 128 }, () => rand())),
-);
-const EP_KEYS = Array.from({ length: 8 }, () => rand());
-const CASTLING_KEYS = Array.from({ length: 16 }, () => rand());
-const SIDE_KEY = rand();
-
-function hashPiece(encoded, sq) {
-    return PIECE_KEYS[pieceColor(encoded)][pieceType(encoded)][sq];
+// Interleaved [hi, lo, hi, lo, ...] pairs in single typed arrays.
+function randPairs(n) {
+    const a = new Int32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+        const [h, l] = rand();
+        a[i * 2] = h;
+        a[i * 2 + 1] = l;
+    }
+    return a;
 }
+
+const PIECE_KEYS = Array.from({ length: 2 }, () => Array.from({ length: 7 }, () => randPairs(128)));
+const EP_KEYS = randPairs(8);
+const CASTLING_KEYS = randPairs(16);
+const SIDE_KEY = randPairs(1);
 
 // ─── hashFen ────────────────────────────────────────────────────────
 // Compute Zobrist hash directly from a FEN string (for position lookups).
+// Returns [hi, lo] Int32 pair.
 
 const FEN_CHAR_TO_ENCODED = {
     P: W | P,
@@ -74,9 +84,9 @@ const FEN_CHAR_TO_ENCODED = {
 
 export function hashFen(fen) {
     const parts = fen.split(' ');
-    let hash = 0n;
+    let hi = 0,
+        lo = 0;
 
-    // Pieces
     const rows = parts[0].split('/');
     for (let r = 0; r < 8; r++) {
         let f = 0;
@@ -85,42 +95,43 @@ export function hashFen(fen) {
                 f += parseInt(ch);
             } else {
                 const encoded = FEN_CHAR_TO_ENCODED[ch];
-                if (encoded) hash ^= hashPiece(encoded, r * 16 + f);
+                if (encoded) {
+                    const k = PIECE_KEYS[pieceColor(encoded)][pieceType(encoded)];
+                    const j = (r * 16 + f) * 2;
+                    hi ^= k[j];
+                    lo ^= k[j + 1];
+                }
                 f++;
             }
         }
     }
 
-    // Side to move
-    if (parts[1] === 'b') hash ^= SIDE_KEY;
+    if (parts[1] === 'b') {
+        hi ^= SIDE_KEY[0];
+        lo ^= SIDE_KEY[1];
+    }
 
-    // Castling
-    let castlingIdx = 0;
+    let ci = 0;
     if (parts[2] && parts[2] !== '-') {
-        if (parts[2].includes('K')) castlingIdx |= 1;
-        if (parts[2].includes('Q')) castlingIdx |= 2;
-        if (parts[2].includes('k')) castlingIdx |= 4;
-        if (parts[2].includes('q')) castlingIdx |= 8;
+        if (parts[2].includes('K')) ci |= 1;
+        if (parts[2].includes('Q')) ci |= 2;
+        if (parts[2].includes('k')) ci |= 4;
+        if (parts[2].includes('q')) ci |= 8;
     }
-    hash ^= CASTLING_KEYS[castlingIdx];
+    hi ^= CASTLING_KEYS[ci * 2];
+    lo ^= CASTLING_KEYS[ci * 2 + 1];
 
-    // En passant
     if (parts[3] && parts[3] !== '-') {
-        const epFile = parts[3].charCodeAt(0) - 97;
-        hash ^= EP_KEYS[epFile];
+        const j = (parts[3].charCodeAt(0) - 97) * 2;
+        hi ^= EP_KEYS[j];
+        lo ^= EP_KEYS[j + 1];
     }
 
-    return hash;
+    return [hi, lo];
 }
 
 // Precomputed start position hash
 export const START_HASH = hashFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -');
-
-// ─── ReplayEngine ───────────────────────────────────────────────────
-// Board-centric engine: no piece lists, no object allocation per move.
-// Finds pieces via reverse lookup from target square instead of
-// scanning a piece list — inspired by Lichess compression library's
-// approach of working directly with board state.
 
 // Char code → piece type (supports N/B/R/Q/K in both cases)
 const CC = new Uint8Array(128);
@@ -140,16 +151,21 @@ function sqAt(s, i) {
     return (56 - s.charCodeAt(i + 1)) * 16 + s.charCodeAt(i) - 97;
 }
 
+// ─── ReplayEngine ───────────────────────────────────────────────────
+// Board-centric engine: no piece lists, no object allocation per move.
+// Hash stored as hashHi/hashLo Int32 pair.
+
 export class ReplayEngine {
     constructor() {
         this.board = new Uint8Array(128);
         this.wKing = 0;
         this.bKing = 0;
-        this.us = W; // 0 = white, 8 = black (matches color encoding)
+        this.us = W;
         this.castleW = 0;
         this.castleB = 0;
         this.epSquare = -1;
-        this.hash = 0n;
+        this.hashHi = 0;
+        this.hashLo = 0;
         this.reset();
     }
 
@@ -159,28 +175,26 @@ export class ReplayEngine {
         this.castleW = 3;
         this.castleB = 3;
         this.epSquare = -1;
-        this.hash = 0n;
+        this.hashHi = 0;
+        this.hashLo = 0;
         const back = [R, N, _B, Q, K, _B, N, R];
         for (let f = 0; f < 8; f++) {
             const wBack = W | back[f],
-                wPawn = W | P;
-            const bBack = B | back[f],
-                bPawn = B | P;
+                bBack = B | back[f];
             this.board[112 + f] = wBack;
-            this.hash ^= hashPiece(wBack, 112 + f);
-            this.board[96 + f] = wPawn;
-            this.hash ^= hashPiece(wPawn, 96 + f);
+            this._xorPiece(wBack, 112 + f);
+            this.board[96 + f] = W | P;
+            this._xorPiece(W | P, 96 + f);
             this.board[f] = bBack;
-            this.hash ^= hashPiece(bBack, f);
-            this.board[16 + f] = bPawn;
-            this.hash ^= hashPiece(bPawn, 16 + f);
+            this._xorPiece(bBack, f);
+            this.board[16 + f] = B | P;
+            this._xorPiece(B | P, 16 + f);
         }
-        this.wKing = 116; // e1
-        this.bKing = 4; // e8
-        this.hash ^= CASTLING_KEYS[3 | (3 << 2)];
+        this.wKing = 116;
+        this.bKing = 4;
+        this._xorCastling(3 | (3 << 2));
     }
 
-    // Getter/setter for compatibility with code that reads .turn as 'w'/'b'
     get turn() {
         return this.us === W ? 'w' : 'b';
     }
@@ -188,24 +202,19 @@ export class ReplayEngine {
         this.us = v === 'w' ? W : B;
     }
 
-    // Is the piece on `sq` pinned to our king? (i.e., moving it to `toSq` would expose king)
-    // Only returns true if the move doesn't stay on the pin ray.
     _isPinned(sq, toSq) {
         const kingSq = this.us === W ? this.wKing : this.bKing;
         const enemy = this.us ^ 8;
-        // Find ray direction from king to piece
-        const dr = Math.sign((sq >> 4) - (kingSq >> 4)); // rank delta: -1, 0, 1
-        const df = Math.sign((sq & 0xf) - (kingSq & 0xf)); // file delta: -1, 0, 1
+        const dr = Math.sign((sq >> 4) - (kingSq >> 4));
+        const df = Math.sign((sq & 0xf) - (kingSq & 0xf));
         if (dr === 0 && df === 0) return false;
         const offset = dr * 16 + df;
-        // Check if sq is actually on a ray from king
         let s = kingSq + offset;
         while (!(s & 0x88) && s !== sq) {
-            if (this.board[s]) return false; // something between king and piece, not pinned
+            if (this.board[s]) return false;
             s += offset;
         }
-        if (s !== sq) return false; // sq not on this ray from king
-        // Check if toSq is actually on the pin ray (walk it, don't approximate with signs)
+        if (s !== sq) return false;
         s = kingSq + offset;
         while (!(s & 0x88)) {
             if (s === toSq) return false;
@@ -216,20 +225,41 @@ export class ReplayEngine {
             if (s === toSq) return false;
             s -= offset;
         }
-        // Walk from sq away from king to find attacker
         s = sq + offset;
         while (!(s & 0x88)) {
             const p = this.board[s];
             if (p) {
-                if (p >> 3 !== enemy >> 3) return false; // friendly piece, no pin
+                if (p >> 3 !== enemy >> 3) return false;
                 const ptype = p & 7;
-                // Rook/queen pin on rank/file, bishop/queen pin on diagonal
                 if (dr === 0 || df === 0) return ptype === R || ptype === Q;
                 return ptype === _B || ptype === Q;
             }
             s += offset;
         }
         return false;
+    }
+
+    // ── Hash XOR helpers ─────────────────────────────────────────────
+
+    _xorPiece(encoded, sq) {
+        const k = PIECE_KEYS[pieceColor(encoded)][pieceType(encoded)],
+            j = sq * 2;
+        this.hashHi ^= k[j];
+        this.hashLo ^= k[j + 1];
+    }
+    _xorSide() {
+        this.hashHi ^= SIDE_KEY[0];
+        this.hashLo ^= SIDE_KEY[1];
+    }
+    _xorCastling(idx) {
+        const j = idx * 2;
+        this.hashHi ^= CASTLING_KEYS[j];
+        this.hashLo ^= CASTLING_KEYS[j + 1];
+    }
+    _xorEp(file) {
+        const j = file * 2;
+        this.hashHi ^= EP_KEYS[j];
+        this.hashLo ^= EP_KEYS[j + 1];
     }
 
     move(san) {
@@ -251,13 +281,15 @@ export class ReplayEngine {
             const rEnc = this.board[rFrom];
 
             const oldCI = this.castleW | (this.castleB << 2);
-            this.hash ^= CASTLING_KEYS[oldCI];
+            this._xorCastling(oldCI);
             // Move king
-            this.hash ^= hashPiece(kEnc, kFrom) ^ hashPiece(kEnc, kTo);
+            this._xorPiece(kEnc, kFrom);
+            this._xorPiece(kEnc, kTo);
             this.board[kTo] = kEnc;
             this.board[kFrom] = 0;
             // Move rook
-            this.hash ^= hashPiece(rEnc, rFrom) ^ hashPiece(rEnc, rTo);
+            this._xorPiece(rEnc, rFrom);
+            this._xorPiece(rEnc, rTo);
             this.board[rTo] = rEnc;
             this.board[rFrom] = 0;
 
@@ -268,13 +300,13 @@ export class ReplayEngine {
                 this.bKing = kTo;
                 this.castleB = 0;
             }
-            this.hash ^= CASTLING_KEYS[this.castleW | (this.castleB << 2)];
+            this._xorCastling(this.castleW | (this.castleB << 2));
 
             if (this.epSquare !== -1) {
-                this.hash ^= EP_KEYS[this.epSquare & 0xf];
+                this._xorEp(this.epSquare & 0xf);
                 this.epSquare = -1;
             }
-            this.hash ^= SIDE_KEY;
+            this._xorSide();
             this.us ^= 8;
             return;
         }
@@ -377,20 +409,21 @@ export class ReplayEngine {
         const oldCI = this.castleW | (this.castleB << 2);
 
         // Clear old EP hash
-        if (this.epSquare !== -1) this.hash ^= EP_KEYS[this.epSquare & 0xf];
+        if (this.epSquare !== -1) this._xorEp(this.epSquare & 0xf);
 
         // Handle capture
         if (pt === P && toSq === this.epSquare) {
             const capSq = this.us === W ? toSq + 16 : toSq - 16;
-            this.hash ^= hashPiece(this.board[capSq], capSq);
+            this._xorPiece(this.board[capSq], capSq);
             this.board[capSq] = 0;
         } else if (this.board[toSq]) {
-            this.hash ^= hashPiece(this.board[toSq], toSq);
+            this._xorPiece(this.board[toSq], toSq);
             this.board[toSq] = 0;
         }
 
-        // Move piece (no method call, no piece list scan)
-        this.hash ^= hashPiece(ourPiece, fromSq) ^ hashPiece(ourPiece, toSq);
+        // Move piece
+        this._xorPiece(ourPiece, fromSq);
+        this._xorPiece(ourPiece, toSq);
         this.board[toSq] = ourPiece;
         this.board[fromSq] = 0;
 
@@ -403,7 +436,8 @@ export class ReplayEngine {
         // Promotion
         if (promotion) {
             const promoted = this.us | promotion;
-            this.hash ^= hashPiece(ourPiece, toSq) ^ hashPiece(promoted, toSq);
+            this._xorPiece(ourPiece, toSq);
+            this._xorPiece(promoted, toSq);
             this.board[toSq] = promoted;
         }
 
@@ -418,7 +452,7 @@ export class ReplayEngine {
                 (!(right & 0x88) && this.board[right] === enemyPawn)
             ) {
                 this.epSquare = epSq;
-                this.hash ^= EP_KEYS[epSq & 0xf];
+                this._xorEp(epSq & 0xf);
             } else {
                 this.epSquare = -1;
             }
@@ -451,9 +485,12 @@ export class ReplayEngine {
         }
 
         const newCI = this.castleW | (this.castleB << 2);
-        if (oldCI !== newCI) this.hash ^= CASTLING_KEYS[oldCI] ^ CASTLING_KEYS[newCI];
+        if (oldCI !== newCI) {
+            this._xorCastling(oldCI);
+            this._xorCastling(newCI);
+        }
 
-        this.hash ^= SIDE_KEY;
+        this._xorSide();
         this.us ^= 8;
     }
 }
