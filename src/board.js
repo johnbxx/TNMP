@@ -106,6 +106,20 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
     const turn = turnColor(currentFen);
     const dests = computeDests(currentFen);
 
+    // Capture chessground's internal ResizeObserver so we can disconnect it on
+    // destroy. chessground creates one in bindBoard (events.ts) with no stored
+    // reference and no disconnect path — `cg.destroy()` only unbinds document
+    // listeners, leaving the observer live and retaining the entire detached
+    // board subtree. TODO: remove once upstream exposes a disconnect hook.
+    let cgResizeObserver = null;
+    const OrigRO = window.ResizeObserver;
+    window.ResizeObserver = class extends OrigRO {
+        constructor(cb) {
+            super(cb);
+            cgResizeObserver = this;
+        }
+    };
+
     const cg = Chessground(el, {
         fen: currentFen,
         orientation: currentOrientation,
@@ -127,6 +141,8 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
         coordinates: localStorage.getItem('boardCoords') === 'true',
         drawable: { onChange: (shapes) => onDraw?.(shapes) },
     });
+
+    window.ResizeObserver = OrigRO;
 
     return {
         setCoordinates(show) {
@@ -181,6 +197,7 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
         },
 
         destroy() {
+            cgResizeObserver?.disconnect();
             cg.destroy();
             el.innerHTML = '';
         },
