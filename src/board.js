@@ -120,29 +120,32 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
         }
     };
 
-    const cg = Chessground(el, {
-        fen: currentFen,
-        orientation: currentOrientation,
-        turnColor: turn,
-        movable: {
-            free: false,
-            color: turn,
-            dests,
-            showDests: true,
-            events: { after: (from, to) => doMove(from, to) },
-            rookCastle: true,
-        },
-        draggable: { enabled: true, showGhost: true },
-        selectable: { enabled: true },
-        highlight: { lastMove: true, check: true },
-        animation: { enabled: true, duration: 200 },
-        premovable: { enabled: false },
-        predroppable: { enabled: false },
-        coordinates: localStorage.getItem('boardCoords') === 'true',
-        drawable: { onChange: (shapes) => onDraw?.(shapes) },
-    });
-
-    window.ResizeObserver = OrigRO;
+    let cg;
+    try {
+        cg = Chessground(el, {
+            fen: currentFen,
+            orientation: currentOrientation,
+            turnColor: turn,
+            movable: {
+                free: false,
+                color: turn,
+                dests,
+                showDests: true,
+                events: { after: (from, to) => doMove(from, to) },
+                rookCastle: true,
+            },
+            draggable: { enabled: true, showGhost: true },
+            selectable: { enabled: true },
+            highlight: { lastMove: true, check: true },
+            animation: { enabled: true, duration: 200 },
+            premovable: { enabled: false },
+            predroppable: { enabled: false },
+            coordinates: localStorage.getItem('boardCoords') === 'true',
+            drawable: { onChange: (shapes) => onDraw?.(shapes) },
+        });
+    } finally {
+        window.ResizeObserver = OrigRO;
+    }
 
     return {
         setCoordinates(show) {
