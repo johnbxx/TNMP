@@ -66,6 +66,11 @@ let _features = {
     tabs: true,
 };
 
+// Piece image src resolver. Overridable via initGamePanel({ pieceSrc }) so the
+// embed can bake in inline data URLs at template-assembly time — eliminating
+// 404s from the browser's image preloader racing the post-insert patcher.
+let _pieceSrc = (p) => `/pieces/${p}.webp`;
+
 let _activeTab = null;
 let _tabs = [];
 let _tabBar = null;
@@ -115,12 +120,12 @@ function buildTabDOM() {
                         <div class="viewer-player viewer-player-white">
                             <span class="viewer-player-name viewer-white-name" data-player=""></span>
                             <span class="viewer-player-clock viewer-white-clock hidden"></span>
-                            <img class="viewer-piece-icon" src="/pieces/wK.webp" alt="White">
+                            <img class="viewer-piece-icon" src="${_pieceSrc('wK')}" alt="White">
                             <span class="viewer-player-score viewer-white-score"></span>
                         </div>
                         <div class="viewer-player viewer-player-black">
                             <span class="viewer-player-score viewer-black-score"></span>
-                            <img class="viewer-piece-icon" src="/pieces/bK.webp" alt="Black">
+                            <img class="viewer-piece-icon" src="${_pieceSrc('bK')}" alt="Black">
                             <span class="viewer-player-clock viewer-black-clock hidden"></span>
                             <span class="viewer-player-name viewer-black-name" data-player=""></span>
                         </div>
@@ -295,87 +300,90 @@ function addTab({ sourceCtxKey } = {}) {
     tab.el.classList.add('hidden'); // hidden until switchTab reveals it
     _tabHost.appendChild(tab.el);
 
-    // Create tab bar button
-    const tabBtn = document.createElement('button');
-    tabBtn.className = 'tab-btn';
-    tabBtn.innerHTML = `${TAB_ICON_EXPLORE}<span class="tab-label">New Tab</span><span class="tab-close" aria-label="Close tab">&times;</span>`;
-    tab.tabBtn = tabBtn;
+    // Tab bar UI (skipped in single-tab embed mode where _features.tabs === false)
+    if (_features.tabs && _tabBar) {
+        // Create tab bar button
+        const tabBtn = document.createElement('button');
+        tabBtn.className = 'tab-btn';
+        tabBtn.innerHTML = `${TAB_ICON_EXPLORE}<span class="tab-label">New Tab</span><span class="tab-close" aria-label="Close tab">&times;</span>`;
+        tab.tabBtn = tabBtn;
 
-    // Drag-to-reorder via pointer events
-    tabBtn.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 || _tabs.length < 2) return;
-        if (e.target.closest('.tab-close')) return;
-        _dragTab = tab;
-        _dragOffset = 0;
-        _dragLastX = e.clientX;
-        tabBtn.classList.add('tab-dragging');
-        document.addEventListener('pointermove', onDragMove);
-        document.addEventListener('pointerup', onDragEnd);
-    });
-    function onDragMove(e) {
-        if (_dragTab !== tab) return;
-        _dragOffset += e.clientX - _dragLastX;
-        _dragLastX = e.clientX;
-        tabBtn.style.transform = `translateX(${_dragOffset}px)`;
-
-        const list = tabBtn.parentNode;
-        const listLeft = list.getBoundingClientRect().left;
-        const mid = listLeft + tabBtn.offsetLeft + tabBtn.offsetWidth / 2 + _dragOffset;
-        const prev = tabBtn.previousElementSibling;
-        const next = tabBtn.nextElementSibling;
-
-        if (prev && mid < listLeft + prev.offsetLeft + prev.offsetWidth) {
-            const nOld = prev.offsetLeft;
-            const oldLeft = tabBtn.offsetLeft;
-            list.insertBefore(tabBtn, prev);
-            _dragOffset += oldLeft - tabBtn.offsetLeft;
-            tabBtn.style.transform = `translateX(${_dragOffset}px)`;
-            animateNeighbor(prev, nOld);
-        } else if (next && mid > listLeft + next.offsetLeft) {
-            const nOld = next.offsetLeft;
-            const oldLeft = tabBtn.offsetLeft;
-            list.insertBefore(tabBtn, next.nextSibling);
-            _dragOffset += oldLeft - tabBtn.offsetLeft;
-            tabBtn.style.transform = `translateX(${_dragOffset}px)`;
-            animateNeighbor(next, nOld);
-        }
-    }
-    function onDragEnd() {
-        if (_dragTab !== tab) return;
-        document.removeEventListener('pointermove', onDragMove);
-        document.removeEventListener('pointerup', onDragEnd);
-        tabBtn.classList.remove('tab-dragging');
-        tabBtn.animate([{ transform: `translateX(${_dragOffset}px)` }, { transform: 'translateX(0)' }], {
-            duration: 200,
-            easing: 'ease',
+        // Drag-to-reorder via pointer events
+        tabBtn.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 || _tabs.length < 2) return;
+            if (e.target.closest('.tab-close')) return;
+            _dragTab = tab;
+            _dragOffset = 0;
+            _dragLastX = e.clientX;
+            tabBtn.classList.add('tab-dragging');
+            document.addEventListener('pointermove', onDragMove);
+            document.addEventListener('pointerup', onDragEnd);
         });
-        tabBtn.style.transform = '';
-        const btns = [..._tabBar.querySelector('.tab-list').children];
-        _tabs.sort((a, b) => btns.indexOf(a.tabBtn) - btns.indexOf(b.tabBtn));
-        _dragTab = null;
-        updateActiveTabGradient();
-    }
+        function onDragMove(e) {
+            if (_dragTab !== tab) return;
+            _dragOffset += e.clientX - _dragLastX;
+            _dragLastX = e.clientX;
+            tabBtn.style.transform = `translateX(${_dragOffset}px)`;
 
-    const tabList = _tabBar.querySelector('.tab-list');
+            const list = tabBtn.parentNode;
+            const listLeft = list.getBoundingClientRect().left;
+            const mid = listLeft + tabBtn.offsetLeft + tabBtn.offsetWidth / 2 + _dragOffset;
+            const prev = tabBtn.previousElementSibling;
+            const next = tabBtn.nextElementSibling;
 
-    // Animate tab sliding in
-    const openTransition = 'max-width 200ms ease, opacity 200ms ease';
-    tabBtn.style.transition = openTransition;
-    tabBtn.style.maxWidth = '0';
-    tabBtn.style.opacity = '0';
-    tabList.appendChild(tabBtn);
-    requestAnimationFrame(() => {
-        tabBtn.style.maxWidth = '';
-        tabBtn.style.opacity = '';
-    });
-    tabBtn.addEventListener(
-        'transitionend',
-        () => {
-            tabBtn.style.transition = '';
+            if (prev && mid < listLeft + prev.offsetLeft + prev.offsetWidth) {
+                const nOld = prev.offsetLeft;
+                const oldLeft = tabBtn.offsetLeft;
+                list.insertBefore(tabBtn, prev);
+                _dragOffset += oldLeft - tabBtn.offsetLeft;
+                tabBtn.style.transform = `translateX(${_dragOffset}px)`;
+                animateNeighbor(prev, nOld);
+            } else if (next && mid > listLeft + next.offsetLeft) {
+                const nOld = next.offsetLeft;
+                const oldLeft = tabBtn.offsetLeft;
+                list.insertBefore(tabBtn, next.nextSibling);
+                _dragOffset += oldLeft - tabBtn.offsetLeft;
+                tabBtn.style.transform = `translateX(${_dragOffset}px)`;
+                animateNeighbor(next, nOld);
+            }
+        }
+        function onDragEnd() {
+            if (_dragTab !== tab) return;
+            document.removeEventListener('pointermove', onDragMove);
+            document.removeEventListener('pointerup', onDragEnd);
+            tabBtn.classList.remove('tab-dragging');
+            tabBtn.animate([{ transform: `translateX(${_dragOffset}px)` }, { transform: 'translateX(0)' }], {
+                duration: 200,
+                easing: 'ease',
+            });
+            tabBtn.style.transform = '';
+            const btns = [..._tabBar.querySelector('.tab-list').children];
+            _tabs.sort((a, b) => btns.indexOf(a.tabBtn) - btns.indexOf(b.tabBtn));
+            _dragTab = null;
             updateActiveTabGradient();
-        },
-        { once: true },
-    );
+        }
+
+        const tabList = _tabBar.querySelector('.tab-list');
+
+        // Animate tab sliding in
+        const openTransition = 'max-width 200ms ease, opacity 200ms ease';
+        tabBtn.style.transition = openTransition;
+        tabBtn.style.maxWidth = '0';
+        tabBtn.style.opacity = '0';
+        tabList.appendChild(tabBtn);
+        requestAnimationFrame(() => {
+            tabBtn.style.maxWidth = '';
+            tabBtn.style.opacity = '';
+        });
+        tabBtn.addEventListener(
+            'transitionend',
+            () => {
+                tabBtn.style.transition = '';
+                updateActiveTabGradient();
+            },
+            { once: true },
+        );
+    }
 
     _tabs.push(tab);
     switchTab(tab);
@@ -598,8 +606,9 @@ function updateTabCloseVisibility() {
     }
 }
 
-export function initGamePanel(mount, { features } = {}) {
+export function initGamePanel(mount, { features, pieceSrc } = {}) {
     if (features) _features = { ..._features, ...features };
+    if (pieceSrc) _pieceSrc = pieceSrc;
 
     mount.innerHTML = `
     <div id="viewer-modal" class="modal hidden" role="dialog" aria-label="Game Panel" aria-modal="true" data-manual-close>
@@ -2948,7 +2957,9 @@ function renderBrowserFilters(panelEl, state) {
 
 const VLIST_BUFFER = 5;
 
-const POOL_GAME_HTML = `<div class="browser-game-row" data-game-id="" data-has-pgn="" data-pairing="false" role="listitem">
+// Lazy so `_pieceSrc` overrides (set by initGamePanel) apply before first use.
+const poolGameHtml =
+    () => `<div class="browser-game-row" data-game-id="" data-has-pgn="" data-pairing="false" role="listitem">
             <span class="browser-board"></span>
             <div class="browser-player browser-player-white">
                 <span class="browser-name"></span>
@@ -2956,13 +2967,13 @@ const POOL_GAME_HTML = `<div class="browser-game-row" data-game-id="" data-has-p
             </div>
             <div class="browser-result-center">
                 <div class="browser-result-half">
-                    <img class="browser-piece-icon" src="/pieces/wK.webp" alt="White">
+                    <img class="browser-piece-icon" src="${_pieceSrc('wK')}" alt="White">
                     <span class="browser-score"></span>
                 </div>
                 <span class="browser-vs">vs.</span>
                 <div class="browser-result-half">
                     <span class="browser-score"></span>
-                    <img class="browser-piece-icon" src="/pieces/bK.webp" alt="Black">
+                    <img class="browser-piece-icon" src="${_pieceSrc('bK')}" alt="Black">
                 </div>
             </div>
             <div class="browser-player browser-player-black">
@@ -2982,7 +2993,7 @@ function getTemplate(type) {
     if (type === 'game') {
         if (!_gameTemplate) {
             const d = document.createElement('div');
-            d.innerHTML = POOL_GAME_HTML;
+            d.innerHTML = poolGameHtml();
             _gameTemplate = d.firstElementChild;
         }
         return _gameTemplate;

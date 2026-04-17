@@ -411,8 +411,14 @@ function init() {
     profileMount.className = 'tnmp';
     document.body.appendChild(profileMount);
 
-    // Init modules
-    initGamePanel(gameMount, { features: FEAT });
+    // Init modules. `pieceSrc` bakes inline data URLs into img src at template
+    // build time so the browser never dispatches a `/pieces/*.webp` fetch on
+    // the host origin (which would 404). Falls through to the default path
+    // for any unknown piece.
+    initGamePanel(gameMount, {
+        features: FEAT,
+        pieceSrc: (p) => PIECE_URLS[p] || `/pieces/${p}.webp`,
+    });
 
     // Apply embed theme (compile-time constants from embed.config.js)
     const _theme = typeof __EMBED__ !== 'undefined' && typeof __THEME__ !== 'undefined' ? __THEME__ : null; // eslint-disable-line
