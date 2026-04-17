@@ -137,7 +137,7 @@ function buildTabDOM() {
                 </div>
                 <div class="explorer-header hidden"></div>
             </div>
-            <div class="viewer-layout">
+            <div class="tnmp-viewer-layout">
                 <div class="viewer-board-col">
                     <div class="viewer-board"></div>
                 </div>

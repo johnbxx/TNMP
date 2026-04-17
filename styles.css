@@ -1587,7 +1587,7 @@ button.viewer-close {
 }
 
 /* Board layout */
-.viewer-layout {
+.tnmp-viewer-layout {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2441,7 +2441,7 @@ button.viewer-close {
         flex-direction: column;
         min-width: 0;
     }
-    .viewer-layout {
+    .tnmp-viewer-layout {
         flex: 1 1 0;
         min-height: 0;
         display: flex;
@@ -2488,7 +2488,7 @@ button.viewer-close {
         max-width: 560px;
         width: 95%;
     }
-    .viewer-layout {
+    .tnmp-viewer-layout {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -2560,13 +2560,18 @@ button.viewer-close {
         flex-direction: column;
         max-height: 98vh;
         max-height: 98dvh;
+    }
+    /* Tab-host owns the modal chrome only when a tab bar sits on top of it.
+       Without the tab bar (single-tab embed), the modal-content-viewer
+       keeps its own background and shadow from the base rule. */
+    .viewer-tab-host:has(.viewer-tab-bar) {
         border-radius: var(--radius-card);
         background: linear-gradient(135deg,
             var(--modal-bg),
             color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
         box-shadow: var(--shadow-modal), inset 0 1px 0 0 rgba(255,255,255,0.08);
     }
-    .modal-content-viewer {
+    .viewer-tab-host:has(.viewer-tab-bar) .modal-content-viewer {
         box-shadow: none;
     }
 }
@@ -2737,7 +2742,9 @@ button.viewer-close {
     button.viewer-close-mobile {
         display: none;
     }
-    .modal-content-viewer {
+    /* Only square the top corners when a tab bar is actually rendered above
+       (tab bar is absent in single-tab embed mode). */
+    .viewer-tab-host:has(.viewer-tab-bar) .modal-content-viewer {
         border-radius: 0 0 var(--radius-card) var(--radius-card);
         box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.08);
     }
@@ -2807,7 +2814,7 @@ button.viewer-close {
         height: 90vh;
         max-width: 1000px;
     }
-    .has-browser .viewer-layout {
+    .has-browser .tnmp-viewer-layout {
         display: flex;
         flex-direction: column;
         align-items: center;
