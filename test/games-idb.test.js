@@ -6,6 +6,10 @@ import {
     writeDatasetToIdb,
     hydrateFromIdb,
     getCachedGame,
+    ingestDataset,
+    isValidSaveTarget,
+    isValidLoadTarget,
+    _pendingIdbWriteForTests,
 } from '../src/games.js';
 import {
     getAllGames,
@@ -360,3 +364,64 @@ describe('hydrateFromIdb', () => {
         expect(ctx.datasetKey).toBe('empty-one');
     });
 });
+
+// ─── dataset classification ────────────────────────────────────────
+
+describe('ingestDataset IDB write policy', () => {
+    it('skips IDB write for player: datasets (ephemeral, grow over time)', async () => {
+        ingestDataset('player:alicesmith', { games: [makeGame()] });
+        await _pendingIdbWriteForTests();
+
+        const games = await getAllGames();
+        const colls = await getAllCollections();
+        expect(games).toHaveLength(0);
+        expect(colls).toHaveLength(0);
+    });
+
+    it('writes tournament: datasets to IDB', async () => {
+        ingestDataset('tournament:tnm-spring-2026', { games: [makeGame()] });
+        await _pendingIdbWriteForTests();
+
+        const games = await getAllGames();
+        expect(games).toHaveLength(1);
+    });
+
+    it('writes import: datasets to IDB', async () => {
+        ingestDataset('import:1700000000000', { games: [makeGame()] });
+        await _pendingIdbWriteForTests();
+
+        const games = await getAllGames();
+        expect(games).toHaveLength(1);
+    });
+});
+
+describe('isValidSaveTarget', () => {
+    it('accepts user collections', () => {
+        expect(isValidSaveTarget({ kind: 'user' })).toBe(true);
+    });
+
+    it('rejects auto collections (read-only mirrors)', () => {
+        expect(isValidSaveTarget({ kind: 'auto' })).toBe(false);
+    });
+
+    it('rejects null/undefined', () => {
+        expect(isValidSaveTarget(null)).toBe(false);
+        expect(isValidSaveTarget(undefined)).toBe(false);
+    });
+});
+
+describe('isValidLoadTarget', () => {
+    it('accepts user collections', () => {
+        expect(isValidLoadTarget({ kind: 'user' })).toBe(true);
+    });
+
+    it('rejects auto collections for now (TNM has its own switcher)', () => {
+        expect(isValidLoadTarget({ kind: 'auto' })).toBe(false);
+    });
+
+    it('rejects null/undefined', () => {
+        expect(isValidLoadTarget(null)).toBe(false);
+        expect(isValidLoadTarget(undefined)).toBe(false);
+    });
+});
+

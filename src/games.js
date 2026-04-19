@@ -119,6 +119,29 @@ function _sourceTypeForKey(key) {
     return 'unknown';
 }
 
+// Player sets are ephemeral: they grow every time the player plays, so
+// caching them in IDB would be stale-by-default. Historic tournaments
+// are immutable once complete, so they persist freely. Everything else
+// (imports, future chess.com/lichess syncs) persists by default.
+function _shouldWriteDataset(key) {
+    if (key.startsWith('player:')) return false;
+    return true;
+}
+
+/** Collections a user can add games to. Auto mirrors are read-only. */
+export function isValidSaveTarget(coll) {
+    return coll?.kind === 'user';
+}
+
+/** Collections a user can open. TNM tournaments have their own switcher
+ * so are excluded; everything else (user collections + future non-TNM
+ * auto syncs like chess.com/lichess) is loadable. */
+export function isValidLoadTarget(coll) {
+    if (!coll) return false;
+    if (coll.kind === 'user') return true;
+    return false;
+}
+
 /**
  * Translate a flat GameObject into the parsed shape consumed by
  * record.ingestSource: `{ headers, moveTree, startFen }`. Omits
@@ -280,7 +303,7 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     if (key.startsWith('tournament:') && !_lastTournamentKey) _lastTournamentKey = key;
 
     // Fire-and-forget write-through to IDB. UI activation does not wait.
-    if (!skipIdbWrite && _idbWriteThroughEnabled() && ds.games.length > 0) {
+    if (!skipIdbWrite && _idbWriteThroughEnabled() && _shouldWriteDataset(key) && ds.games.length > 0) {
         _lastIdbWrite = writeDatasetToIdb(key, ds.games, ds.meta).catch(() => {});
     }
 
