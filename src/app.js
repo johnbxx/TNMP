@@ -1,4 +1,12 @@
-import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState } from './config.js';
+import {
+    WORKER_URL,
+    CONFIG,
+    STATE,
+    getAppState,
+    getTournamentMeta,
+    setTournamentMeta,
+    updateAppState,
+} from './config.js';
 import {
     showLoading,
     showState,
@@ -8,7 +16,6 @@ import {
     renderRoundTracker,
 } from './ui.js';
 import { resetCountdown, stopCountdown, startCountdown } from './countdown.js';
-import { shareStatus } from './share.js';
 import { openSettings, saveSettings, initSettings } from './settings.js';
 import { openStyle, initStyle } from './style.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
@@ -55,7 +62,7 @@ import {
 import { showToast } from './toast.js';
 import { getCachedGame, getPlayer, getGroupedGames, getFilter, getLastTournamentKey } from './games.js';
 import { queryGames, prefetchGames } from './tnm.js';
-import { formatName, getHeader } from './utils.js';
+import { formatName, getHeader, resultDisplay } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
 function downloadPgn(pgnText, filename) {
@@ -555,6 +562,80 @@ document.addEventListener('click', (e) => {
     });
     document.addEventListener('pointerup', stop);
     document.addEventListener('pointercancel', stop);
+}
+
+// ─── Share status (main page) ──────────────────────────────────────
+
+function getShareText() {
+    const { state, pairing, roundInfo } = getAppState();
+
+    let text;
+    let pairingText = '';
+
+    if (pairing && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
+        if (pairing.isBye) {
+            pairingText =
+                pairing.byeType === 'full'
+                    ? ' I have a full-point bye this round.'
+                    : ' I have a half-point bye this round.';
+        } else if (state === STATE.RESULTS && pairing.playerResult) {
+            const result = resultDisplay(pairing.playerResult);
+            const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
+            const outcomeText = result.outcome === 'win' ? 'Won' : result.outcome === 'loss' ? 'Lost' : 'Drew';
+            pairingText = ` ${outcomeText} with ${pairing.color} vs ${pairing.opponent}${ratingText} on Board ${pairing.board}.`;
+        } else {
+            const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
+            pairingText = ` Playing ${pairing.color} vs ${pairing.opponent}${ratingText} on Board ${pairing.board}.`;
+        }
+    }
+
+    switch (state) {
+        case STATE.YES:
+            text = `The pairings are UP! ${roundInfo}${pairingText}`;
+            break;
+        case STATE.NO:
+            text = `Still waiting for pairings... ${roundInfo}`;
+            break;
+        case STATE.TOO_EARLY:
+            text = `Chill! ${roundInfo}`;
+            break;
+        case STATE.IN_PROGRESS:
+            text = `Chess in progress! ${roundInfo}${pairingText}`;
+            break;
+        case STATE.RESULTS:
+            text = `Results are in! ${roundInfo}`;
+            break;
+        case STATE.OFF_SEASON:
+            text = roundInfo || 'Check back for the next TNM schedule.';
+            break;
+        default:
+            text = 'Checking if the pairings are up...';
+    }
+    return text;
+}
+
+async function shareStatus() {
+    const text = getShareText();
+    const url = window.location.href.split('?')[0];
+
+    const shareData = { title: 'Are the Pairings Up?', text, url };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        try {
+            await navigator.share(shareData);
+        } catch (err) {
+            if (err.name !== 'AbortError') console.error('Share failed:', err);
+        }
+    } else {
+        const shareText = `${text}\n${url}`;
+        try {
+            await navigator.clipboard.writeText(shareText);
+            showToast('Copied to clipboard!', 'success');
+        } catch (err) {
+            console.error('Copy failed:', err);
+            showToast('Could not copy to clipboard', 'error');
+        }
+    }
 }
 
 async function handleShareAction(action) {

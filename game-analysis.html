@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Heroic Draw — Annotated Game Analysis</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9.1.1/assets/chessground.base.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9.1.1/assets/chessground.brown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@9.1.1/assets/chessground.cburnett.css">
+<style>
+  :root {
+    --bg: #15110c;
+    --bg-soft: #1d1812;
+    --bg-panel: #231c14;
+    --ink: #e8dfcf;
+    --ink-dim: #a69b85;
+    --rule: #3a2f20;
+    --accent: #d9a441;
+    --accent-soft: #b57a2a;
+    --white-cell: #f0d9b5;
+    --black-cell: #946f40;
+    --danger: #c96a5f;
+    --good: #79a472;
+    --serif: "Iowan Old Style", "Hoefler Text", "Palatino", "Georgia", serif;
+    --sans: "Inter", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+    --mono: "SF Mono", "Menlo", "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 80px 40px 120px;
+  }
+  header.title {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 40px;
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 58px;
+    line-height: 1.05;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .subtitle {
+    font-size: 22px;
+    color: var(--ink-dim);
+    font-style: italic;
+    margin: 0;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    margin-top: 40px;
+    font-family: var(--sans);
+  }
+  .meta-grid div {
+    border-left: 2px solid var(--accent-soft);
+    padding-left: 14px;
+  }
+  .meta-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+  }
+  .meta-value {
+    font-size: 16px;
+    color: var(--ink);
+  }
+  h2 {
+    font-size: 32px;
+    margin: 72px 0 8px;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  h2 .move-num {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 22px;
+    margin-right: 14px;
+    letter-spacing: 0;
+    vertical-align: 1px;
+  }
+  .section-sub {
+    font-family: var(--sans);
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent-soft);
+    margin-bottom: 28px;
+  }
+  p { margin: 0 0 16px; }
+  p + p { text-indent: 1.6em; }
+  .drop::first-letter {
+    float: left;
+    font-size: 68px;
+    line-height: 0.85;
+    padding: 6px 10px 0 0;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .diagram-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: start;
+    margin: 36px 0;
+  }
+  .diagram-row.reverse { grid-template-columns: 1fr 1fr; }
+  .board-wrap {
+    position: relative;
+  }
+  .board-container {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55), 0 2px 0 rgba(217,164,65,0.18) inset;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .board-caption {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink-dim);
+    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .board-caption .pos-label {
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+  .side-text h3 {
+    font-family: var(--sans);
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 12px;
+    font-weight: 500;
+  }
+  .side-text p {
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .eval-bar {
+    display: flex;
+    height: 6px;
+    margin: 18px 0 24px;
+    background: var(--bg-panel);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .eval-white { background: var(--ink); }
+  .eval-black { background: #000; }
+  .eval-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-top: -16px;
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .eval-label span:last-child { color: var(--accent); }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 28px 0;
+    padding: 4px 0 4px 24px;
+    font-style: italic;
+    color: var(--ink-dim);
+    font-size: 19px;
+  }
+  code, .move {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--accent);
+    background: rgba(217,164,65,0.08);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .move.strong { color: var(--ink); background: rgba(217,164,65,0.2); font-weight: 600; }
+  .move.bad { color: var(--danger); background: rgba(201,106,95,0.12); }
+  .callout {
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 24px 28px;
+    margin: 32px 0;
+    border-radius: 2px;
+  }
+  .callout h4 {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+    font-weight: 500;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .movelist {
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 28px 32px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 2;
+    color: var(--ink);
+    margin: 32px 0;
+    columns: 2;
+    column-gap: 40px;
+  }
+  .movelist .num { color: var(--accent-soft); margin-right: 4px; }
+  .movelist .highlight {
+    background: rgba(217,164,65,0.18);
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+  hr.ornament {
+    border: 0;
+    text-align: center;
+    margin: 64px 0;
+    color: var(--accent-soft);
+    letter-spacing: 1em;
+  }
+  hr.ornament::before {
+    content: "◆   ◆   ◆";
+    font-size: 12px;
+  }
+  @media (max-width: 760px) {
+    .page { padding: 40px 20px; }
+    h1 { font-size: 38px; }
+    .diagram-row { grid-template-columns: 1fr; gap: 24px; }
+    .meta-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
+    .movelist { columns: 1; }
+  }
+  /* chessground size overrides */
+  .board-container cg-container { width: 100% !important; height: 100% !important; }
+  .cg-wrap { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="title">
+  <div class="eyebrow">Game Analysis · Annotated</div>
+  <h1>A Bishop Too Many, <em>A Pawn Too Few</em></h1>
+  <p class="subtitle">How White, two minor pieces down, walked his king across the board to hold a fortress draw.</p>
+  <div class="meta-grid">
+    <div><div class="meta-label">Opening</div><div class="meta-value">Sicilian · Paulsen</div></div>
+    <div><div class="meta-label">Result</div><div class="meta-value">½ – ½ (draw)</div></div>
+    <div><div class="meta-label">Length</div><div class="meta-value">60 moves</div></div>
+    <div><div class="meta-label">Character</div><div class="meta-value">Defensive study</div></div>
+  </div>
+</header>
+
+<section>
+  <p class="drop">There is a particular kind of chess game that rewards a careful second look — not because the tactics dazzle, but because the logic of the position bends under pressure and refuses to break. This is one of them. Black wins a clean minor piece by move fourteen, enters a materially winning endgame, and still, sixty moves in, has to shake hands on a draw. Along the way White conducts a king march that borders on the absurd, and the final position is a textbook fortress nobody saw coming.</p>
+
+  <p>What follows is a walk through the critical moments. We will not belabor the book moves, nor chase every sideline. The aim is to understand the <em>decisions</em> — where the game actually turned, and what each side was seeing.</p>
+</section>
+
+<hr class="ornament">
+
+<section>
+  <h2><span class="move-num">10.</span>The Knight Sortie</h2>
+  <div class="section-sub">Move 10 · White to move</div>
+
+  <p>The opening has taken a standard Sicilian shape: Black has the classical <code>...Qb6</code>/<code>...Qc7</code> setup, White has developed to <code>Bd3</code>, <code>Be3</code>, and a pair of knights. Black's <code>9...b4</code> kicks the <code>Nc3</code> and poses White the first real question of the game.</p>
+
+  <div class="diagram-row">
+    <div class="board-wrap">
+      <div class="board-container" id="board-1"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 9…b4</span>
+        <span>White to move</span>
+      </div>
+    </div>
+    <div class="side-text">
+      <h3>The Choice</h3>
+      <p>Quiet retreats (<code>Ne2</code>, <code>Nd1</code>) are safe but passive — Black emerges with a space advantage on the queenside and no problems to solve. Instead White plays <span class="move strong">10.Nb5!?</span>, an attempted piece sacrifice designed to trade a knight for activity and a far-advanced b-pawn.</p>
+      <p>The forced sequence runs <code>10…axb5 11.axb5 Rxa1 12.Qxa1</code>. The dust settles with White down a clean minor piece for one pawn — but with an advanced passed b-pawn, an open a-file, and an active queen eyeing <code>a7</code>.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <h4>Material ledger · after 12.Qxa1</h4>
+    <p>White has given up <strong>Nc3</strong>; won the <strong>a6 pawn</strong>, then traded rooks. Net deficit: one minor piece for one pawn — objectively around <strong>−2</strong>. The compensation is dynamic: the <code>b5</code>-pawn cramps Black's queenside, and the <code>Nc6</code> is now attacked by the pawn and must move.</p>
+  </div>
+
+  <p>Black's reply <code>12…Ne5</code> is sensible — the knight avoids the pawn and hits <code>Bd3</code>. But <span class="move">13.b6!</span> pushes the wedge deeper, dislodging Black's queen, and after <code>13…Nxd3+ 14.cxd3 Qb8</code>, White has traded bishops as well. Another minor is off the board, and the position looks like it has simplified — which is exactly the impression White wanted to create.</p>
+</section>
+
+<section>
+  <h2><span class="move-num">15.</span>The Queen at a7</h2>
+  <div class="section-sub">Move 15 · Black to move</div>
+
+  <div class="diagram-row">
+    <div class="side-text">
+      <h3>A Queen Behind Enemy Lines</h3>
+      <p>With <span class="move strong">15.Qa7</span> White parks the queen deep in Black's position — not to threaten mate, but to glue the <code>b6</code>-pawn in place and keep Black's development cramped. The queen <em>and</em> pawn together are doing the work of an extra piece.</p>
+      <p>Black is objectively winning, but tied up. The <code>Bc8</code> and <code>Ra8</code>… wait, the rook is gone; the <code>Ng8</code> hasn't moved; castling short is problematic because the f8-square needs clearing. The knight and bishops need paths, and every path runs through a square White is watching.</p>
+      <p>Black responds sensibly — <code>15…Bd6 16.Bc5 Ne7 17.Na5 Nc6 18.Nxc6 dxc6</code> — and the trades continue. White is bleeding pieces but collecting simplifications.</p>
+    </div>
+    <div class="board-wrap">
+      <div class="board-container" id="board-2"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 15.Qa7</span>
+        <span>Black to move</span>
+      </div>
+    </div>
+  </div>
+
+  <blockquote>White's strategy is not to equalize — it is to make equality <em>look possible</em> by reducing the position to something Black has to calculate, not just play.</blockquote>
+</section>
+
+<section>
+  <h2><span class="move-num">21.</span>The Endgame Begins</h2>
+  <div class="section-sub">Move 21 · White to move</div>
+
+  <div class="diagram-row">
+    <div class="board-wrap">
+      <div class="board-container" id="board-3"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 21…Kxf8</span>
+        <span>White to move</span>
+      </div>
+    </div>
+    <div class="side-text">
+      <h3>Taking Stock</h3>
+      <p>The queens have come off (<code>20.Qxb8 Bxb8</code>) and the dark-squared bishops too (<code>21.Bxf8 Kxf8</code>). What's left is stark:</p>
+      <ul style="font-family: var(--sans); font-size: 15px; color: var(--ink-dim); margin: 12px 0 16px; padding-left: 18px;">
+        <li><strong>White:</strong> King, Rook, 7 pawns (including a passed <code>b6</code>)</li>
+        <li><strong>Black:</strong> King, Rook, <em>two bishops</em>, 6 pawns</li>
+      </ul>
+      <p>Black is up a full minor piece — effectively a <strong>bishop pair</strong> against nothing — in a position where bishops usually flourish. But the <code>b6</code>-pawn is an asset that refuses to die, and White's rook has the open <code>a</code>-file.</p>
+    </div>
+  </div>
+
+  <div class="eval-label"><span>Engine estimate</span><span>−2.4 to Black</span></div>
+  <div class="eval-bar"><div class="eval-white" style="width: 34%"></div><div class="eval-black" style="width: 66%"></div></div>
+
+  <p>Plans from here are clear on paper. <strong>Black</strong> should centralize the king, activate the <code>Bc8</code>, and then pick an entry point — the bishops belong on long diagonals, the king belongs on <code>d6</code> or <code>c7</code> to neutralize the b-pawn. <strong>White</strong> must keep the rook active and the king in the center; any passivity loses because Black's two bishops will eventually coordinate.</p>
+</section>
+
+<section>
+  <h2><span class="move-num">28.</span>Two Checks, One Mistake</h2>
+  <div class="section-sub">Move 28 · White to move</div>
+
+  <p>The middlegame-to-endgame transition produced a run of logical moves: <code>22.Ke2 Ke7 23.Ra1 Bb7 24.e5 Kd7 25.Kd3 c5 26.dxc5 Bxe5</code>. Black has gradually activated everything, and with <code>27.Kc4 Bxb2</code> picks off a second pawn. White's king, daringly or desperately, is on <code>c4</code>.</p>
+
+  <div class="diagram-row">
+    <div class="side-text">
+      <h3>The Double Check Sequence</h3>
+      <p>White plays <span class="move">28.Rd1+</span>, and Black's <span class="move strong">28…Bd5+</span> looks devastating — a second check and the bishop reaches an ideal central outpost. But look at the reply.</p>
+      <p>White simply plays <span class="move">29.Kxb4</span>, winning a third pawn and leaving Black to wonder what was achieved. The checks accomplished nothing — Black's bishops are beautifully placed, yes, but White's king is now on <code>b4</code>, shepherding two connected passed pawns (<code>b6</code>, <code>c5</code>) with its bare hands.</p>
+      <p>The engine whispers <code>29.Kb5</code> as an even stronger alternative, but the text is already excellent. This is the moment the game's character changes: Black is still winning on material, but the position has begun to drift.</p>
+    </div>
+    <div class="board-wrap">
+      <div class="board-container" id="board-4"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 28…Bd5+</span>
+        <span>White to move</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <h4>Why this is the turning point</h4>
+    <p>Black has two bishops and a pawn extra. But White's king stands on <code>b4</code>, defending the <code>c5</code>-pawn, attacking nothing, and — crucially — <em>available</em>. In endgames, an active king is worth a piece. Over the next fifteen moves, that king will prove the saying literally.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="move-num">43.</span>The King Walks to f6</h2>
+  <div class="section-sub">Move 43 · Black to move</div>
+
+  <div class="diagram-row">
+    <div class="board-wrap">
+      <div class="board-container" id="board-5"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 43.Kf6</span>
+        <span>Black to move</span>
+      </div>
+    </div>
+    <div class="side-text">
+      <h3>An Absurd Journey</h3>
+      <p>Trace the white king's path: <code>c4 → b4 → a5 → b5 → c4 → d4 → e3 → d4 → e5 → f6</code>. That is ten moves of pure king activity, through Black's position, while Black tries to push an e-pawn and coordinate bishops.</p>
+      <p>Black's plan was sound: push <code>e5-e4-e3-e2</code>, promote, convert. But each move is a tempo White uses to step forward. By move 43 the white king is on <code>f6</code>, three squares from Black's back rank, and the Black e-pawn has reached <code>e2</code> — one square from promotion.</p>
+      <p>Both sides are racing. Both are about to make a queen. The question is what happens next.</p>
+    </div>
+  </div>
+
+  <blockquote>The king is not a fighting piece in the middlegame. In the endgame, it is the strongest piece on the board. This game is a working demonstration.</blockquote>
+</section>
+
+<section>
+  <h2><span class="move-num">47.</span>Queens On, Queens Off</h2>
+  <div class="section-sub">Move 47 · Black to move</div>
+
+  <p>The race resolves with clockwork: <code>44.c6+ Kxb6 45.c7 e1=Q 46.c8=Q Qe6+ 47.Qxe6+ fxe6</code>. Both pawns promoted, both queens were immediately traded off. What remains?</p>
+
+  <div class="diagram-row">
+    <div class="side-text">
+      <h3>The Deflated Endgame</h3>
+      <p>After <code>47…fxe6</code>, the forced liquidation leaves a surreal material picture:</p>
+      <ul style="font-family: var(--sans); font-size: 15px; color: var(--ink-dim); margin: 12px 0 16px; padding-left: 18px;">
+        <li><strong>White:</strong> King (on <code>f6</code>!), Rook, pawns on <code>g3</code>, <code>h4</code></li>
+        <li><strong>Black:</strong> King, two bishops, pawns on <code>e6</code>, <code>h7</code></li>
+      </ul>
+      <p>Black is still up a piece. But the white king is marooned in Black's kingside, blockading the e-pawn from behind while eyeing the <code>h7</code>-pawn. Black's bishops coordinate beautifully on paper; in practice they are pointed at nothing.</p>
+      <p>The next phase is White wringing maximum value from his king and Black attempting to trade down. Watch what Black gives up to simplify.</p>
+    </div>
+    <div class="board-wrap">
+      <div class="board-container" id="board-6"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 47…fxe6</span>
+        <span>White to move</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="move-num">52.</span>The Exchange Sacrifice That Draws</h2>
+  <div class="section-sub">Move 52 · White to move</div>
+
+  <div class="diagram-row">
+    <div class="board-wrap">
+      <div class="board-container" id="board-7"></div>
+      <div class="board-caption">
+        <span class="pos-label">Position · after 52…Kxb5</span>
+        <span>White to move</span>
+      </div>
+    </div>
+    <div class="side-text">
+      <h3>Rook for Bishop — But Which One?</h3>
+      <p>White plays <span class="move strong">52.Rxb5+!</span>, giving up the rook for Black's <em>light-squared</em> bishop. This is not desperation; it is precision.</p>
+      <p>The reason: with only the <strong>dark-squared bishop</strong> left, Black's winning chances collapse if the remaining pawns fall on the wrong color. And White knows exactly which pawns remain — just his <code>g3</code> and <code>h4</code>, both of which will soon be captured or exchanged, and the <code>h</code>-pawn promotes on <code>h8</code>: a <strong>dark square</strong>, the same color as Black's remaining bishop.</p>
+      <p>After the sequence <code>53.Kg6 Be1 54.Kxh5 Bxg3 55.Kg4 Be5 56.h5</code>, the game reduces to <strong>K+h-pawn versus K+B</strong> — the most famous fortress in endgame theory, when the bishop controls the promotion square.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <h4>The key geometric fact</h4>
+    <p>The h-pawn promotes on <code>h8</code>. The square <code>h8</code> is a <strong>dark square</strong>. Black's bishop travels on dark squares. Therefore Black can always either sacrifice the bishop for the pawn or, with king nearby, simply prevent promotion. White cannot win; Black cannot break through without help. <em>Draw</em>.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="move-num">60.</span>The Final Fortress</h2>
+  <div class="section-sub">Final position · Black oscillates forever</div>
+
+  <div class="diagram-row">
+    <div class="side-text">
+      <h3>Bh8 — Ba1 — Bh8</h3>
+      <p>The final moves are pure geometry: <code>57.Kf5 Ba1 58.h6 Bh8 59.h7 Ba1 60.Kg6 Bh8</code>. Black's bishop travels the entire <code>a1–h8</code> diagonal, never leaving it.</p>
+      <p>If White ever plays <code>h8=Q</code>, the bishop captures. If White tries to dislodge the bishop with the king, Black's king returns to help. There is no progress for White to make.</p>
+      <p>The agreed draw is the only honest result. Black, who won a piece on move 12 and two pawns on the way, finishes a full piece up and a pawn down, unable to convert. White's king, working alone, has saved a lost game.</p>
+    </div>
+    <div class="board-wrap">
+      <div class="board-container" id="board-8"></div>
+      <div class="board-caption">
+        <span class="pos-label">Final · after 60…Bh8</span>
+        <span>Draw agreed</span>
+      </div>
+    </div>
+  </div>
+
+  <hr class="ornament">
+
+  <h2 style="margin-top: 8px;">What to Take Away</h2>
+  <div class="section-sub">Lessons from a game that should have been won</div>
+
+  <p><strong>For Black:</strong> Material is not a plan. Winning a piece in the opening is an opportunity, not a result. Around move 28, Black had every right to expect victory — but the moves that followed treated the position as already won rather than still requiring <em>conversion</em>. The e-pawn push felt decisive; it was actually a concession of tempi to a white king that had nothing better to do than walk across the board.</p>
+
+  <p><strong>For White:</strong> When down material, the cheapest resource is usually the king. A passive defense would have been crushed by Black's two bishops in twenty moves. The king march from <code>c4</code> to <code>f6</code> — ten moves of naked infiltration — worked precisely because Black had no way to punish it without abandoning the only plan that might have won.</p>
+
+  <p><strong>For everyone:</strong> Endgames reward knowing the names of positions. The rook-for-bishop sacrifice on move 52 only makes sense if you know that K+h-pawn vs K+B-of-the-right-color is a draw. This is not calculation; it is <em>recognition</em>. Study the fortress, and you play moves that look like sacrifices but are actually arithmetic.</p>
+
+</section>
+
+<hr class="ornament">
+
+<section>
+  <h2>Full Game Score</h2>
+  <div class="movelist" id="movelist"></div>
+  <p style="font-size: 13px; color: var(--ink-dim); font-family: var(--sans); text-align: center;">Highlighted moves mark the seven critical moments analyzed above.</p>
+</section>
+
+</div>
+
+<script type="module">
+import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.0.0-beta.6/+esm';
+import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@9.1.1/+esm';
+
+const pgn = `1. e4 c5 2. Nf3 Nc6 3. d4 cxd4 4. Nxd4 Qb6 5. Nb3 e6 6. Nc3 Qc7 7. Bd3 a6 8. Be3 b5 9. a4 b4 10. Nb5 axb5 11. axb5 Rxa1 12. Qxa1 Ne5 13. b6 Nxd3+ 14. cxd3 Qb8 15. Qa7 Bd6 16. Bc5 Ne7 17. Na5 Nc6 18. Nxc6 dxc6 19. d4 O-O 20. Qxb8 Bxb8 21. Bxf8 Kxf8 22. Ke2 Ke7 23. Ra1 Bb7 24. e5 Kd7 25. Kd3 c5 26. dxc5 Bxe5 27. Kc4 Bxb2 28. Rd1+ Bd5+ 29. Kxb4 Kc6 30. g3 Bf6 31. f4 Be7 32. Rc1 g5 33. fxg5 Bxg5 34. Rc2 e5 35. Ka5 Kb7 36. Kb5 Bc6+ 37. Kc4 e4 38. Kd4 Bf6+ 39. Ke3 Bg5+ 40. Kd4 e3 41. h4 Bh6 42. Ke5 Bb5 43. Kf6 e2 44. c6+ Kxb6 45. c7 e1=Q 46. c8=Q Qe6+ 47. Qxe6+ fxe6 48. Kxe6 Be3 49. Rc3 Bd2 50. Rb3 Kc5 51. Kf6 h5 52. Rxb5+ Kxb5 53. Kg6 Be1 54. Kxh5 Bxg3 55. Kg4 Be5 56. h5 Bh8 57. Kf5 Ba1 58. h6 Bh8 59. h7 Ba1 60. Kg6 Bh8`;
+
+// Render a board at a given half-move (ply) count
+function fenAtPly(ply) {
+  const chess = new Chess();
+  chess.loadPgn(pgn);
+  const history = chess.history({ verbose: true });
+  const replay = new Chess();
+  for (let i = 0; i < ply && i < history.length; i++) {
+    replay.move(history[i]);
+  }
+  return { fen: replay.fen(), lastMove: ply > 0 ? [history[ply-1].from, history[ply-1].to] : null };
+}
+
+function renderBoard(id, ply, orientation = 'white') {
+  const { fen, lastMove } = fenAtPly(ply);
+  const el = document.getElementById(id);
+  if (!el) return;
+  Chessground(el, {
+    fen,
+    orientation,
+    viewOnly: true,
+    coordinates: true,
+    lastMove,
+    drawable: { enabled: false, visible: true },
+    animation: { enabled: false },
+    highlight: { lastMove: true, check: true },
+  });
+}
+
+// Key moments — ply numbers from the main line
+const moments = [
+  { id: 'board-1', ply: 18, orient: 'white' },   // after 9...b4
+  { id: 'board-2', ply: 29, orient: 'black' },   // after 15.Qa7
+  { id: 'board-3', ply: 42, orient: 'white' },   // after 21...Kxf8
+  { id: 'board-4', ply: 56, orient: 'white' },   // after 28...Bd5+
+  { id: 'board-5', ply: 85, orient: 'black' },   // after 43.Kf6
+  { id: 'board-6', ply: 94, orient: 'white' },   // after 47...fxe6
+  { id: 'board-7', ply: 104, orient: 'white' },  // after 52...Kxb5
+  { id: 'board-8', ply: 120, orient: 'white' },  // final
+];
+
+// Render after fonts and layout stabilize
+window.addEventListener('DOMContentLoaded', () => {
+  moments.forEach(m => renderBoard(m.id, m.ply, m.orient));
+
+  // Build movelist
+  const chess = new Chess();
+  chess.loadPgn(pgn);
+  const hist = chess.history();
+  const highlightPlies = new Set([19, 29, 42, 56, 85, 94, 104, 120]);
+  const ml = document.getElementById('movelist');
+  let html = '';
+  for (let i = 0; i < hist.length; i += 2) {
+    const num = (i / 2) + 1;
+    const w = hist[i];
+    const b = hist[i + 1] || '';
+    const wCls = highlightPlies.has(i + 1) ? 'highlight' : '';
+    const bCls = highlightPlies.has(i + 2) ? 'highlight' : '';
+    html += `<div><span class="num">${num}.</span><span class="${wCls}">${w}</span> <span class="${bCls}">${b}</span></div>`;
+  }
+  ml.innerHTML = html;
+});
+</script>
+
+</body>
+</html>
