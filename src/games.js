@@ -251,6 +251,54 @@ export function recordToGameObject(record) {
 }
 
 /**
+ * Persist games as records and add them to a user collection. If
+ * collectionId is provided, appends to that existing collection.
+ * Otherwise creates a new user collection with the given name.
+ * Idempotent on records via fingerprint: games already in IDB keep
+ * their existing id (no new source entry on each save).
+ */
+export async function saveGamesToCollection(games, { collectionId = null, name = '', description = '' } = {}) {
+    const ids = [];
+    for (const g of games) {
+        try {
+            const parsed = gameObjectToParsed(g);
+            const fp = fingerprint(parsed.headers);
+            const existing = await getGameByFingerprint(fp);
+            if (existing) {
+                ids.push(existing.id);
+            } else {
+                const record = ingestSource(null, parsed, {
+                    type: 'user',
+                    refId: g.gameId ?? null,
+                    raw: g.pgn ?? null,
+                });
+                await putGame(record);
+                ids.push(record.id);
+            }
+        } catch {
+            /* skip bad row */
+        }
+    }
+
+    if (collectionId) {
+        await addGamesToCollection(collectionId, ids);
+        return collectionId;
+    }
+    const newId = `coll:${crypto.randomUUID()}`;
+    const now = Date.now();
+    await putCollection({
+        id: newId,
+        kind: 'user',
+        name: name || 'Untitled collection',
+        description,
+        gameIds: ids,
+        createdAt: now,
+        modifiedAt: now,
+    });
+    return newId;
+}
+
+/**
  * Read a collection + its records from IDB and activate as a ctx.
  * Returns the activated ctx, or null if the collection doesn't exist.
  * Skips write-through — records came from IDB, round-tripping them

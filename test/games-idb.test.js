@@ -9,6 +9,7 @@ import {
     ingestDataset,
     isValidSaveTarget,
     isValidLoadTarget,
+    saveGamesToCollection,
     _pendingIdbWriteForTests,
 } from '../src/games.js';
 import {
@@ -407,6 +408,62 @@ describe('isValidSaveTarget', () => {
     it('rejects null/undefined', () => {
         expect(isValidSaveTarget(null)).toBe(false);
         expect(isValidSaveTarget(undefined)).toBe(false);
+    });
+});
+
+describe('saveGamesToCollection', () => {
+    it('creates a new user collection when collectionId is omitted', async () => {
+        const id = await saveGamesToCollection([makeGame()], { name: 'My picks' });
+
+        const coll = await getCollection(id);
+        expect(coll).toBeTruthy();
+        expect(coll.kind).toBe('user');
+        expect(coll.name).toBe('My picks');
+        expect(coll.gameIds).toHaveLength(1);
+    });
+
+    it('defaults the name when omitted', async () => {
+        const id = await saveGamesToCollection([makeGame()]);
+        const coll = await getCollection(id);
+        expect(coll.name).toBe('Untitled collection');
+    });
+
+    it('returns a coll:<uuid> id', async () => {
+        const id = await saveGamesToCollection([makeGame()]);
+        expect(id).toMatch(/^coll:/);
+    });
+
+    it('appends to an existing collection when collectionId is given', async () => {
+        const first = await saveGamesToCollection([makeGame()], { name: 'Box' });
+        const before = await getCollection(first);
+        expect(before.gameIds).toHaveLength(1);
+
+        const second = makeGame({ gameId: 't:5:1', round: 5, board: 1, white: 'Eve', black: 'Frank' });
+        const returned = await saveGamesToCollection([second], { collectionId: first });
+        expect(returned).toBe(first);
+
+        const after = await getCollection(first);
+        expect(after.gameIds).toHaveLength(2);
+    });
+
+    it('reuses existing record id when a game is already persisted (no duplicate)', async () => {
+        // Pre-seed via writeDatasetToIdb (tournament persist path)
+        await writeDatasetToIdb('tournament:t', [makeGame()]);
+        const [before] = await getAllGames();
+
+        // Save the same game into a user collection
+        const collId = await saveGamesToCollection([makeGame()], { name: 'Favs' });
+
+        const all = await getAllGames();
+        expect(all).toHaveLength(1);
+        const coll = await getCollection(collId);
+        expect(coll.gameIds).toEqual([before.id]);
+    });
+
+    it('persists descriptions', async () => {
+        const id = await saveGamesToCollection([makeGame()], { name: 'Named', description: 'For study' });
+        const coll = await getCollection(id);
+        expect(coll.description).toBe('For study');
     });
 });
 

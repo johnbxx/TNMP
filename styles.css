@@ -1107,6 +1107,219 @@ select.editor-header-input option {
     font-size: 0.8rem;
 }
 
+/* ─── Collection Browser ──────────────────────────────────────── */
+
+.cb-content {
+    max-width: 720px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+}
+
+.cb-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.cb-header h2 {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cb-search {
+    flex: 0 0 14rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    border: 2px solid rgb(from var(--foreground) r g b / 0.2);
+    border-radius: var(--radius-sm);
+    background: var(--overlay-light);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.cb-search:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.cb-search::placeholder {
+    color: var(--text-faint);
+}
+
+.cb-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    border-radius: var(--radius-sm);
+    background: var(--overlay-light);
+}
+
+.cb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.cb-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--modal-bg);
+    color: var(--text-primary);
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    font-weight: 600;
+    border-bottom: 1px solid rgb(from var(--foreground) r g b / 0.2);
+    user-select: none;
+}
+
+.cb-table th.cb-sortable {
+    cursor: pointer;
+}
+
+.cb-table th.cb-sortable:hover {
+    background: var(--overlay-light);
+}
+
+.cb-table th.cb-sort-active::after {
+    content: " ▾";
+    font-size: 0.75em;
+    opacity: 0.7;
+}
+
+.cb-table th.cb-sort-asc::after {
+    content: " ▴";
+}
+
+.cb-table tbody td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid rgb(from var(--foreground) r g b / 0.08);
+    color: var(--text-primary);
+}
+
+.cb-row {
+    cursor: pointer;
+}
+
+.cb-row:hover {
+    background: rgb(from var(--accent) r g b / 0.12);
+}
+
+.cb-col-games,
+.cb-col-modified {
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.cb-col-games {
+    text-align: right;
+    width: 4rem;
+}
+
+.cb-col-modified {
+    width: 7rem;
+}
+
+.cb-kind-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--overlay-light);
+    color: var(--text-faint);
+}
+
+.cb-kind-user {
+    background: rgb(from var(--accent) r g b / 0.25);
+    color: var(--text-primary);
+}
+
+/* Pinned "new collection" row (save mode) */
+.cb-new-row td {
+    padding: 0.5rem 0.75rem;
+    background: rgb(from var(--accent) r g b / 0.06);
+    border-bottom: 1px solid rgb(from var(--foreground) r g b / 0.2);
+}
+
+.cb-new-trigger {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 0.3rem 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.cb-new-trigger:hover {
+    text-decoration: underline;
+}
+
+.cb-new-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.cb-new-name-input,
+.cb-new-desc-input {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    border: 2px solid rgb(from var(--foreground) r g b / 0.2);
+    border-radius: var(--radius-sm);
+    background: var(--overlay-light);
+    color: var(--text-primary);
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.cb-new-name-input:focus,
+.cb-new-desc-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.cb-new-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.cb-empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.9rem;
+}
+
+.cb-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--overlay-light);
+}
+
+/* Hide on mobile — desktop-only per platform-split policy */
+@media (max-width: 999px) {
+    #collection-browser-modal {
+        display: none !important;
+    }
+}
+
 .notify-prefs {
     display: flex;
     flex-direction: column;

@@ -90,40 +90,42 @@ export function trapFocus(e, modalId) {
     }
 }
 
-document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal-backdrop')) {
-        const modal = e.target.closest('.modal');
-        if (modal && !modal.hasAttribute('data-manual-close')) closeModal(modal.id);
-        return;
-    }
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-backdrop')) {
+            const modal = e.target.closest('.modal');
+            if (modal && !modal.hasAttribute('data-manual-close')) closeModal(modal.id);
+            return;
+        }
 
-    const closeBtn = e.target.closest('[data-close-modal]');
-    if (closeBtn) {
-        const modal = closeBtn.closest('.modal');
-        if (modal) closeModal(modal.id);
-        return;
-    }
+        const closeBtn = e.target.closest('[data-close-modal]');
+        if (closeBtn) {
+            const modal = closeBtn.closest('.modal');
+            if (modal) closeModal(modal.id);
+            return;
+        }
 
-    const openBtn = e.target.closest('[data-open-modal]');
-    if (openBtn) {
-        openModal(openBtn.dataset.openModal);
-        return;
-    }
+        const openBtn = e.target.closest('[data-open-modal]');
+        if (openBtn) {
+            openModal(openBtn.dataset.openModal);
+            return;
+        }
 
-    const switchBtn = e.target.closest('[data-switch-modal]');
-    if (switchBtn) {
-        e.preventDefault();
-        const current = switchBtn.closest('.modal');
-        if (current) closeModal(current.id);
-        setTimeout(() => openModal(switchBtn.dataset.switchModal), 300);
-    }
-});
+        const switchBtn = e.target.closest('[data-switch-modal]');
+        if (switchBtn) {
+            e.preventDefault();
+            const current = switchBtn.closest('.modal');
+            if (current) closeModal(current.id);
+            setTimeout(() => openModal(switchBtn.dataset.switchModal), 300);
+        }
+    });
 
-document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    const modals = document.querySelectorAll('.modal:not(.hidden)');
-    if (modals.length === 0) return;
-    const topModal = modals[modals.length - 1];
-    if (topModal.hasAttribute('data-manual-close')) return;
-    closeModal(topModal.id);
-});
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const modals = document.querySelectorAll('.modal:not(.hidden)');
+        if (modals.length === 0) return;
+        const topModal = modals[modals.length - 1];
+        if (topModal.hasAttribute('data-manual-close')) return;
+        closeModal(topModal.id);
+    });
+}
