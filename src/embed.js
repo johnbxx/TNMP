@@ -41,6 +41,7 @@ import {
     closeGamePanel,
     handlePanelKeydown,
     explorerBackToBrowser,
+    navbarBack,
     resolveDirtyDialog,
     explorerGoToStart,
     explorerGoBack,
@@ -248,6 +249,7 @@ const ACTIONS = {
     'share-download': () => handleShareAction('download'),
     'share-native': () => handleShareAction('share'),
     'close-panel': closeGamePanel,
+    'navbar-back': navbarBack,
 };
 
 function handleShareAction(action) {

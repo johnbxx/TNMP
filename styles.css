@@ -295,10 +295,17 @@ html.tnmp {
 body.tnmp {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
+    /* Respect iPhone notch / home-indicator / landscape cutouts.
+       env() is 0 on non-notched devices — no-op elsewhere. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 body.tnmp::before {
@@ -1327,6 +1334,12 @@ button.viewer-close {
     color: var(--accent);
     background: var(--close-btn-bg-hover);
 }
+
+/* Mobile app-shell nav bar — hidden on desktop, shown below 1000px.
+   Sits at the top of the modal, extends through the safe-area (notch)
+   with matched bg so the status bar icons sit on our header instead of
+   over content. Three-col grid: back · title · close. */
+.viewer-navbar { display: none; }
 
 /* Chessground overrides */
 .viewer-board cg-board {
@@ -2480,13 +2493,95 @@ button.viewer-close {
     }
 }
 
-/* Below 1000px: consistent stacked column layout at all mobile sizes */
+/* Below 1000px: mobile = full-screen app, not a modal-on-backdrop. */
 @media (max-width: 999px) {
+    /* Full-bleed app shell — pinned directly to the viewport. No dvh, no
+       inherited sizing from ancestors, no flex centering artifacts. The navbar
+       pads safe-area-top, the toolbar pads safe-area-bottom; L/R insets apply
+       to the shell for landscape notch/cutouts. */
     .modal-content-viewer {
-        height: 98vh;
-        height: 98dvh;
-        max-width: 560px;
-        width: 95%;
+        position: fixed;
+        inset: 0;
+        width: auto;
+        height: auto;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
+        background: var(--modal-bg);
+    }
+    /* Desktop floating close is replaced by navbar close on mobile */
+    .modal-content-viewer > button.viewer-close { display: none; }
+    /* Hide the in-panel round·board nav — the round/board label lives in the navbar now */
+    .modal-content-viewer .viewer-browser-nav { display: none; }
+
+    /* Nav bar — top strip with safe-area-top padding, matched bg, extends through notch */
+    .viewer-navbar {
+        display: grid;
+        grid-template-columns: 2.75rem 1fr 2.75rem;
+        align-items: center;
+        flex-shrink: 0;
+        padding-top: env(safe-area-inset-top);
+        background: var(--modal-bg);
+        border-bottom: 1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08));
+    }
+    .viewer-navbar-btn {
+        background: transparent;
+        border: none;
+        color: var(--toolbar-icon);
+        width: 2.75rem;
+        height: 2.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        margin: 0;
+    }
+    .viewer-navbar-btn:hover,
+    .viewer-navbar-btn:active {
+        color: var(--accent);
+    }
+    .viewer-navbar-title {
+        text-align: center;
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 0 0.5rem;
+        min-width: 0;
+    }
+    /* Back button hidden in browser mode (top-level — nothing to go back to) */
+    .modal-content-viewer.navbar-mode-browser .viewer-navbar-back {
+        visibility: hidden;
+    }
+
+    /* Browser list extends through safe-area-bottom; inner scroll padding keeps
+       the last game row clear of the home indicator without exposing modal bg. */
+    .modal-content-viewer.browser-only .browser-games {
+        padding-bottom: calc(0.3rem + env(safe-area-inset-bottom));
+    }
+
+    /* When the .browser-title-panel is hosted inside the navbar slot
+       (browser mode only), flatten its h2/select styling to fit the nav row. */
+    .viewer-navbar-title .browser-title-panel {
+        margin: 0;
+        padding: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .viewer-navbar-title .browser-title-select {
+        font-size: 1rem;
+        padding: 0.35rem 1.5rem 0.35rem 0.5rem;
+        box-shadow: none;
+        background: transparent;
+        font-weight: 600;
     }
     .tnmp-viewer-layout {
         display: flex;
@@ -2526,7 +2621,7 @@ button.viewer-close {
     }
     .viewer-toolbar {
         gap: 0.1rem;
-        padding: 0.2rem;
+        padding: 0.2rem 0.2rem calc(0.2rem + env(safe-area-inset-bottom));
     }
     .viewer-toolbar-sep {
         margin: 0;
@@ -2738,8 +2833,8 @@ button.viewer-close {
         margin-left: 3px;
         padding-bottom: 2px;
     }
-    /* When tab bar exists, hide the in-tab close button and adjust modal corners */
-    button.viewer-close-mobile {
+    /* When tab bar exists, hide the in-modal floating close button — tab bar owns close */
+    .viewer-tab-host:has(.viewer-tab-bar) .modal-content-viewer > button.viewer-close {
         display: none;
     }
     /* Only square the top corners when a tab bar is actually rendered above
@@ -3405,41 +3500,70 @@ select.editor-header-input {
 }
 
 @media (max-width: 767px) {
-    /* Mobile toolbar: [flip] [nav×5] [overflow] */
+    /* Mobile toolbar: borderless, [flip] | [start][prev][next×2] | [more]
+       Flex weights: 1 | (1 + 1 + 2) | 1 — Forward gets a double slot. */
+    .viewer-toolbar.raised-panel {
+        background: transparent;
+        box-shadow: none;
+        border-radius: 0;
+    }
     .viewer-toolbar {
-        justify-content: space-evenly;
-        gap: 0;
+        gap: 0.25rem;
         padding: 0.4rem 0;
     }
+
+    /* Hidden on mobile: right tool group (moved to overflow), separators,
+       play/pause, skip-to-end, and left-group items other than Flip. */
+    .viewer-tool-group:first-child > :not([data-action="viewer-flip"]),
+    .viewer-tool-group-end,
+    .viewer-toolbar-sep,
+    .viewer-play-btn,
+    .viewer-nav-btn[data-action="viewer-end"] {
+        display: none;
+    }
+
+    /* Left: Flip (1 unit) */
     .viewer-tool-group:first-child {
-        flex: 0;
+        flex: 1 1 0;
+        margin-top: 0;
     }
-    .viewer-tool-group:first-child > :not([data-action="viewer-flip"]) {
-        display: none;
-    }
-    .viewer-tool-group-end {
-        display: none;
-    }
-    .viewer-toolbar-sep {
-        margin: 0 0.15rem;
-    }
-    .viewer-nav-group {
-        flex: 1;
-        justify-content: space-evenly;
-    }
-    .overflow-btn-wrapper {
-        display: flex;
-    }
-    .viewer-tool-btn,
-    .viewer-nav-btn,
-    .viewer-overflow-btn {
-        width: 3rem;
+    .viewer-tool-group:first-child .viewer-tool-btn {
+        flex: 1 1 0;
+        width: auto;
         height: 3rem;
         padding: 0.55rem;
+        border-radius: var(--radius-xs);
     }
-    .viewer-play-btn {
-        width: 3.5rem;
-        height: 3.5rem;
+    .viewer-tool-group:first-child .viewer-tool-btn svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    /* Center: Start + Prev + Next (1 + 1 + 2) */
+    .viewer-nav-group {
+        flex: 4 4 0;
+        gap: 0.25rem;
+    }
+    .viewer-nav-btn {
+        flex: 1 1 0;
+        width: auto;
+        height: 3rem;
+        border-radius: var(--radius-xs);
+    }
+    .viewer-nav-btn[data-action="viewer-next"] {
+        flex: 2 2 0;
+    }
+
+    /* Right: More/overflow (1 unit) */
+    .overflow-btn-wrapper {
+        flex: 1 1 0;
+        display: flex;
+    }
+    .viewer-overflow-btn {
+        flex: 1 1 0;
+        width: auto;
+        height: 3rem;
+        border-radius: var(--radius-xs);
     }
 }
 
@@ -4452,9 +4576,7 @@ input.browser-search-input {
     /* Buttons */
     .check-btn { padding: 0.75rem 1.5rem; font-size: 1rem; }
 
-    /* Viewer */
-    .modal-content-viewer { width: 98%; padding: 1rem; }
-    .modal-content-viewer.browser-only { padding: 0; }
+    /* Viewer — full-bleed on phone; panels handle their own internal padding. */
     .modal-content-viewer.browser-only h2 { padding: 1rem 1rem 0.5rem; }
     .modal-content-viewer.browser-only .browser-search,
     .modal-content-viewer.browser-only .browser-filters {

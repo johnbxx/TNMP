@@ -88,7 +88,12 @@ function buildTabDOM() {
     const el = document.createElement('div');
     el.className = 'modal-content-viewer';
     el.innerHTML = `
-        <button class="viewer-close viewer-close-mobile" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
+        <button class="viewer-close" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
+        <div class="viewer-navbar">
+            <button class="viewer-navbar-btn viewer-navbar-back" data-action="navbar-back" aria-label="Back">${icon('prev', 20)}</button>
+            <div class="viewer-navbar-title"></div>
+            <button class="viewer-navbar-btn viewer-navbar-close" data-action="close-panel" aria-label="Close">${icon('close', 20)}</button>
+        </div>
         <div class="viewer-browser-panel hidden">
             <h2 class="browser-title-panel"></h2>
             <div class="browser-content">
@@ -235,6 +240,9 @@ function createTab() {
         browserChips: el.querySelector('.browser-chips'),
         browserFilters: el.querySelector('.browser-filters'),
         titlePanel: el.querySelector('.browser-title-panel'),
+        navbar: el.querySelector('.viewer-navbar'),
+        navbarTitle: el.querySelector('.viewer-navbar-title'),
+        navbarBack: el.querySelector('.viewer-navbar-back'),
         browserExport: el.querySelector('.browser-export'),
         viewerHeader: el.querySelector('.viewer-header'),
         gameHeader: el.querySelector('.viewer-game-header'),
@@ -976,17 +984,74 @@ combinedWidthQuery.addEventListener('change', () => {
     const modal = _activeTab.el;
     if (modal.closest('.modal.hidden')) return;
     updateLayout();
+    // Restore the title panel to the browser panel when entering desktop —
+    // the mobile navbar is hidden on desktop, so the element would disappear.
+    if (isCombinedWidth()) {
+        const titlePanel = _activeTab.titlePanel;
+        const browserPanel = _activeTab.browserPanel;
+        if (titlePanel && browserPanel && titlePanel.parentElement !== browserPanel) {
+            browserPanel.insertBefore(titlePanel, browserPanel.firstChild);
+        }
+    } else if (!_activeTab.game && _activeTab.browserPanel && !_activeTab.browserPanel.classList.contains('hidden')) {
+        // Entering mobile while in browser mode — relocate title into navbar.
+        setNavbarMode('browser');
+    }
     _activeTab.board.resize();
     positionEnginePanel();
     if (_activeTab.gamesState) renderBrowserPanel(_activeTab.gamesState);
     if (_activeTab.game) renderPgnMoveList();
 });
 
+// Mobile app-shell navbar: title text + mode class drive nav layout + back visibility.
+// Modes: 'browser' (no back), 'game' (back → browser), 'explorer' (back → browser).
+// In browser mode the interactive .browser-title-panel (dropdown / "X's Games") is
+// relocated into the navbar title slot — eliminates the redundant generic header row.
+function setNavbarMode(mode, title) {
+    if (!_activeTab) return;
+    const modal = _activeTab.el;
+    const navTitle = _activeTab.navbarTitle;
+    const titlePanel = _activeTab.titlePanel;
+    const browserPanel = _activeTab.browserPanel;
+    if (!modal) return;
+
+    modal.classList.remove('navbar-mode-browser', 'navbar-mode-game', 'navbar-mode-explorer');
+    modal.classList.add(`navbar-mode-${mode}`);
+
+    if (mode === 'browser') {
+        // Host the dropdown/title element inside the navbar title slot.
+        if (titlePanel && navTitle && titlePanel.parentElement !== navTitle) {
+            navTitle.textContent = '';
+            navTitle.appendChild(titlePanel);
+        }
+    } else {
+        // Return the title panel to its home in the browser panel content.
+        if (titlePanel && browserPanel && titlePanel.parentElement !== browserPanel) {
+            browserPanel.insertBefore(titlePanel, browserPanel.firstChild);
+        }
+        if (navTitle && typeof title === 'string') navTitle.textContent = title;
+    }
+}
+
+// Navbar back button — mobile only, always returns to browser list.
+export function navbarBack() {
+    if (!_activeTab) return;
+    if (_activeTab.game) {
+        // Game mode → back to browser
+        showBrowser();
+    } else {
+        // Explorer mode → back to browser (same as explorer-back)
+        explorerBackToBrowser();
+    }
+}
+
 // Mobile view toggle: browser-panel vs viewer-main
 function showBrowser() {
     const modal = _activeTab.el;
     if (modal && !isCombinedWidth()) {
         modal.classList.add('browser-only');
+        // Navbar title stays generic ("Games") — the tournament dropdown
+        // below the navbar is the interactive switcher.
+        setNavbarMode('browser', 'Games');
         requestAnimationFrame(() => {
             if (_activeTab.gamesState) renderBrowserPanel(_activeTab.gamesState);
         });
@@ -1615,6 +1680,10 @@ function loadGame(pgnText, orientation = 'white') {
     _activeTab.game = createGame(pgnText, { onPositionChange, onChange: onGameChange });
     _activeTab.game.start();
     updateGameHeader(_activeTab.panel.meta);
+    // Mobile navbar: derive round·board label from meta for title slot.
+    const m = _activeTab.panel.meta || {};
+    const navTitle = m.round && m.board ? `Round ${m.round} · Board ${m.board}` : m.round ? `Round ${m.round}` : 'Game';
+    setNavbarMode('game', navTitle);
 
     _activeTab.board.setOrientation(orientation);
     _activeTab.board.setPosition(_activeTab.game.getCurrentFen(), false);
@@ -1632,6 +1701,7 @@ function loadExplorer({ restoreMoves } = {}) {
     setToolbarButtons();
     _activeTab.gameHeader?.classList.add('hidden');
     _activeTab.explorerHeader?.classList.remove('hidden');
+    setNavbarMode('explorer', 'Explorer');
     updateTabLabel(_activeTab);
 
     _activeTab.board.setOrientation(games.getFilter('color') === 'black' ? 'black' : 'white');
@@ -2839,7 +2909,9 @@ function renderBrowserPanel(state) {
 }
 
 function renderBrowserTitle(panelEl, state) {
-    const titleEl = panelEl.querySelector('.browser-title-panel');
+    // Use stable ref — element may have been relocated into the mobile navbar.
+    const titleEl = _activeTab.titlePanel;
+    if (!titleEl) return;
 
     if (games.hasPlayer()) {
         titleEl.textContent = `${games.getPlayer()}'s Games`;
