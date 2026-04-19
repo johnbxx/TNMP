@@ -58,11 +58,21 @@ import {
     launchExplorer,
     initGamePanel,
     getActiveTabEl,
+    getActiveTabGame,
     openGameInTab,
     openExplorerInTab,
 } from './game-panel.js';
 import { showToast } from './toast.js';
-import { getCachedGame, getPlayer, getGroupedGames, getFilter, getLastTournamentKey } from './games.js';
+import {
+    getCachedGame,
+    getPlayer,
+    getGroupedGames,
+    getFilter,
+    getLastTournamentKey,
+    getVisibleGames,
+    hydrateFromIdb,
+} from './games.js';
+import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
 import { formatName, getHeader, resultDisplay } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
@@ -478,6 +488,21 @@ const ACTIONS = {
     // Browser
     'browser-explore': launchExplorer,
     'browser-tournament-info': showTournamentInfo,
+    'browser-save': () =>
+        openCollectionBrowser({
+            mode: 'save',
+            games: getVisibleGames(),
+            onSave: () => showToast('Saved to collection', 'success'),
+        }),
+    'browser-load': () =>
+        openCollectionBrowser({
+            mode: 'load',
+            onLoad: async (id) => {
+                const ctx = await hydrateFromIdb(id);
+                if (ctx) showToast('Collection loaded', 'success');
+            },
+            onImportPaste: () => showImportDialog(),
+        }),
     'tournament-info-close': () => document.getElementById('tournament-info-popup')?.classList.add('hidden'),
     // Editor
     'editor-import-ok': doImport,
@@ -490,6 +515,17 @@ const ACTIONS = {
     'dirty-discard': () => resolveDirtyDialog('discard'),
     'dirty-cancel': () => resolveDirtyDialog('cancel'),
     // Share popover
+    'viewer-save': () => {
+        getActiveTabEl()?.querySelector('.share-popover')?.classList.add('hidden');
+        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+        const game = getActiveTabGame();
+        if (!game) return;
+        openCollectionBrowser({
+            mode: 'save',
+            games: [game],
+            onSave: () => showToast('Saved to collection', 'success'),
+        });
+    },
     'share-copy-pgn': () => handleShareAction('copy-pgn'),
     'share-copy-link': () => handleShareAction('copy-link'),
     'share-download': () => handleShareAction('download'),

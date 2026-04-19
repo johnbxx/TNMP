@@ -708,7 +708,7 @@ function passesActiveFilters(g) {
     return passesFilters(g, _activeCtx.filters, ds.playerNorm, ds.sections, _activeCtx.visibleSections);
 }
 
-function getVisibleGames() {
+export function getVisibleGames() {
     const ds = _activeDs();
     if (!_activeCtx || !ds) return [];
     let games = ds.games;

@@ -49,6 +49,8 @@ const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none
 <symbol id="i-copy" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></symbol>
 <symbol id="i-link" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></symbol>
 <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></symbol>
+<symbol id="i-bookmark" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></symbol>
+<symbol id="i-folder-open" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></symbol>
 </svg>`;
 
 function icon(name, size) {
@@ -107,6 +109,8 @@ function buildTabDOM() {
                     <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer">${icon('explore', 16)}</button>
                     <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN">${icon('import', 16)}</button>
                     <button type="button" class="browser-action-btn browser-export" aria-label="Download PGNs" data-tooltip="Download PGNs">${icon('download', 16)}</button>
+                    <button type="button" class="browser-action-btn browser-save" data-action="browser-save" aria-label="Save to collection" data-tooltip="Save to collection" disabled>${icon('bookmark', 16)}<span class="browser-save-count hidden"></span></button>
+                    <button type="button" class="browser-action-btn browser-load" data-action="browser-load" aria-label="Open collection" data-tooltip="Open collection">${icon('folder-open', 16)}</button>
                 </div>
                 <div class="browser-chips hidden"></div>
                 <div class="browser-filters hidden"></div>
@@ -199,6 +203,7 @@ function buildTabDOM() {
                 <div class="share-btn-wrapper">
                     <button data-action="viewer-share" class="viewer-tool-btn" aria-label="Share / Export game" data-tooltip="Share / Export game">${icon('share')}<span class="tool-label">Share</span></button>
                     <div class="share-popover hidden">
+                        <button class="share-option" data-action="viewer-save">Save to collection…</button>
                         <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
                         <button class="share-option" data-action="share-copy-link">Copy Link</button>
                         <button class="share-option" data-action="share-download">Download PGN</button>
@@ -244,6 +249,8 @@ function createTab() {
         navbarTitle: el.querySelector('.viewer-navbar-title'),
         navbarBack: el.querySelector('.viewer-navbar-back'),
         browserExport: el.querySelector('.browser-export'),
+        browserSave: el.querySelector('.browser-save'),
+        browserSaveCount: el.querySelector('.browser-save-count'),
         viewerHeader: el.querySelector('.viewer-header'),
         gameHeader: el.querySelector('.viewer-game-header'),
         explorerHeader: el.querySelector('.explorer-header'),
@@ -2905,7 +2912,26 @@ function renderBrowserPanel(state) {
     renderBrowserChips(panelEl, state);
     renderBrowserFilters(panelEl, state);
     renderBrowserGameList(panelEl, state);
+    renderBrowserSaveButton(state);
     if (_activeTab.panel.gameId) highlightActiveGame(_activeTab.panel.gameId);
+}
+
+function renderBrowserSaveButton(state) {
+    const btn = _activeTab.browserSave;
+    const count = _activeTab.browserSaveCount;
+    if (!btn) return;
+    const n = state.groupedGames.reduce((total, g) => total + g.games.length, 0);
+    btn.disabled = n === 0;
+    btn.setAttribute(
+        'data-tooltip',
+        n === 0 ? 'Save to collection' : `Save ${n} game${n === 1 ? '' : 's'} to collection`,
+    );
+    if (n > 0) {
+        count.textContent = String(n);
+        count.classList.remove('hidden');
+    } else {
+        count.classList.add('hidden');
+    }
 }
 
 function renderBrowserTitle(panelEl, state) {
@@ -3593,6 +3619,14 @@ export const flipBoard = () => {
 export const setBoardOrientation = (color) => _activeTab.board.setOrientation(color);
 export const setBoardCoordinates = (show) => _activeTab.board?.setCoordinates(show);
 export const getActiveTabEl = () => _activeTab?.el;
+export const getActiveTabGame = () => {
+    const gameId = _activeTab?.panel?.gameId;
+    if (!gameId) return null;
+    const cached = games.getCachedGame(gameId);
+    if (!cached) return null;
+    // Return a copy with the current in-tab PGN (may include edits).
+    return { ...cached, pgn: _activeTab.game?.getPgn() || cached.pgn };
+};
 export const toggleAutoPlay = () => _activeTab.game.toggleAutoPlay();
 export const toggleComments = () => _activeTab.game.toggleComments();
 export const toggleBranchMode = () => _activeTab.game.toggleBranchMode();

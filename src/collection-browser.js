@@ -10,7 +10,7 @@
  * Desktop-only per platform-split policy. No mobile affordances.
  */
 
-import { getAllCollections } from './db.js';
+import { getAllCollections, putCollection } from './db.js';
 import { isValidSaveTarget, isValidLoadTarget, saveGamesToCollection } from './games.js';
 import { openModal, closeModal } from './modal.js';
 
@@ -86,7 +86,7 @@ export function collectionsForMode(all, mode) {
  * @param {(collectionId: string) => void} [opts.onSave]
  * @param {(collectionId: string) => void} [opts.onLoad]
  */
-export async function openCollectionBrowser({ mode, games = [], onSave, onLoad } = {}) {
+export async function openCollectionBrowser({ mode, games = [], onSave, onLoad, onImportPaste } = {}) {
     if (mode !== 'save' && mode !== 'load') {
         throw new Error(`openCollectionBrowser: invalid mode "${mode}"`);
     }
@@ -97,6 +97,7 @@ export async function openCollectionBrowser({ mode, games = [], onSave, onLoad }
         games,
         onSave,
         onLoad,
+        onImportPaste,
         collections: [],
         search: '',
         sort: 'modified',
@@ -201,6 +202,36 @@ function _attachListeners(modal) {
             _createAndSave();
         }
     });
+
+    // Import submenu (load mode only — footer-left innerHTML is re-rendered,
+    // so delegate from its stable container).
+    modal.querySelector('.cb-footer-left').addEventListener('click', (e) => {
+        const btn = e.target.closest('.cb-import-btn');
+        if (btn) {
+            const menu = modal.querySelector('.cb-import-menu');
+            const open = menu.classList.toggle('hidden');
+            btn.setAttribute('aria-expanded', String(!open));
+            return;
+        }
+        const item = e.target.closest('.cb-import-item');
+        if (item) {
+            const kind = item.dataset.import;
+            if (kind === 'paste') {
+                closeModal(MODAL_ID);
+                _state.onImportPaste?.();
+            } else if (kind === 'empty') {
+                _createEmptyCollection();
+            }
+        }
+    });
+
+    // Close import menu on outside click (only while modal is open)
+    document.addEventListener('click', (e) => {
+        if (modal.classList.contains('hidden')) return;
+        if (e.target.closest('.cb-import-wrap')) return;
+        modal.querySelector('.cb-import-menu')?.classList.add('hidden');
+        modal.querySelector('.cb-import-btn')?.setAttribute('aria-expanded', 'false');
+    });
 }
 
 // ─── Rendering ─────────────────────────────────────────────────────
@@ -226,12 +257,17 @@ function _renderHeader() {
         th.classList.toggle('cb-sort-desc', th.dataset.col === _state.sort && _state.sortDir === 'desc');
     });
 
-    // Footer left: Import submenu placeholder in load mode; empty in save mode.
-    // (Full Import submenu wired in Phase 4.6.)
+    // Footer left: Import submenu in load mode; empty in save mode.
     const left = modal.querySelector('.cb-footer-left');
     left.innerHTML =
         _state.mode === 'load'
-            ? '<button class="modal-btn cb-import-btn" disabled title="Import (coming in 4.6)">Import…</button>'
+            ? `<div class="cb-import-wrap">
+                 <button class="modal-btn cb-import-btn" aria-haspopup="menu" aria-expanded="false">Import…</button>
+                 <div class="cb-import-menu hidden" role="menu">
+                     <button class="cb-import-item" data-import="paste" role="menuitem">Paste PGN…</button>
+                     <button class="cb-import-item" data-import="empty" role="menuitem">Create empty collection</button>
+                 </div>
+               </div>`
             : '';
 }
 
@@ -321,6 +357,26 @@ async function _handleRowClick(collectionId) {
         _state.onLoad?.(collectionId);
     }
     closeModal(MODAL_ID);
+}
+
+async function _createEmptyCollection() {
+    const name = prompt('Name for new collection:');
+    if (!name || !name.trim()) return;
+    const id = `coll:${crypto.randomUUID()}`;
+    const now = Date.now();
+    await putCollection({
+        id,
+        kind: 'user',
+        name: name.trim(),
+        description: '',
+        gameIds: [],
+        createdAt: now,
+        modifiedAt: now,
+    });
+    // Refresh list so the new collection appears and user can click in.
+    const all = await getAllCollections();
+    _state.collections = collectionsForMode(all, _state.mode);
+    _renderBody();
 }
 
 async function _createAndSave() {
