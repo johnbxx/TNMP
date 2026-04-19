@@ -110,7 +110,7 @@ export function trieResolveGameIds(t, nodeId) {
 
 // ─── Move tokenization ─────────────────────────────────────────────
 
-export function extractMoveTokens(pgn) {
+function extractMoveTokens(pgn) {
     const moveText = extractMoveText(pgn);
     const moves = [];
     let i = 0,

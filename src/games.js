@@ -172,33 +172,46 @@ export function gameObjectToParsed(g) {
 }
 
 /**
- * Persist a dataset's games to IDB and ensure an auto/user collection
- * mirrors its membership. Idempotent on refresh: records are keyed by
- * fingerprint so repeated ingests merge rather than duplicate, and
- * collection membership is set-append. Swallows per-record errors so a
- * single bad row doesn't stall the whole batch.
+ * Upsert a batch of GameObjects into IDB. Returns the record ids in the
+ * same order as the input (bad rows skipped).
+ *
+ * mergeExisting:
+ *   - true (refresh path): append a source to already-stored records,
+ *     merging mutable headers via record.js rules.
+ *   - false (user-save path): if a fingerprint already exists, reuse
+ *     its id without appending another source entry.
  */
-export async function writeDatasetToIdb(key, games, meta = null) {
-    const sourceType = _sourceTypeForKey(key);
-    const recordIds = [];
-
+async function _persistGames(games, sourceType, mergeExisting) {
+    const ids = [];
     for (const g of games) {
         try {
             const parsed = gameObjectToParsed(g);
-            const fp = fingerprint(parsed.headers);
-            const existing = await getGameByFingerprint(fp);
+            const existing = await getGameByFingerprint(fingerprint(parsed.headers));
+            if (existing && !mergeExisting) {
+                ids.push(existing.id);
+                continue;
+            }
             const record = ingestSource(existing, parsed, {
                 type: sourceType,
                 refId: g.gameId ?? null,
                 raw: g.pgn ?? null,
             });
             await putGame(record);
-            recordIds.push(record.id);
+            ids.push(record.id);
         } catch {
             /* skip bad row */
         }
     }
+    return ids;
+}
 
+/**
+ * Persist a dataset's games to IDB and ensure an auto/user collection
+ * mirrors its membership. Idempotent on refresh: fingerprint keying
+ * merges rather than duplicates, and collection membership is set-append.
+ */
+export async function writeDatasetToIdb(key, games, meta = null) {
+    const recordIds = await _persistGames(games, _sourceTypeForKey(key), true);
     if (recordIds.length === 0) return recordIds;
 
     const collectionId = `coll:${key}`;
@@ -266,28 +279,7 @@ export function recordToGameObject(record) {
  * their existing id (no new source entry on each save).
  */
 export async function saveGamesToCollection(games, { collectionId = null, name = '', description = '' } = {}) {
-    const ids = [];
-    for (const g of games) {
-        try {
-            const parsed = gameObjectToParsed(g);
-            const fp = fingerprint(parsed.headers);
-            const existing = await getGameByFingerprint(fp);
-            if (existing) {
-                ids.push(existing.id);
-            } else {
-                const record = ingestSource(null, parsed, {
-                    type: 'user',
-                    refId: g.gameId ?? null,
-                    raw: g.pgn ?? null,
-                });
-                await putGame(record);
-                ids.push(record.id);
-            }
-        } catch {
-            /* skip bad row */
-        }
-    }
-
+    const ids = await _persistGames(games, 'user', false);
     if (collectionId) {
         await addGamesToCollection(collectionId, ids);
         return collectionId;

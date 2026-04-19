@@ -252,9 +252,9 @@ function _renderHeader() {
     }
 
     modal.querySelectorAll('th.cb-sortable').forEach((th) => {
-        th.classList.toggle('cb-sort-active', th.dataset.col === _state.sort);
-        th.classList.toggle('cb-sort-asc', th.dataset.col === _state.sort && _state.sortDir === 'asc');
-        th.classList.toggle('cb-sort-desc', th.dataset.col === _state.sort && _state.sortDir === 'desc');
+        const active = th.dataset.col === _state.sort;
+        th.classList.toggle('cb-sort-active', active);
+        th.classList.toggle('cb-sort-asc', active && _state.sortDir === 'asc');
     });
 
     // Footer left: Import submenu in load mode; empty in save mode.
