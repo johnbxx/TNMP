@@ -14,7 +14,8 @@ import { Chess } from 'chess.js';
 import { hashFen } from './tree.js';
 import { buildTrie, trieLookup, trieResolveGameIds, RESULT_TALLY } from './trie.js';
 import { getAllPlayers } from './tnm.js';
-import { writeDatasetToIdb } from './dataset-adapter.js';
+import { fingerprint, ingestSource } from './record.js';
+import { getGameByFingerprint, putGame, getCollection, putCollection, addGamesToCollection } from './db.js';
 
 // Re-export TNM getters for consumers
 export { getTournamentList, getActiveTournamentSlug, getPlayerUscfId } from './tnm.js';
@@ -98,10 +99,101 @@ function _activeDs() {
     return _activeCtx ? _datasetCache.get(_activeCtx.datasetKey) : null;
 }
 
+// ─── IDB write-through ─────────────────────────────────────────────
+//
+// Translates flat GameObject rows into canonical records (record.js)
+// and persists them via db.js. Each ingest also ensures an auto/user
+// collection mirrors the dataset's membership. Runs as a side effect
+// of ingestDataset — UI activation does not wait.
+
+// Auto collections mirror an external source (TNM tournament, player
+// cross-tournament view, chess.com archive). User collections are
+// explicit curations created from imports or by the user.
+function _collectionKindForKey(key) {
+    return key.startsWith('import:') ? 'user' : 'auto';
+}
+
+function _sourceTypeForKey(key) {
+    if (key.startsWith('tournament:') || key.startsWith('player:')) return 'tnm';
+    if (key.startsWith('import:')) return 'import';
+    return 'unknown';
+}
+
 /**
- * Universal entry point for loading games into the viewer.
- * Creates/updates dataset and a context pointing to it.
+ * Translate a flat GameObject into the parsed shape consumed by
+ * record.ingestSource: `{ headers, moveTree, startFen }`. Omits
+ * null/undefined/empty fields so set-once semantics don't lock in
+ * empty values on first ingest.
  */
+export function gameObjectToParsed(g) {
+    const headers = {};
+    if (g.white) headers.White = g.white;
+    if (g.black) headers.Black = g.black;
+    if (g.result) headers.Result = g.result;
+    if (g.round != null) headers.Round = String(g.round);
+    if (g.board != null) headers.Board = String(g.board);
+    if (g.tournament) headers.Event = g.tournament;
+    if (g.section) headers.Section = g.section;
+    if (g.date) headers.Date = g.date;
+    if (g.whiteElo != null && g.whiteElo !== '') headers.WhiteElo = String(g.whiteElo);
+    if (g.blackElo != null && g.blackElo !== '') headers.BlackElo = String(g.blackElo);
+    return { headers, moveTree: null, startFen: null };
+}
+
+/**
+ * Persist a dataset's games to IDB and ensure an auto/user collection
+ * mirrors its membership. Idempotent on refresh: records are keyed by
+ * fingerprint so repeated ingests merge rather than duplicate, and
+ * collection membership is set-append. Swallows per-record errors so a
+ * single bad row doesn't stall the whole batch.
+ */
+export async function writeDatasetToIdb(key, games, meta = null) {
+    const sourceType = _sourceTypeForKey(key);
+    const recordIds = [];
+
+    for (const g of games) {
+        try {
+            const parsed = gameObjectToParsed(g);
+            const fp = fingerprint(parsed.headers);
+            const existing = await getGameByFingerprint(fp);
+            const record = ingestSource(existing, parsed, {
+                type: sourceType,
+                refId: g.gameId ?? null,
+                raw: g.pgn ?? null,
+            });
+            await putGame(record);
+            recordIds.push(record.id);
+        } catch {
+            /* skip bad row */
+        }
+    }
+
+    if (recordIds.length === 0) return recordIds;
+
+    const collectionId = `coll:${key}`;
+    try {
+        const existing = await getCollection(collectionId);
+        if (!existing) {
+            const now = Date.now();
+            await putCollection({
+                id: collectionId,
+                kind: _collectionKindForKey(key),
+                name: meta?.name || key,
+                description: '',
+                gameIds: recordIds,
+                createdAt: now,
+                modifiedAt: now,
+            });
+        } else {
+            await addGamesToCollection(collectionId, recordIds);
+        }
+    } catch {
+        /* collection write failed — records are still persisted */
+    }
+
+    return recordIds;
+}
+
 // Runtime feature flag for IDB write-through. Default on; set to false
 // on globalThis to disable (e.g. from the devtools console if something
 // goes wrong). Not a build-time constant so it can be flipped without
@@ -116,6 +208,12 @@ export function _pendingIdbWriteForTests() {
     return _lastIdbWrite;
 }
 
+// ─── ingestDataset ─────────────────────────────────────────────────
+
+/**
+ * Universal entry point for loading games into the viewer.
+ * Creates/updates dataset and a context pointing to it.
+ */
 export function ingestDataset(key, fields, { defaultRound = false, filters = null } = {}) {
     const ds = makeDataset(key, fields);
     _datasetCache.set(key, ds);

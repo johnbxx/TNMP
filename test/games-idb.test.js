@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { gameObjectToParsed, writeDatasetToIdb } from '../src/dataset-adapter.js';
+import { gameObjectToParsed, writeDatasetToIdb } from '../src/games.js';
 import {
     getAllGames,
     getGameByFingerprint,
