@@ -313,14 +313,6 @@ export async function hydrateFromIdb(collectionId) {
     return ingestDataset(datasetKey, { games, meta: { name: coll.name } }, { skipIdbWrite: true });
 }
 
-// Runtime feature flag for IDB write-through. Default on; set to false
-// on globalThis to disable (e.g. from the devtools console if something
-// goes wrong). Not a build-time constant so it can be flipped without
-// a reload dance.
-function _idbWriteThroughEnabled() {
-    return globalThis.__tnmpUseIdbDatasets !== false;
-}
-
 let _lastIdbWrite = Promise.resolve();
 /** Test hook: promise that resolves when the most recent ingest's IDB write completes. */
 export function _pendingIdbWriteForTests() {
@@ -351,7 +343,7 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     if (key.startsWith('tournament:') && !_lastTournamentKey) _lastTournamentKey = key;
 
     // Fire-and-forget write-through to IDB. UI activation does not wait.
-    if (!skipIdbWrite && _idbWriteThroughEnabled() && _shouldWriteDataset(key) && ds.games.length > 0) {
+    if (!skipIdbWrite && _shouldWriteDataset(key) && ds.games.length > 0) {
         _lastIdbWrite = writeDatasetToIdb(key, ds.games, ds.meta).catch(() => {});
     }
 

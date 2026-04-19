@@ -18,6 +18,7 @@ import {
     putSetting,
     getSetting,
     subscribeDB,
+    INBOX_COLLECTION_ID,
     _resetConnectionForTests,
 } from '../src/db.js';
 
@@ -312,12 +313,27 @@ describe('BroadcastChannel events', () => {
 
     it('removeGamesFromCollection fires when ids actually removed', async () => {
         const c = makeCollection({ gameIds: ['a', 'b'] });
+        const other = makeCollection({ gameIds: ['a'] }); // keeps 'a' from orphaning
         await putCollection(c);
+        await putCollection(other);
         await flush();
         received.length = 0;
         await removeGamesFromCollection(c.id, ['a']);
         await flush();
         expect(received).toEqual([{ type: 'collection.put', id: c.id, removed: ['a'] }]);
+    });
+
+    it('removeGamesFromCollection also fires Inbox adoption event when game orphans', async () => {
+        const c = makeCollection({ gameIds: ['a'] });
+        await putCollection(c);
+        await flush();
+        received.length = 0;
+        await removeGamesFromCollection(c.id, ['a']);
+        await flush();
+        expect(received).toEqual([
+            { type: 'collection.put', id: c.id, removed: ['a'] },
+            { type: 'collection.put', id: INBOX_COLLECTION_ID, added: ['a'] },
+        ]);
     });
 
     it('subscribeDB returns a working unsubscribe', async () => {
@@ -336,6 +352,75 @@ describe('BroadcastChannel events', () => {
         await flush();
         expect(events).toHaveLength(1); // no new delivery after unsub
         remote.close();
+    });
+});
+
+describe('Inbox invariant', () => {
+    it('removing the last collection membership adopts game into Inbox', async () => {
+        const only = makeCollection({ gameIds: ['g1'] });
+        await putCollection(only);
+        await removeGamesFromCollection(only.id, ['g1']);
+        const inbox = await getCollection(INBOX_COLLECTION_ID);
+        expect(inbox).toBeDefined();
+        expect(inbox.gameIds).toEqual(['g1']);
+        expect(inbox.kind).toBe('user');
+        expect(inbox.name).toBe('Inbox');
+    });
+
+    it('removing a game that still lives in another collection does NOT adopt to Inbox', async () => {
+        const a = makeCollection({ gameIds: ['g1', 'g2'] });
+        const b = makeCollection({ gameIds: ['g1'] });
+        await putCollection(a);
+        await putCollection(b);
+        await removeGamesFromCollection(a.id, ['g1']);
+        const inbox = await getCollection(INBOX_COLLECTION_ID);
+        expect(inbox).toBeUndefined();
+    });
+
+    it('deleting a collection adopts its orphaned games into Inbox', async () => {
+        const a = makeCollection({ gameIds: ['g1', 'g2'] });
+        const b = makeCollection({ gameIds: ['g2'] });
+        await putCollection(a);
+        await putCollection(b);
+        await deleteCollection(a.id); // g1 becomes orphan, g2 still in b
+        const inbox = await getCollection(INBOX_COLLECTION_ID);
+        expect(inbox.gameIds).toEqual(['g1']);
+    });
+
+    it('deleting a collection with no orphans does not create Inbox', async () => {
+        const a = makeCollection({ gameIds: ['g1'] });
+        const b = makeCollection({ gameIds: ['g1'] });
+        await putCollection(a);
+        await putCollection(b);
+        await deleteCollection(a.id);
+        expect(await getCollection(INBOX_COLLECTION_ID)).toBeUndefined();
+    });
+
+    it('Inbox is reused across adoptions (prepends new orphans)', async () => {
+        const a = makeCollection({ gameIds: ['g1'] });
+        await putCollection(a);
+        await removeGamesFromCollection(a.id, ['g1']);
+        await putCollection(makeCollection({ id: 'c2', gameIds: ['g2'] }));
+        await removeGamesFromCollection('c2', ['g2']);
+        const inbox = await getCollection(INBOX_COLLECTION_ID);
+        expect(inbox.gameIds).toEqual(['g2', 'g1']);
+    });
+
+    it('Inbox itself is not a "home" — removing game from Inbox does not re-adopt', async () => {
+        const a = makeCollection({ gameIds: ['g1'] });
+        await putCollection(a);
+        await removeGamesFromCollection(a.id, ['g1']); // g1 → Inbox
+        await removeGamesFromCollection(INBOX_COLLECTION_ID, ['g1']);
+        const inbox = await getCollection(INBOX_COLLECTION_ID);
+        expect(inbox.gameIds).toEqual([]);
+    });
+
+    it('deleteCollection refuses to delete Inbox', async () => {
+        const a = makeCollection({ gameIds: ['g1'] });
+        await putCollection(a);
+        await removeGamesFromCollection(a.id, ['g1']); // create Inbox
+        await expect(deleteCollection(INBOX_COLLECTION_ID)).rejects.toThrow(/Inbox/);
+        expect(await getCollection(INBOX_COLLECTION_ID)).toBeDefined();
     });
 });
 

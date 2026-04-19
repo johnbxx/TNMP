@@ -20,6 +20,9 @@ const DB_NAME = 'tnmp';
 const DB_VERSION = 1;
 const CHANNEL_NAME = 'tnmp-db';
 
+/** Special collection that holds any game not referenced by another collection. */
+export const INBOX_COLLECTION_ID = 'coll:inbox';
+
 let _dbPromise = null;
 let _channel = null;
 
@@ -146,8 +149,23 @@ export async function putCollection(collection) {
 }
 
 export async function deleteCollection(id) {
-    await _tx('collections', 'readwrite', (tx) => _req(tx.objectStore('collections').delete(id)));
+    if (id === INBOX_COLLECTION_ID) {
+        throw new Error('Inbox collection cannot be deleted');
+    }
+    const { adoptedIds } = await _tx('collections', 'readwrite', async (tx) => {
+        const store = tx.objectStore('collections');
+        const target = await _req(store.get(id));
+        if (!target) return { adoptedIds: [] };
+        const all = await _req(store.getAll());
+        const orphans = _computeOrphans(target.gameIds || [], all, id);
+        await _req(store.delete(id));
+        const adopted = orphans.length ? await _adoptIntoInbox(store, orphans) : [];
+        return { adoptedIds: adopted };
+    });
     _broadcast({ type: 'collection.deleted', id });
+    if (adoptedIds.length > 0) {
+        _broadcast({ type: 'collection.put', id: INBOX_COLLECTION_ID, added: adoptedIds });
+    }
 }
 
 export async function getCollection(id) {
@@ -189,26 +207,77 @@ export async function addGamesToCollection(collectionId, gameIds) {
 /**
  * Remove gameIds from a collection. Returns the ids actually removed.
  * Updates modifiedAt inside the same transaction. Throws if collection missing.
+ *
+ * If removal orphans any games (not referenced by any other collection),
+ * they are auto-adopted into the Inbox collection so games are never lost.
  */
 export async function removeGamesFromCollection(collectionId, gameIds) {
     const now = Date.now();
-    const removed = await _tx('collections', 'readwrite', async (tx) => {
+    const { removed, adoptedIds } = await _tx('collections', 'readwrite', async (tx) => {
         const store = tx.objectStore('collections');
         const col = await _req(store.get(collectionId));
         if (!col) throw new Error(`collection ${collectionId} not found`);
         const drop = new Set(gameIds);
         const present = new Set(col.gameIds);
         const actuallyRemoved = gameIds.filter((id) => present.has(id));
-        if (actuallyRemoved.length === 0) return [];
+        if (actuallyRemoved.length === 0) return { removed: [], adoptedIds: [] };
         col.gameIds = col.gameIds.filter((id) => !drop.has(id));
         col.modifiedAt = now;
         await _req(store.put(col));
-        return actuallyRemoved;
+        // Inbox invariant: Inbox is never the source of auto-adoption.
+        if (collectionId === INBOX_COLLECTION_ID) {
+            return { removed: actuallyRemoved, adoptedIds: [] };
+        }
+        const all = await _req(store.getAll());
+        const orphans = _computeOrphans(actuallyRemoved, all);
+        const adopted = orphans.length ? await _adoptIntoInbox(store, orphans) : [];
+        return { removed: actuallyRemoved, adoptedIds: adopted };
     });
     if (removed.length > 0) {
         _broadcast({ type: 'collection.put', id: collectionId, removed });
     }
+    if (adoptedIds.length > 0) {
+        _broadcast({ type: 'collection.put', id: INBOX_COLLECTION_ID, added: adoptedIds });
+    }
     return removed;
+}
+
+/**
+ * Inbox invariant helpers. Run inside an open collections-store transaction
+ * so the orphan check + adoption are atomic with the triggering mutation.
+ */
+function _computeOrphans(candidateIds, allCollections, excludeCollectionId = null) {
+    if (candidateIds.length === 0) return [];
+    const referenced = new Set();
+    for (const c of allCollections) {
+        if (c.id === excludeCollectionId) continue;
+        if (c.id === INBOX_COLLECTION_ID) continue;
+        for (const gid of c.gameIds || []) referenced.add(gid);
+    }
+    return candidateIds.filter((id) => !referenced.has(id));
+}
+
+async function _adoptIntoInbox(store, gameIds) {
+    const now = Date.now();
+    let inbox = await _req(store.get(INBOX_COLLECTION_ID));
+    if (!inbox) {
+        inbox = {
+            id: INBOX_COLLECTION_ID,
+            kind: 'user',
+            name: 'Inbox',
+            description: 'Games not in any other collection.',
+            gameIds: [],
+            createdAt: now,
+            modifiedAt: now,
+        };
+    }
+    const existing = new Set(inbox.gameIds);
+    const toAdd = gameIds.filter((id) => !existing.has(id));
+    if (toAdd.length === 0) return [];
+    inbox.gameIds = [...toAdd, ...inbox.gameIds];
+    inbox.modifiedAt = now;
+    await _req(store.put(inbox));
+    return toAdd;
 }
 
 // ─── Settings ──────────────────────────────────────────────────────
