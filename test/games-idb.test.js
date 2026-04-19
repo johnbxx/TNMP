@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { gameObjectToParsed, writeDatasetToIdb } from '../src/games.js';
+import {
+    gameObjectToParsed,
+    recordToGameObject,
+    writeDatasetToIdb,
+    hydrateFromIdb,
+    getCachedGame,
+} from '../src/games.js';
 import {
     getAllGames,
     getGameByFingerprint,
@@ -197,5 +203,160 @@ describe('writeDatasetToIdb', () => {
         expect(ids.length).toBeGreaterThanOrEqual(1);
         const all = await getAllGames();
         expect(all.some((r) => r.headers.White === 'Alice Smith')).toBe(true);
+    });
+});
+
+// ─── recordToGameObject ────────────────────────────────────────────
+
+describe('recordToGameObject', () => {
+    function makeRecord(overrides = {}) {
+        return {
+            id: 'rec-1',
+            kind: 'game',
+            fingerprint: 'fp-1',
+            headers: {
+                White: 'Alice Smith',
+                Black: 'Bob Jones',
+                Result: '1-0',
+                Round: '4',
+                Board: '18',
+                Event: 'TNM Spring 2026',
+                Section: 'Master',
+                Date: '2026.03.11',
+                WhiteElo: '2200',
+                BlackElo: '2100',
+            },
+            moveTree: null,
+            startFen: null,
+            sources: [
+                {
+                    type: 'tnm',
+                    refId: 'tnm-spring-2026:4:18',
+                    raw: '[Event "TNM Spring 2026"]\n1. e4 e5 1-0',
+                    fetchedAt: Date.now(),
+                },
+            ],
+            createdAt: Date.now(),
+            modifiedAt: Date.now(),
+            ...overrides,
+        };
+    }
+
+    it('maps PGN headers back to flat GameObject fields', () => {
+        const g = recordToGameObject(makeRecord());
+        expect(g.white).toBe('Alice Smith');
+        expect(g.black).toBe('Bob Jones');
+        expect(g.result).toBe('1-0');
+        expect(g.tournament).toBe('TNM Spring 2026');
+        expect(g.section).toBe('Master');
+        expect(g.date).toBe('2026.03.11');
+    });
+
+    it('parses numeric fields from string headers', () => {
+        const g = recordToGameObject(makeRecord());
+        expect(g.round).toBe(4);
+        expect(g.board).toBe(18);
+        expect(g.whiteElo).toBe(2200);
+        expect(g.blackElo).toBe(2100);
+    });
+
+    it('recovers gameId + pgn from the first source carrying them', () => {
+        const g = recordToGameObject(makeRecord());
+        expect(g.gameId).toBe('tnm-spring-2026:4:18');
+        expect(g.pgn).toBe('[Event "TNM Spring 2026"]\n1. e4 e5 1-0');
+    });
+
+    it('recovers tournamentSlug from a TNM-shaped refId', () => {
+        const g = recordToGameObject(makeRecord());
+        expect(g.tournamentSlug).toBe('tnm-spring-2026');
+    });
+
+    it('omits tournamentSlug when refId does not look TNM-shaped', () => {
+        const g = recordToGameObject(
+            makeRecord({ sources: [{ type: 'import', refId: null, raw: null, fetchedAt: Date.now() }] }),
+        );
+        expect(g.tournamentSlug).toBeUndefined();
+    });
+
+    it('leaves headers absent in the record as undefined on the flat shape', () => {
+        const g = recordToGameObject(makeRecord({ headers: { White: 'Alice', Black: 'Bob' } }));
+        expect(g.white).toBe('Alice');
+        expect(g.result).toBeUndefined();
+        expect(g.round).toBeUndefined();
+    });
+
+    it('round-trips through gameObjectToParsed for standard fields', () => {
+        const original = makeGame();
+        const parsed = gameObjectToParsed(original);
+        const record = {
+            headers: parsed.headers,
+            sources: [{ type: 'tnm', refId: original.gameId, raw: original.pgn, fetchedAt: Date.now() }],
+        };
+        const restored = recordToGameObject(record);
+        // Norms are server-computed and not preserved — skip them.
+        const { whiteNorm, blackNorm, ...compareOriginal } = original;
+        expect(restored).toEqual(compareOriginal);
+    });
+});
+
+// ─── hydrateFromIdb ────────────────────────────────────────────────
+
+describe('hydrateFromIdb', () => {
+    it('returns null for a nonexistent collection', async () => {
+        const ctx = await hydrateFromIdb('coll:does-not-exist');
+        expect(ctx).toBeNull();
+    });
+
+    it('activates a ctx from a persisted collection', async () => {
+        await writeDatasetToIdb('tournament:t', [makeGame()]);
+
+        const ctx = await hydrateFromIdb('coll:tournament:t');
+        expect(ctx).not.toBeNull();
+        expect(ctx.datasetKey).toBe('tournament:t');
+    });
+
+    it('rehydrates game rows with headers + pgn + gameId intact', async () => {
+        const original = makeGame();
+        await writeDatasetToIdb('tournament:t', [original]);
+
+        await hydrateFromIdb('coll:tournament:t');
+        const hydrated = getCachedGame(original.gameId);
+
+        expect(hydrated).toBeTruthy();
+        expect(hydrated.white).toBe(original.white);
+        expect(hydrated.black).toBe(original.black);
+        expect(hydrated.result).toBe(original.result);
+        expect(hydrated.round).toBe(original.round);
+        expect(hydrated.pgn).toBe(original.pgn);
+    });
+
+    it('does not re-bump record modifiedAt (skipIdbWrite)', async () => {
+        await writeDatasetToIdb('tournament:t', [makeGame()]);
+        const [before] = await getAllGames();
+
+        // Small wait so any unintended write would produce a later timestamp.
+        await new Promise((r) => setTimeout(r, 5));
+        await hydrateFromIdb('coll:tournament:t');
+
+        const [after] = await getAllGames();
+        expect(after.modifiedAt).toBe(before.modifiedAt);
+    });
+
+    it('hydrates an empty collection into an empty dataset', async () => {
+        // Seed an empty collection directly via db.js (writeDatasetToIdb skips empty).
+        const { putCollection } = await import('../src/db.js');
+        await putCollection({
+            id: 'coll:empty-one',
+            kind: 'user',
+            name: 'Empty',
+            description: '',
+            gameIds: [],
+            createdAt: Date.now(),
+            modifiedAt: Date.now(),
+        });
+
+        const ctx = await hydrateFromIdb('coll:empty-one');
+        expect(ctx).not.toBeNull();
+        expect(ctx.datasetKey).toBe('empty-one');
     });
 });

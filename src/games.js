@@ -15,7 +15,7 @@ import { hashFen } from './tree.js';
 import { buildTrie, trieLookup, trieResolveGameIds, RESULT_TALLY } from './trie.js';
 import { getAllPlayers } from './tnm.js';
 import { fingerprint, ingestSource } from './record.js';
-import { getGameByFingerprint, putGame, getCollection, putCollection, addGamesToCollection } from './db.js';
+import { getGame, getGameByFingerprint, putGame, getCollection, putCollection, addGamesToCollection } from './db.js';
 
 // Re-export TNM getters for consumers
 export { getTournamentList, getActiveTournamentSlug, getPlayerUscfId } from './tnm.js';
@@ -99,12 +99,12 @@ function _activeDs() {
     return _activeCtx ? _datasetCache.get(_activeCtx.datasetKey) : null;
 }
 
-// ─── IDB write-through ─────────────────────────────────────────────
+// ─── IDB bridge ────────────────────────────────────────────────────
 //
-// Translates flat GameObject rows into canonical records (record.js)
-// and persists them via db.js. Each ingest also ensures an auto/user
-// collection mirrors the dataset's membership. Runs as a side effect
-// of ingestDataset — UI activation does not wait.
+// Two-way translation between flat GameObject rows (what games.js
+// consumes) and canonical records (record.js / db.js). Writes happen
+// as a side effect of ingestDataset; reads happen via hydrateFromIdb
+// to re-activate a saved collection as a ctx.
 
 // Auto collections mirror an external source (TNM tournament, player
 // cross-tournament view, chess.com archive). User collections are
@@ -194,6 +194,54 @@ export async function writeDatasetToIdb(key, games, meta = null) {
     return recordIds;
 }
 
+/**
+ * Inverse of gameObjectToParsed: reconstruct a flat GameObject from a
+ * stored record. Headers map back to their flat fields; identifiers
+ * (gameId, pgn) are recovered from the first source entry that carries
+ * them. Does not reconstruct norms — those are server-computed and
+ * simply absent on hydrated rows (filters that need them will no-op).
+ */
+export function recordToGameObject(record) {
+    const h = record.headers || {};
+    const g = {};
+    if (h.White) g.white = h.White;
+    if (h.Black) g.black = h.Black;
+    if (h.Result) g.result = h.Result;
+    if (h.Round) g.round = Number(h.Round);
+    if (h.Board) g.board = Number(h.Board);
+    if (h.Event) g.tournament = h.Event;
+    if (h.Section) g.section = h.Section;
+    if (h.Date) g.date = h.Date;
+    if (h.WhiteElo) g.whiteElo = Number(h.WhiteElo);
+    if (h.BlackElo) g.blackElo = Number(h.BlackElo);
+
+    // Recover gameId + pgn from the first source that carries them.
+    const src = (record.sources || []).find((s) => s.refId || s.raw);
+    if (src?.refId) g.gameId = src.refId;
+    if (src?.raw) g.pgn = src.raw;
+    // TNM refIds are shaped "slug:round:board" — recover the slug.
+    if (typeof g.gameId === 'string' && g.gameId.includes(':')) {
+        g.tournamentSlug = g.gameId.split(':')[0];
+    }
+
+    return g;
+}
+
+/**
+ * Read a collection + its records from IDB and activate as a ctx.
+ * Returns the activated ctx, or null if the collection doesn't exist.
+ * Skips write-through — records came from IDB, round-tripping them
+ * would only bump modifiedAt.
+ */
+export async function hydrateFromIdb(collectionId) {
+    const coll = await getCollection(collectionId);
+    if (!coll) return null;
+    const records = await Promise.all(coll.gameIds.map((id) => getGame(id)));
+    const games = records.filter(Boolean).map(recordToGameObject);
+    const datasetKey = collectionId.startsWith('coll:') ? collectionId.slice(5) : collectionId;
+    return ingestDataset(datasetKey, { games, meta: { name: coll.name } }, { skipIdbWrite: true });
+}
+
 // Runtime feature flag for IDB write-through. Default on; set to false
 // on globalThis to disable (e.g. from the devtools console if something
 // goes wrong). Not a build-time constant so it can be flipped without
@@ -214,7 +262,7 @@ export function _pendingIdbWriteForTests() {
  * Universal entry point for loading games into the viewer.
  * Creates/updates dataset and a context pointing to it.
  */
-export function ingestDataset(key, fields, { defaultRound = false, filters = null } = {}) {
+export function ingestDataset(key, fields, { defaultRound = false, filters = null, skipIdbWrite = false } = {}) {
     const ds = makeDataset(key, fields);
     _datasetCache.set(key, ds);
     const ctx = makeCtx(key, ds);
@@ -232,7 +280,7 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     if (key.startsWith('tournament:') && !_lastTournamentKey) _lastTournamentKey = key;
 
     // Fire-and-forget write-through to IDB. UI activation does not wait.
-    if (_idbWriteThroughEnabled() && ds.games.length > 0) {
+    if (!skipIdbWrite && _idbWriteThroughEnabled() && ds.games.length > 0) {
         _lastIdbWrite = writeDatasetToIdb(key, ds.games, ds.meta).catch(() => {});
     }
 
