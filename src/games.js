@@ -25,9 +25,6 @@ import {
     subscribeDB,
 } from './db.js';
 
-// Re-export TNM getters for consumers
-export { getTournamentList, getActiveTournamentSlug, getPlayerUscfId } from './tnm.js';
-
 // ─── Private State ─────────────────────────────────────────────────
 
 const EMPTY_FILTERS = {
@@ -109,10 +106,9 @@ function _activeDs() {
 
 // ─── IDB bridge ────────────────────────────────────────────────────
 //
-// Two-way translation between flat GameObject rows (what games.js
-// consumes) and canonical records (record.js / db.js). Writes happen
-// as a side effect of ingestDataset; reads happen via hydrateFromIdb
-// to re-activate a saved collection as a ctx.
+// GameObject and Record share one shape: flat, lowercase, typed. Writes
+// happen as a side effect of ingestDataset; reads happen via
+// hydrateFromIdb to re-activate a saved collection as a ctx.
 
 // Auto collections mirror an external source (TNM tournament, player
 // cross-tournament view, chess.com archive). User collections are
@@ -151,33 +147,12 @@ export function isValidLoadTarget(coll) {
 }
 
 /**
- * Translate a flat GameObject into the parsed shape consumed by
- * record.ingestSource: `{ headers, moveTree, startFen }`. Omits
- * null/undefined/empty fields so set-once semantics don't lock in
- * empty values on first ingest.
- */
-export function gameObjectToParsed(g) {
-    const headers = {};
-    if (g.white) headers.White = g.white;
-    if (g.black) headers.Black = g.black;
-    if (g.result) headers.Result = g.result;
-    if (g.round != null) headers.Round = String(g.round);
-    if (g.board != null) headers.Board = String(g.board);
-    if (g.tournament) headers.Event = g.tournament;
-    if (g.section) headers.Section = g.section;
-    if (g.date) headers.Date = g.date;
-    if (g.whiteElo != null && g.whiteElo !== '') headers.WhiteElo = String(g.whiteElo);
-    if (g.blackElo != null && g.blackElo !== '') headers.BlackElo = String(g.blackElo);
-    return { headers, moveTree: null, startFen: null };
-}
-
-/**
  * Upsert a batch of GameObjects into IDB. Returns the record ids in the
  * same order as the input (bad rows skipped).
  *
  * mergeExisting:
  *   - true (refresh path): append a source to already-stored records,
- *     merging mutable headers via record.js rules.
+ *     merging mutable fields via record.js rules.
  *   - false (user-save path): if a fingerprint already exists, reuse
  *     its id without appending another source entry.
  */
@@ -185,13 +160,12 @@ async function _persistGames(games, sourceType, mergeExisting) {
     const ids = [];
     for (const g of games) {
         try {
-            const parsed = gameObjectToParsed(g);
-            const existing = await getGameByFingerprint(fingerprint(parsed.headers));
+            const existing = await getGameByFingerprint(fingerprint(g));
             if (existing && !mergeExisting) {
                 ids.push(existing.id);
                 continue;
             }
-            const record = ingestSource(existing, parsed, {
+            const record = ingestSource(existing, g, {
                 type: sourceType,
                 refId: g.gameId ?? null,
                 raw: g.pgn ?? null,
@@ -239,35 +213,22 @@ export async function writeDatasetToIdb(key, games, meta = null) {
 }
 
 /**
- * Inverse of gameObjectToParsed: reconstruct a flat GameObject from a
- * stored record. Headers map back to their flat fields; identifiers
- * (gameId, pgn) are recovered from the first source entry that carries
- * them. Does not reconstruct norms — those are server-computed and
- * simply absent on hydrated rows (filters that need them will no-op).
+ * Project a stored record into the flat GameObject shape consumed by
+ * the UI. Since records already share the flat shape, this only lifts
+ * source-derived fields (gameId, pgn) out of sources[] onto the
+ * top-level object and strips persistence-only fields. Norms are
+ * server-computed and not persisted, so filters that need them no-op
+ * on hydrated rows.
  */
 export function recordToGameObject(record) {
-    const h = record.headers || {};
-    const g = {};
-    if (h.White) g.white = h.White;
-    if (h.Black) g.black = h.Black;
-    if (h.Result) g.result = h.Result;
-    if (h.Round) g.round = Number(h.Round);
-    if (h.Board) g.board = Number(h.Board);
-    if (h.Event) g.tournament = h.Event;
-    if (h.Section) g.section = h.Section;
-    if (h.Date) g.date = h.Date;
-    if (h.WhiteElo) g.whiteElo = Number(h.WhiteElo);
-    if (h.BlackElo) g.blackElo = Number(h.BlackElo);
-
-    // Recover gameId + pgn from the first source that carries them.
+    const g = { ...record };
+    delete g.sources;
+    delete g.extraHeaders;
+    delete g.moveTree;
+    delete g.startFen;
     const src = (record.sources || []).find((s) => s.refId || s.raw);
     if (src?.refId) g.gameId = src.refId;
     if (src?.raw) g.pgn = src.raw;
-    // TNM refIds are shaped "slug:round:board" — recover the slug.
-    if (typeof g.gameId === 'string' && g.gameId.includes(':')) {
-        g.tournamentSlug = g.gameId.split(':')[0];
-    }
-
     return g;
 }
 
@@ -522,18 +483,6 @@ export function getCachedGame(gameId) {
         if (found) return found;
     }
     return null;
-}
-
-export function updateCachedGame(gameId, headers) {
-    const game = getCachedGame(gameId);
-    if (!game) return;
-    if (headers.White) game.white = headers.White;
-    if (headers.Black) game.black = headers.Black;
-    if (headers.Result) game.result = headers.Result;
-    if (headers.WhiteElo) game.whiteElo = headers.WhiteElo;
-    if (headers.BlackElo) game.blackElo = headers.BlackElo;
-    if (headers.ECO) game.eco = headers.ECO;
-    if (headers.Opening) game.openingName = headers.Opening;
 }
 
 export function getOrientationForGame(game) {

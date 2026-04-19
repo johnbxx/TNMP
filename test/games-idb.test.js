@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import {
-    gameObjectToParsed,
     recordToGameObject,
     writeDatasetToIdb,
     hydrateFromIdb,
@@ -52,45 +51,6 @@ function makeGame(overrides = {}) {
     };
 }
 
-// ─── gameObjectToParsed ────────────────────────────────────────────
-
-describe('gameObjectToParsed', () => {
-    it('maps flat GameObject fields to PGN header names', () => {
-        const parsed = gameObjectToParsed(makeGame());
-        expect(parsed.headers).toEqual({
-            White: 'Alice Smith',
-            Black: 'Bob Jones',
-            Result: '1-0',
-            Round: '4',
-            Board: '18',
-            Event: 'TNM Spring 2026',
-            Section: 'Master',
-            Date: '2026.03.11',
-            WhiteElo: '2200',
-            BlackElo: '2100',
-        });
-    });
-
-    it('stringifies numeric fields', () => {
-        const parsed = gameObjectToParsed(makeGame({ round: 7, board: 1 }));
-        expect(parsed.headers.Round).toBe('7');
-        expect(parsed.headers.Board).toBe('1');
-    });
-
-    it('omits null/undefined/empty fields so set-once semantics are preserved', () => {
-        const parsed = gameObjectToParsed(makeGame({ whiteElo: null, blackElo: '', date: undefined }));
-        expect(parsed.headers).not.toHaveProperty('WhiteElo');
-        expect(parsed.headers).not.toHaveProperty('BlackElo');
-        expect(parsed.headers).not.toHaveProperty('Date');
-    });
-
-    it('returns a parsed record with null moveTree and startFen', () => {
-        const parsed = gameObjectToParsed(makeGame());
-        expect(parsed.moveTree).toBeNull();
-        expect(parsed.startFen).toBeNull();
-    });
-});
-
 // ─── writeDatasetToIdb ─────────────────────────────────────────────
 
 describe('writeDatasetToIdb', () => {
@@ -102,11 +62,11 @@ describe('writeDatasetToIdb', () => {
         const all = await getAllGames();
         expect(all).toHaveLength(2);
 
-        const fp = fingerprint(gameObjectToParsed(games[0]).headers);
+        const fp = fingerprint(games[0]);
         const rec = await getGameByFingerprint(fp);
         expect(rec).toBeDefined();
         expect(rec.kind).toBe('game');
-        expect(rec.headers.White).toBe('Alice Smith');
+        expect(rec.white).toBe('Alice Smith');
     });
 
     it('stores PGN in source.raw when present', async () => {
@@ -127,22 +87,22 @@ describe('writeDatasetToIdb', () => {
         expect(all).toHaveLength(1);
     });
 
-    it('merges mutable headers on refresh (Result change)', async () => {
+    it('merges mutable fields on refresh (result change)', async () => {
         await writeDatasetToIdb('tournament:t', [makeGame({ result: '*' })]);
         const [before] = await getAllGames();
-        expect(before.headers.Result).toBe('*');
+        expect(before.result).toBe('*');
 
         await writeDatasetToIdb('tournament:t', [makeGame({ result: '1-0' })]);
         const [after] = await getAllGames();
         expect(after.id).toBe(before.id);
-        expect(after.headers.Result).toBe('1-0');
+        expect(after.result).toBe('1-0');
     });
 
-    it('keeps set-once headers on refresh (WhiteElo stays)', async () => {
+    it('keeps set-once fields on refresh (whiteElo stays)', async () => {
         await writeDatasetToIdb('tournament:t', [makeGame({ whiteElo: 2200 })]);
         await writeDatasetToIdb('tournament:t', [makeGame({ whiteElo: 2400 })]);
         const [rec] = await getAllGames();
-        expect(rec.headers.WhiteElo).toBe('2200');
+        expect(rec.whiteElo).toBe(2200);
     });
 
     it('creates an auto collection for tournament: keys', async () => {
@@ -206,12 +166,12 @@ describe('writeDatasetToIdb', () => {
 
     it('survives a malformed game without stalling the batch', async () => {
         // A game object missing everything ingestSource needs still gets processed
-        // (fingerprint tolerates empty headers). The next healthy game should land.
+        // (fingerprint tolerates empty records). The next healthy game should land.
         const games = [{ gameId: null }, makeGame()];
         const ids = await writeDatasetToIdb('tournament:t', games);
         expect(ids.length).toBeGreaterThanOrEqual(1);
         const all = await getAllGames();
-        expect(all.some((r) => r.headers.White === 'Alice Smith')).toBe(true);
+        expect(all.some((r) => r.white === 'Alice Smith')).toBe(true);
     });
 });
 
@@ -223,20 +183,16 @@ describe('recordToGameObject', () => {
             id: 'rec-1',
             kind: 'game',
             fingerprint: 'fp-1',
-            headers: {
-                White: 'Alice Smith',
-                Black: 'Bob Jones',
-                Result: '1-0',
-                Round: '4',
-                Board: '18',
-                Event: 'TNM Spring 2026',
-                Section: 'Master',
-                Date: '2026.03.11',
-                WhiteElo: '2200',
-                BlackElo: '2100',
-            },
-            moveTree: null,
-            startFen: null,
+            white: 'Alice Smith',
+            black: 'Bob Jones',
+            result: '1-0',
+            round: 4,
+            board: 18,
+            tournament: 'TNM Spring 2026',
+            section: 'Master',
+            date: '2026.03.11',
+            whiteElo: 2200,
+            blackElo: 2100,
             sources: [
                 {
                     type: 'tnm',
@@ -251,22 +207,15 @@ describe('recordToGameObject', () => {
         };
     }
 
-    it('maps PGN headers back to flat GameObject fields', () => {
+    it('passes through indexed fields unchanged', () => {
         const g = recordToGameObject(makeRecord());
         expect(g.white).toBe('Alice Smith');
         expect(g.black).toBe('Bob Jones');
         expect(g.result).toBe('1-0');
-        expect(g.tournament).toBe('TNM Spring 2026');
-        expect(g.section).toBe('Master');
-        expect(g.date).toBe('2026.03.11');
-    });
-
-    it('parses numeric fields from string headers', () => {
-        const g = recordToGameObject(makeRecord());
         expect(g.round).toBe(4);
         expect(g.board).toBe(18);
         expect(g.whiteElo).toBe(2200);
-        expect(g.blackElo).toBe(2100);
+        expect(g.tournament).toBe('TNM Spring 2026');
     });
 
     it('recovers gameId + pgn from the first source carrying them', () => {
@@ -275,36 +224,27 @@ describe('recordToGameObject', () => {
         expect(g.pgn).toBe('[Event "TNM Spring 2026"]\n1. e4 e5 1-0');
     });
 
-    it('recovers tournamentSlug from a TNM-shaped refId', () => {
-        const g = recordToGameObject(makeRecord());
+    it('passes through tournamentSlug when present on the record', () => {
+        const g = recordToGameObject(makeRecord({ tournamentSlug: 'tnm-spring-2026' }));
         expect(g.tournamentSlug).toBe('tnm-spring-2026');
     });
 
-    it('omits tournamentSlug when refId does not look TNM-shaped', () => {
-        const g = recordToGameObject(
-            makeRecord({ sources: [{ type: 'import', refId: null, raw: null, fetchedAt: Date.now() }] }),
-        );
+    it('leaves tournamentSlug undefined when the record has none', () => {
+        const g = recordToGameObject(makeRecord());
         expect(g.tournamentSlug).toBeUndefined();
     });
 
-    it('leaves headers absent in the record as undefined on the flat shape', () => {
-        const g = recordToGameObject(makeRecord({ headers: { White: 'Alice', Black: 'Bob' } }));
-        expect(g.white).toBe('Alice');
-        expect(g.result).toBeUndefined();
-        expect(g.round).toBeUndefined();
-    });
-
-    it('round-trips through gameObjectToParsed for standard fields', () => {
-        const original = makeGame();
-        const parsed = gameObjectToParsed(original);
-        const record = {
-            headers: parsed.headers,
-            sources: [{ type: 'tnm', refId: original.gameId, raw: original.pgn, fetchedAt: Date.now() }],
-        };
-        const restored = recordToGameObject(record);
-        // Norms are server-computed and not preserved — skip them.
-        const { whiteNorm, blackNorm, ...compareOriginal } = original;
-        expect(restored).toEqual(compareOriginal);
+    it('strips persistence-only fields from the projection', () => {
+        const record = makeRecord({
+            extraHeaders: { ECO: 'B12' },
+            moveTree: { root: true, children: [] },
+            startFen: 'rnbqkbnr/8/8/8/8/8/8/RNBQKBNR w KQkq - 0 1',
+        });
+        const g = recordToGameObject(record);
+        expect(g.sources).toBeUndefined();
+        expect(g.extraHeaders).toBeUndefined();
+        expect(g.moveTree).toBeUndefined();
+        expect(g.startFen).toBeUndefined();
     });
 });
 

@@ -21,7 +21,13 @@ import * as games from './games.js';
 import * as board from './board.js';
 import { Chessground } from '@lichess-org/chessground';
 import { createGame } from './pgn.js';
-import { switchTournament, fetchPlayerGames } from './tnm.js';
+import {
+    switchTournament,
+    fetchPlayerGames,
+    getTournamentList,
+    getActiveTournamentSlug,
+    getPlayerUscfId,
+} from './tnm.js';
 import * as engine from './engine.js';
 
 loadEcoData();
@@ -2964,13 +2970,13 @@ function renderBrowserTitle(panelEl, state) {
     }
 
     // Server mode: dropdown from prefetched tournament list
-    const tournaments = games.getTournamentList();
+    const tournaments = getTournamentList();
     if (!tournaments || tournaments.length <= 1) {
         titleEl.textContent = games.getTitle();
         return;
     }
 
-    const slug = games.getActiveTournamentSlug();
+    const slug = getActiveTournamentSlug();
     const options = tournaments
         .map(
             (t) =>
@@ -3352,7 +3358,7 @@ function wireViewerHeader() {
             if (_features.playerProfiles) {
                 openPlayerProfile(playerEl.dataset.player);
             } else {
-                const uscfId = games.getPlayerUscfId(playerEl.dataset.player);
+                const uscfId = getPlayerUscfId(playerEl.dataset.player);
                 if (uscfId) window.open(`https://ratings.uschess.org/player/${uscfId}`, '_blank', 'noopener');
             }
             return;
@@ -3543,7 +3549,7 @@ function wireBrowserListeners(panelEl) {
                 if (_features.playerProfiles) {
                     openPlayerProfile(name);
                 } else {
-                    const uscfId = games.getPlayerUscfId(name);
+                    const uscfId = getPlayerUscfId(name);
                     if (uscfId) window.open(`https://ratings.uschess.org/player/${uscfId}`, '_blank', 'noopener');
                 }
                 return;
