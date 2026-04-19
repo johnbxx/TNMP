@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getRandomMeme } from '../src/memes.js';
+import { getRandomMeme } from '../src/ui.js';
 import { STATE } from '../src/config.js';
 
 describe('getRandomMeme', () => {
