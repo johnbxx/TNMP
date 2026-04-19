@@ -14,8 +14,10 @@ import {
     updateTournamentLink,
     hideOfflineBanner,
     renderRoundTracker,
+    resetCountdown,
+    stopCountdown,
+    startCountdown,
 } from './ui.js';
-import { resetCountdown, stopCountdown, startCountdown } from './countdown.js';
 import { openSettings, saveSettings, initSettings } from './settings.js';
 import { openStyle, initStyle } from './style.js';
 import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
