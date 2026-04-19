@@ -14,6 +14,7 @@ import { Chess } from 'chess.js';
 import { hashFen } from './tree.js';
 import { buildTrie, trieLookup, trieResolveGameIds, RESULT_TALLY } from './trie.js';
 import { getAllPlayers } from './tnm.js';
+import { writeDatasetToIdb } from './dataset-adapter.js';
 
 // Re-export TNM getters for consumers
 export { getTournamentList, getActiveTournamentSlug, getPlayerUscfId } from './tnm.js';
@@ -101,6 +102,20 @@ function _activeDs() {
  * Universal entry point for loading games into the viewer.
  * Creates/updates dataset and a context pointing to it.
  */
+// Runtime feature flag for IDB write-through. Default on; set to false
+// on globalThis to disable (e.g. from the devtools console if something
+// goes wrong). Not a build-time constant so it can be flipped without
+// a reload dance.
+function _idbWriteThroughEnabled() {
+    return globalThis.__tnmpUseIdbDatasets !== false;
+}
+
+let _lastIdbWrite = Promise.resolve();
+/** Test hook: promise that resolves when the most recent ingest's IDB write completes. */
+export function _pendingIdbWriteForTests() {
+    return _lastIdbWrite;
+}
+
 export function ingestDataset(key, fields, { defaultRound = false, filters = null } = {}) {
     const ds = makeDataset(key, fields);
     _datasetCache.set(key, ds);
@@ -117,6 +132,12 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     _activeCtx = ctx;
     _activeCtxKey = key;
     if (key.startsWith('tournament:') && !_lastTournamentKey) _lastTournamentKey = key;
+
+    // Fire-and-forget write-through to IDB. UI activation does not wait.
+    if (_idbWriteThroughEnabled() && ds.games.length > 0) {
+        _lastIdbWrite = writeDatasetToIdb(key, ds.games, ds.meta).catch(() => {});
+    }
+
     notifyChange();
     return ctx;
 }
