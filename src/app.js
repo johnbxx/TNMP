@@ -71,6 +71,7 @@ import {
     getLastTournamentKey,
     getVisibleGames,
     hydrateFromIdb,
+    initCrossTabSync,
 } from './games.js';
 import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
@@ -793,6 +794,12 @@ document.addEventListener('DOMContentLoaded', () => {
     startCountdown(wrappedCheckPairings);
     syncPushSubscription();
     prefetchGames();
+
+    // Cross-tab coherence: re-hydrate ctx when another tab mutates it;
+    // show a toast if the active collection is deleted remotely.
+    initCrossTabSync({
+        onActiveDeleted: () => showToast('This collection was removed in another tab', 'info'),
+    });
 
     // URL params
     const urlParams = new URLSearchParams(window.location.search);

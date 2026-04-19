@@ -15,7 +15,15 @@ import { hashFen } from './tree.js';
 import { buildTrie, trieLookup, trieResolveGameIds, RESULT_TALLY } from './trie.js';
 import { getAllPlayers } from './tnm.js';
 import { fingerprint, ingestSource } from './record.js';
-import { getGame, getGameByFingerprint, putGame, getCollection, putCollection, addGamesToCollection } from './db.js';
+import {
+    getGame,
+    getGameByFingerprint,
+    putGame,
+    getCollection,
+    putCollection,
+    addGamesToCollection,
+    subscribeDB,
+} from './db.js';
 
 // Re-export TNM getters for consumers
 export { getTournamentList, getActiveTournamentSlug, getPlayerUscfId } from './tnm.js';
@@ -433,6 +441,72 @@ export function getEvents() {
 
 function notifyChange() {
     _onChange?.();
+}
+
+// ─── Cross-tab coherence ───────────────────────────────────────────
+
+// Callback fired when the active ctx's backing collection is deleted in
+// another tab. Set by app.js to show a toast or equivalent UX.
+let _onRemoteActiveDelete = null;
+let _crossTabUnsub = null;
+
+/**
+ * Map a collection id (as seen in DB events) to the matching in-memory
+ * ctx key. Returns null if nothing in cache matches.
+ *
+ * Convention: `coll:tournament:foo` ↔ ctxKey `tournament:foo`, and
+ * user collections `coll:<uuid>` ↔ ctxKey `<uuid>`. Whatever rule
+ * `hydrateFromIdb` uses, we invert here.
+ */
+function _ctxKeyForCollectionId(collectionId) {
+    if (!collectionId.startsWith('coll:')) return null;
+    const key = collectionId.slice(5);
+    return _ctxCache.has(key) ? key : null;
+}
+
+/**
+ * Subscribe to DB broadcast events so that mutations in another tab
+ * refresh our in-memory view. Idempotent — calling twice is a no-op.
+ *
+ * @param {{ onActiveDeleted?: () => void }} [opts]
+ *   onActiveDeleted: called when the currently-active ctx's backing
+ *   collection is deleted remotely. app.js uses this to show a toast.
+ */
+export function initCrossTabSync({ onActiveDeleted } = {}) {
+    _onRemoteActiveDelete = onActiveDeleted || null;
+    if (_crossTabUnsub) return; // idempotent
+    _crossTabUnsub = subscribeDB((event) => {
+        if (!event || typeof event !== 'object') return;
+        if (event.type === 'collection.deleted') {
+            const key = _ctxKeyForCollectionId(event.id);
+            if (!key) return;
+            const wasActive = _activeCtxKey === key;
+            _datasetCache.delete(key);
+            _ctxCache.delete(key);
+            if (wasActive) {
+                _activeCtx = null;
+                _activeCtxKey = null;
+                _onRemoteActiveDelete?.();
+            }
+            notifyChange();
+            return;
+        }
+        if (event.type === 'collection.put') {
+            const key = _ctxKeyForCollectionId(event.id);
+            if (!key) return;
+            // Re-hydrate from IDB: records may have been added/removed.
+            hydrateFromIdb(event.id)
+                .then(() => notifyChange())
+                .catch(() => {});
+        }
+    });
+}
+
+/** Test hook — unsubscribe and forget. */
+export function _resetCrossTabSyncForTests() {
+    _crossTabUnsub?.();
+    _crossTabUnsub = null;
+    _onRemoteActiveDelete = null;
 }
 
 // ─── Derived Queries ─────────────────────────────────────────────

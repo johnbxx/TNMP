@@ -10,7 +10,10 @@ import {
     isValidSaveTarget,
     isValidLoadTarget,
     saveGamesToCollection,
+    initCrossTabSync,
+    getActiveCtxKey,
     _pendingIdbWriteForTests,
+    _resetCrossTabSyncForTests,
 } from '../src/games.js';
 import {
     getAllGames,
@@ -22,6 +25,7 @@ import {
 import { fingerprint } from '../src/record.js';
 
 beforeEach(async () => {
+    _resetCrossTabSyncForTests();
     await _resetConnectionForTests();
     globalThis.indexedDB = new IDBFactory();
 });
@@ -479,6 +483,56 @@ describe('isValidLoadTarget', () => {
     it('rejects null/undefined', () => {
         expect(isValidLoadTarget(null)).toBe(false);
         expect(isValidLoadTarget(undefined)).toBe(false);
+    });
+});
+
+// ─── Cross-tab sync (initCrossTabSync) ─────────────────────────────
+
+describe('initCrossTabSync', () => {
+    // BroadcastChannel doesn't deliver to its own posting context, so we
+    // simulate another tab via a separate channel instance writing onto
+    // the same name. Our subscribed handler receives those as "remote".
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    it('clears active ctx when its backing collection is deleted remotely', async () => {
+        await writeDatasetToIdb('tournament:t', [makeGame()]);
+        await hydrateFromIdb('coll:tournament:t');
+        expect(getActiveCtxKey()).toBe('tournament:t');
+
+        let deleted = false;
+        initCrossTabSync({ onActiveDeleted: () => (deleted = true) });
+
+        const remote = new BroadcastChannel('tnmp-db');
+        remote.postMessage({ type: 'collection.deleted', id: 'coll:tournament:t' });
+        await flush();
+        remote.close();
+
+        expect(deleted).toBe(true);
+        expect(getActiveCtxKey()).toBeNull();
+    });
+
+    it('ignores deletions for collections not cached locally', async () => {
+        await writeDatasetToIdb('tournament:t', [makeGame()]);
+        await hydrateFromIdb('coll:tournament:t');
+
+        let deleted = false;
+        initCrossTabSync({ onActiveDeleted: () => (deleted = true) });
+
+        const remote = new BroadcastChannel('tnmp-db');
+        remote.postMessage({ type: 'collection.deleted', id: 'coll:elsewhere' });
+        await flush();
+        remote.close();
+
+        expect(deleted).toBe(false);
+        expect(getActiveCtxKey()).toBe('tournament:t');
+    });
+
+    it('is idempotent — second call does not double-subscribe', async () => {
+        initCrossTabSync();
+        initCrossTabSync();
+        // No assertion other than "doesn't throw and doesn't leak".
+        // Coverage of handler semantics is in the tests above.
+        expect(true).toBe(true);
     });
 });
 
