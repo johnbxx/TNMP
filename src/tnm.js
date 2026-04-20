@@ -7,7 +7,7 @@
  */
 
 import { WORKER_URL } from './config.js';
-import { ingestDataset } from './games.js';
+import { ingestDataset, setPlayerList } from './games.js';
 
 // ─── State ────────────────────────────────────────────────────────
 
@@ -34,10 +34,6 @@ export function setActiveTournamentSlug(slug) {
 
 export function getPlayerUscfId(name) {
     return _allPlayers?.find((p) => p.name === name)?.uscfId || null;
-}
-
-export function getAllPlayers() {
-    return _allPlayers || [];
 }
 
 // ─── Raw Fetchers (one per endpoint) ──────────────────────────────
@@ -77,6 +73,7 @@ export async function fetchPlayerList() {
     if (!response.ok) throw new Error('Failed to fetch players');
     const data = await response.json();
     _allPlayers = data.players.map((p) => ({ name: p.name, norm: p.norm, uscfId: p.uscfId || null }));
+    setPlayerList(_allPlayers);
     return _allPlayers;
 }
 

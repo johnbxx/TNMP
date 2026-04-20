@@ -13,7 +13,6 @@
 import { Chess } from 'chess.js';
 import { hashFen } from './tree.js';
 import { buildTrie, trieLookup, trieResolveGameIds, RESULT_TALLY } from './trie.js';
-import { getAllPlayers } from './tnm.js';
 import { fingerprint, ingestSource, hashMoves, contentFingerprint } from './record.js';
 import { parseRecord, extractMoveText, parseMoveText } from './pgn-parser.js';
 import {
@@ -84,21 +83,29 @@ function makeDataset(key, fields = {}) {
     };
 }
 
-/** Per-tab UI context — pure view state referencing a dataset by key. */
-function makeCtx(datasetKey, ds) {
+/** Per-tab UI context — pure view state referencing a dataset by key.
+ *  `key` is this ctx's id in `_ctxCache` (may be tab-prefixed, e.g.
+ *  `tab:3:tournament:foo`). `datasetKey` is the id of the shared dataset
+ *  in `_datasetCache` (never tab-prefixed). Multiple tabs with different
+ *  keys can share one datasetKey.
+ *
+ *  The explorer is always present, starting at the initial position. It
+ *  filters the game list iff moveHistory.length > 0 — no separate "active"
+ *  flag. "The explorer shows stats for what's currently in the game list"
+ *  is a structural invariant, not a coordinated state. */
+function makeCtx(key, datasetKey, ds) {
     return {
+        key,
         datasetKey,
         filters: { ...EMPTY_FILTERS },
         visibleSections: new Set(ds.sections),
-        explorer: null,
-        explorerActive: false,
+        explorer: { chess: new Chess(), moveHistory: [] },
     };
 }
 
 const _datasetCache = new Map();
 const _ctxCache = new Map();
 let _activeCtx = null;
-let _activeCtxKey = null;
 let _lastTournamentKey = null;
 
 /** Resolve the active dataset from the active context. */
@@ -347,7 +354,7 @@ export function _pendingIdbWriteForTests() {
 export function ingestDataset(key, fields, { defaultRound = false, filters = null, skipIdbWrite = false } = {}) {
     const ds = makeDataset(key, fields);
     _datasetCache.set(key, ds);
-    const ctx = makeCtx(key, ds);
+    const ctx = makeCtx(key, key, ds);
     if (defaultRound && ds.rounds.length > 0) {
         ctx.filters.round = ds.rounds[ds.rounds.length - 1];
     }
@@ -358,7 +365,6 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     }
     _ctxCache.set(key, ctx);
     _activeCtx = ctx;
-    _activeCtxKey = key;
     if (key.startsWith('tournament:') && !_lastTournamentKey) _lastTournamentKey = key;
 
     // Fire-and-forget write-through to IDB. UI activation does not wait.
@@ -374,12 +380,18 @@ export function getLastTournamentKey() {
     return _lastTournamentKey;
 }
 export function getActiveCtxKey() {
-    return _activeCtxKey;
+    return _activeCtx?.key ?? null;
 }
 
 // ─── Module state ─────────────────────────────────────────────────
 
+// Player list for the searchbar. Injected from tnm.js (or any future
+// source adapter) once the canonical list is loaded. Keeps games.js
+// source-agnostic — we don't know or care where these came from.
 let _playerList = [];
+export function setPlayerList(list) {
+    _playerList = Array.isArray(list) ? list : [];
+}
 
 // ─── Observer ──────────────────────────────────────────────────────
 
@@ -398,9 +410,6 @@ export function getFilter(key) {
 }
 export function getVisibleSections() {
     return _activeCtx?.visibleSections ?? new Set();
-}
-export function isExplorerActive() {
-    return _activeCtx?.explorerActive ?? false;
 }
 export function getExplorerFen() {
     return _activeCtx?.explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -491,12 +500,11 @@ export function initCrossTabSync({ onActiveDeleted } = {}) {
         if (event.type === 'collection.deleted') {
             const key = _ctxKeyForCollectionId(event.id);
             if (!key) return;
-            const wasActive = _activeCtxKey === key;
+            const wasActive = _activeCtx?.key === key;
             _datasetCache.delete(key);
             _ctxCache.delete(key);
             if (wasActive) {
                 _activeCtx = null;
-                _activeCtxKey = null;
                 _onRemoteActiveDelete?.();
             }
             notifyChange();
@@ -526,6 +534,13 @@ export function getGroupedGames() {
     return groupGames(getVisibleGames());
 }
 
+/** Flat list of visible game ids. Skips rows without a gameId (e.g. byes). */
+export function getVisibleGameIds() {
+    return getVisibleGames()
+        .filter((g) => g.gameId)
+        .map((g) => g.gameId);
+}
+
 // ─── Queries ─────────────────────────────────────────────────────
 
 export function getCachedGame(gameId) {
@@ -552,8 +567,7 @@ export function getOrientationForGame(game) {
 export function searchPlayers(query) {
     if (!query) return [];
     const q = query.toLowerCase();
-    const list = _playerList.length > 0 ? _playerList : getAllPlayers();
-    return list.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
+    return _playerList.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
 }
 
 // ─── Mutations ────────────────────────────────────────────────────
@@ -602,12 +616,7 @@ export function clearPlayerMode() {
         activateCtx(_lastTournamentKey);
     } else {
         _activeCtx = null;
-        _activeCtxKey = null;
         notifyChange();
-    }
-    if (_activeCtx?.explorer) {
-        _activeCtx.explorer.chess.reset();
-        _activeCtx.explorer.moveHistory = [];
     }
 }
 
@@ -615,24 +624,20 @@ export async function switchDataSource(value, currentSlug, opts = {}) {
     const ds = _activeDs();
     if (ds?.events) {
         _activeCtx.filters.event = value || null;
-        _playerList = buildPlayerListFromGames();
     } else {
         const cacheKey = `tournament:${value}`;
         const cachedCtx = _ctxCache.get(cacheKey);
         if (cachedCtx) {
             _activeCtx = cachedCtx;
-            _activeCtxKey = cacheKey;
         } else if (opts.onSwitch) {
             await opts.onSwitch(value, currentSlug);
         }
-        _playerList = buildPlayerListFromGames();
     }
 
-    if (_activeCtx) {
-        _activeCtx.explorer = null;
-        _activeCtx.explorerActive = false;
+    if (_activeCtx?.explorer) {
+        _activeCtx.explorer.chess.reset();
+        _activeCtx.explorer.moveHistory = [];
     }
-    ensureExplorer();
     notifyChange();
 }
 
@@ -679,7 +684,7 @@ export function cloneCtx(sourceKey, { copyFilters = true } = {}) {
     const newKey = `tab:${++_tabCounter}:${baseKey}`;
     const ds = _datasetCache.get(source.datasetKey);
     if (!ds) return null;
-    const ctx = makeCtx(source.datasetKey, ds);
+    const ctx = makeCtx(newKey, source.datasetKey, ds);
     if (copyFilters) {
         ctx.filters = { ...source.filters };
         ctx.visibleSections = new Set(source.visibleSections);
@@ -688,7 +693,6 @@ export function cloneCtx(sourceKey, { copyFilters = true } = {}) {
     }
     _ctxCache.set(newKey, ctx);
     _activeCtx = ctx;
-    _activeCtxKey = newKey;
     notifyChange();
     return newKey;
 }
@@ -697,8 +701,6 @@ export function activateCtx(key) {
     const ctx = _ctxCache.get(key);
     if (ctx) {
         _activeCtx = ctx;
-        _activeCtxKey = key;
-        _playerList = [];
         notifyChange();
         return true;
     }
@@ -709,24 +711,9 @@ export function deleteCtx(key) {
     _ctxCache.delete(key);
 }
 
-export function closeBrowser() {
-    _activeCtx = null;
-    _activeCtxKey = null;
-    notifyChange();
-}
-
 // ─── Explorer ────────────────────────────────────────────────────
 
-export function ensureExplorer() {
-    if (!_activeCtx) return;
-    if (!_activeCtx.explorer) {
-        _activeCtx.explorer = { chess: new Chess(), moveHistory: [] };
-    }
-    _activeCtx.explorerActive = true;
-}
-
 export function setExplorerPosition(moves = []) {
-    ensureExplorer();
     if (!_activeCtx?.explorer) return;
     const explorer = _activeCtx.explorer;
     explorer.chess.reset();
@@ -739,11 +726,7 @@ export function setExplorerPosition(moves = []) {
         }
         explorer.moveHistory.push(san);
     }
-    _onChange?.();
-}
-
-export function setGamesData(data) {
-    ingestDataset(`import:${Date.now()}`, { games: data.games || [] });
+    notifyChange();
 }
 
 // ─── Filtering ───────────────────────────────────────────────────
@@ -776,17 +759,15 @@ function passesActiveFilters(g) {
 export function getVisibleGames() {
     const ds = _activeDs();
     if (!_activeCtx || !ds) return [];
-    let games = ds.games;
-    if (_activeCtx.explorerActive) {
+    let games = ds.games.filter(passesActiveFilters);
+    // Explorer narrows the list iff it has navigated off the start position.
+    // Games without pgn (byes/forfeits) aren't in the trie, so they naturally
+    // disappear once the explorer engages — which matches the existing UX.
+    if (_activeCtx.explorer.moveHistory.length > 0) {
         const stats = getExplorerStats();
         if (!stats) return []; // position not in database — empty list
         const explorerGameIds = new Set(stats.gameIds);
-        games = games.filter((g) => {
-            if (!passesActiveFilters(g)) return false;
-            return !g.pgn ? _activeCtx.explorer.moveHistory.length === 0 : g.gameId && explorerGameIds.has(g.gameId);
-        });
-    } else {
-        games = games.filter(passesActiveFilters);
+        games = games.filter((g) => g.gameId && explorerGameIds.has(g.gameId));
     }
 
     if (ds.sections.length > 0) {
@@ -841,17 +822,6 @@ function groupGames(games) {
     }
 
     return groups;
-}
-
-function buildPlayerListFromGames() {
-    const ds = _activeDs();
-    if (!ds) return [];
-    const byNorm = new Map();
-    for (const g of ds.games) {
-        if (g.white && g.whiteNorm) byNorm.set(g.whiteNorm, g.white);
-        if (g.black && g.blackNorm) byNorm.set(g.blackNorm, g.black);
-    }
-    return [...byNorm].map(([norm, name]) => ({ name, norm })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ─── Explorer query helpers ────────────────────────────────────────

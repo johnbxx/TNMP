@@ -66,7 +66,7 @@ import { showToast } from './toast.js';
 import {
     getCachedGame,
     getPlayer,
-    getGroupedGames,
+    getVisibleGameIds,
     getFilter,
     getLastTournamentKey,
     getVisibleGames,
@@ -725,10 +725,7 @@ async function handleShareAction(action) {
 }
 
 function handleBrowserExport() {
-    const gameIds = getGroupedGames()
-        .flatMap((g) => g.games)
-        .filter((g) => g.gameId)
-        .map((g) => g.gameId);
+    const gameIds = getVisibleGameIds();
     if (!gameIds.length) {
         showToast('No games to export', 'error');
         return;

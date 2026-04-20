@@ -1106,15 +1106,14 @@ games.onChange(() => {
         event: games.getFilter('event'),
         visibleSections: games.getVisibleSections(),
         groupedGames: games.getGroupedGames(),
-        explorerActive: games.isExplorerActive(),
         explorerFen: games.getExplorerFen(),
         explorerMoveHistory: games.getExplorerMoves(),
     };
     renderBrowserPanel(_activeTab.gamesState);
     // Update tab label when dataset changes (tournament switch, player select)
     if (!_activeTab.game) updateTabLabel(_activeTab);
-    // Explorer takes over the board/moves only when no game is loaded
-    if (_activeTab.gamesState.explorerActive && !_activeTab.game) {
+    // No active game → we're in explorer mode; keep its display in sync with the ctx.
+    if (!_activeTab.game) {
         setToolbarButtons();
         renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
@@ -1127,7 +1126,7 @@ games.onChange(() => {
 
 function onBoardMove(san) {
     if (_activeTab.editingComment) document.activeElement?.blur();
-    if (!_activeTab.game && games.isExplorerActive()) {
+    if (!_activeTab.game) {
         games.setExplorerPosition([...games.getExplorerMoves(), san]);
     } else {
         _activeTab.game.playMove(san);
@@ -1723,7 +1722,6 @@ function loadExplorer({ restoreMoves } = {}) {
     if (restoreMoves?.length) {
         games.setExplorerPosition(restoreMoves);
     } else {
-        games.ensureExplorer();
         if (_activeTab.gamesState) renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
         const fen = games.getExplorerFen() || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -2106,17 +2104,8 @@ export function explorerGoForward() {
     }
 }
 
-// Navigation helpers
-function getGameIdList() {
-    return games
-        .getGroupedGames()
-        .flatMap((g) => g.games)
-        .filter((g) => g.gameId)
-        .map((g) => g.gameId);
-}
-
 export function openGameFromBrowser(gameId) {
-    const gameList = getGameIdList();
+    const gameList = games.getVisibleGameIds();
     const idx = gameList.indexOf(gameId);
     if (idx === -1) return;
     openGameAtIndex(gameList, idx);
@@ -2184,7 +2173,7 @@ export function handlePanelKeydown(e) {
     }
 
     // Explorer mode keyboard (only when explorer view is active, not while viewing a game)
-    if (!_activeTab.game && games.isExplorerActive()) {
+    if (!_activeTab.game) {
         const moves = games.getExplorerStats()?.moves;
         if (e.key === 'ArrowDown' && moves?.length) {
             _activeTab.explorerSelectedIdx = Math.min(_activeTab.explorerSelectedIdx + 1, moves.length - 1);
@@ -3196,7 +3185,7 @@ function renderBrowserGameList(panelEl, state) {
             vl.assigned.clear();
         }
         vl.free = {};
-        const label = state.explorerActive ? 'No games reached this position.' : 'No games found.';
+        const label = state.explorerMoveHistory?.length > 0 ? 'No games reached this position.' : 'No games found.';
         gamesEl.innerHTML = `<div class="browser-empty"><p>${label}</p><img src="knight404.svg" alt="" class="browser-empty-img"></div>`;
         return;
     }
@@ -3718,7 +3707,7 @@ function importFromTexts(texts) {
 
     // Delete old cloned ctx to free trie memory before importing new dataset
     if (_activeTab.ctxKey?.startsWith('tab:')) games.deleteCtx(_activeTab.ctxKey);
-    games.setGamesData({ games: importedGames, query: { local: true } });
+    games.ingestDataset(`import:${Date.now()}`, { games: importedGames });
     openImportedGames(importedGames);
     showToast(`${importedGames.length} game${importedGames.length !== 1 ? 's' : ''} imported`, 'success');
 }

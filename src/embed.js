@@ -73,7 +73,7 @@ import {
     launchExplorer,
     initGamePanel,
 } from './game-panel.js';
-import { getCachedGame, getPlayer, getGroupedGames, getFilter } from './games.js';
+import { getCachedGame, getPlayer, getVisibleGameIds, getFilter } from './games.js';
 import { queryGames, getPlayerUscfId, prefetchGames } from './tnm.js';
 
 // --- PGN download helper ---
@@ -287,10 +287,7 @@ function handleShareAction(action) {
 }
 
 function handleBrowserExport() {
-    const gameIds = getGroupedGames()
-        .flatMap((g) => g.games)
-        .filter((g) => g.gameId)
-        .map((g) => g.gameId);
+    const gameIds = getVisibleGameIds();
     if (!gameIds.length) {
         showToast('No games to export', 'error');
         return;
