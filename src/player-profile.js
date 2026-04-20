@@ -69,9 +69,9 @@ function computeStats(games, norm) {
         tally(tournaments.get(slug), outcome);
 
         // ECO (by opening family, not raw ECO code — A00 covers many unrelated openings)
-        if (game.eco && game.openingName) {
-            const family = openingFamily(game.openingName);
-            if (!ecos.has(family)) ecos.set(family, { name: game.openingName, white: wld(), black: wld() });
+        if (game.eco && game.opening) {
+            const family = openingFamily(game.opening);
+            if (!ecos.has(family)) ecos.set(family, { name: game.opening, white: wld(), black: wld() });
             tally(ecos.get(family)[side], outcome);
         }
 

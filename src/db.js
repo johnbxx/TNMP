@@ -6,9 +6,14 @@
  * re-derive their in-memory view.
  *
  * Schema v1 — three stores:
- *   - games        keyPath 'id', indexes: fingerprint (unique), modifiedAt, kind
+ *   - games        keyPath 'id', indexes: fingerprint (unique),
+ *                  contentFingerprint (non-unique), modifiedAt, kind
  *   - collections  keyPath 'id', indexes: kind, modifiedAt
  *   - settings     keyPath 'key'
+ *
+ * contentFingerprint is non-unique: it dedupes re-imports of the same
+ * game with sloppy/conflicting headers, but we don't want a hard uniqueness
+ * constraint fighting us if two legitimately distinct records collide.
  *
  * Records are free-form beyond the key + indexed fields. The record
  * layer (src/record.js) owns the shape of game/collection records and
@@ -53,6 +58,7 @@ function _upgrade(db, oldVersion) {
     if (oldVersion < 1) {
         const games = db.createObjectStore('games', { keyPath: 'id' });
         games.createIndex('fingerprint', 'fingerprint', { unique: true });
+        games.createIndex('contentFingerprint', 'contentFingerprint', { unique: false });
         games.createIndex('modifiedAt', 'modifiedAt');
         games.createIndex('kind', 'kind');
 
@@ -134,6 +140,20 @@ export async function getAllGames() {
 
 export async function getGameByFingerprint(fingerprint) {
     return _tx('games', 'readonly', (tx) => _req(tx.objectStore('games').index('fingerprint').get(fingerprint)));
+}
+
+/**
+ * Look up a game by content fingerprint (mainline move hash + players +
+ * result). Non-unique index — returns the first match. Our dedup goal
+ * is "find *a* prior record with identical content" rather than every
+ * collision; if later needs require the full list we can switch to getAll.
+ * Short-circuits on null so callers don't need to guard.
+ */
+export async function getGameByContentFingerprint(contentFingerprint) {
+    if (contentFingerprint == null) return undefined;
+    return _tx('games', 'readonly', (tx) =>
+        _req(tx.objectStore('games').index('contentFingerprint').get(contentFingerprint)),
+    );
 }
 
 export async function getGamesByKind(kind) {

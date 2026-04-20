@@ -1,11 +1,28 @@
 /**
- * PGN annotation parser — tokenizes and parses PGN move text into
- * an annotated move tree with comments, NAGs, and variations.
+ * PGN annotation parser + serializer — tokenizes and parses PGN move text
+ * into an annotated move tree with comments, NAGs, and variations; and
+ * serializes records back to PGN wire format.
  *
- * Pure parsing logic with no DOM or board dependencies.
+ * This module owns the wire boundary: PGN's Title-Case header shape lives
+ * only here. parseRecord emits flat lowercase records; serializePgn
+ * synthesizes Title-Case headers on output. Everywhere else in the app
+ * speaks flat records.
+ *
+ * The set of first-class fields is defined by FIELD_SCHEMA in record.js
+ * — add or remove a field there and parseRecord + serializeHeaders pick
+ * it up automatically via the schema iteration below.
+ *
+ * Pure wire logic — no ingest-shape concerns (gameId synthesis, local
+ * indices, etc. live in games.js). No DOM or board dependencies.
  */
 
-import { getHeader } from './utils.js';
+import { FIELD_SCHEMA, KNOWN_PGN_TAGS } from './record.js';
+
+// White/Black NAG pairs — toggling one auto-flips to its counterpart
+// based on which side made the move. (22=White zugzwang, 23=Black
+// zugzwang; etc.)
+export const NAG_PAIRS = { 22: 23, 32: 33, 36: 37, 40: 41, 44: 45, 132: 133, 138: 139 };
+export const NAG_PAIR_REVERSE = Object.fromEntries(Object.entries(NAG_PAIRS).map(([w, b]) => [b, +w]));
 
 // NAG metadata: [symbol, description, category]
 export const NAG_INFO = {
@@ -372,13 +389,6 @@ export function extractMoveText(pgn) {
     return i >= 0 ? pgn.substring(i).trim() : pgn.trim();
 }
 
-export function buildCleanPgn(pgn, mainLineMoves) {
-    const i = findHeaderEnd(pgn);
-    const headers = i >= 0 ? pgn.substring(0, i) : '';
-    const moveStr = mainLineMoves.map((m) => m.san).join(' ');
-    return headers + '\n' + moveStr;
-}
-
 // Scans forward through header lines rather than using lastIndexOf,
 // which fails when movetext contains ]\n (e.g. {[#]\n}).
 function findHeaderEnd(pgn) {
@@ -401,38 +411,111 @@ function findHeaderEnd(pgn) {
     return end > 0 ? end : -1;
 }
 
-export function serializePgn(moves, headers = {}, result) {
+// ─── Serialization ─────────────────────────────────────────────────
+
+// Strips embedded quotes so header values can never close their own tag.
+const sanitize = (v) => String(v).replace(/"/g, '');
+
+function serializeAnnotations(annotations) {
+    if (!annotations) return '';
+    const parts = [];
+    if (annotations.clk) parts.push(`[%clk ${annotations.clk}]`);
+    if (annotations.eval != null) parts.push(`[%eval ${annotations.eval}]`);
+    if (annotations.arrows) parts.push(`[%cal ${annotations.arrows.join(',')}]`);
+    if (annotations.squares) parts.push(`[%csl ${annotations.squares.join(',')}]`);
+    for (const [k, v] of Object.entries(annotations)) {
+        if (!['clk', 'eval', 'arrows', 'squares'].includes(k)) parts.push(`[%${k} ${v}]`);
+    }
+    return parts.join(' ');
+}
+
+// Fields with compound or special serialization — tournament+section fold
+// into Event, round+board pack into Round. Handled explicitly; the generic
+// schema loop skips them.
+const COMPOUND_KEYS = new Set(['tournament', 'section', 'round', 'board']);
+
+// Synthesize Seven Tag Roster + known headers from a flat record,
+// then any extraHeaders verbatim. Record's tournamentSlug is internal
+// and never emitted.
+function serializeHeaders(record) {
     const lines = [];
+    const push = (key, value) => {
+        if (value == null || value === '') return;
+        lines.push(`[${key} "${sanitize(value)}"]`);
+    };
 
-    // Write headers (strip double quotes to prevent PGN injection)
-    const sanitize = (v) => String(v).replace(/"/g, '');
-    const headerOrder = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
-    const written = new Set();
-    for (const key of headerOrder) {
-        if (headers[key] != null) {
-            lines.push(`[${key} "${sanitize(headers[key])}"]`);
-            written.add(key);
+    // Seven Tag Roster — PGN standard output order for the first seven tags.
+    // Event recombines tournament + section (e.g. "2023 Spring TNM: Open").
+    // Callers whose source had a separate [Section "..."] header will see
+    // it duplicated below from extraHeaders — acceptable redundancy.
+    const event =
+        record.tournament && record.section ? `${record.tournament}: ${record.section}` : record.tournament || null;
+    push('Event', event);
+    push('Site', record.extraHeaders?.Site);
+    push('Date', record.date);
+    const roundStr =
+        record.round != null && record.board != null
+            ? `${record.round}.${record.board}`
+            : record.round != null
+              ? String(record.round)
+              : null;
+    push('Round', roundStr);
+    push('White', record.white);
+    push('Black', record.black);
+    push('Result', record.result);
+
+    // Remaining first-class fields in schema order. Skip compound keys
+    // (already emitted above) and fields without a PGN tag.
+    const emitted = new Set(['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result']);
+    for (const { key, pgn: tag } of FIELD_SCHEMA) {
+        if (!tag || COMPOUND_KEYS.has(key) || emitted.has(tag)) continue;
+        push(tag, record[key]);
+        emitted.add(tag);
+    }
+
+    if (record.startFen) {
+        push('FEN', record.startFen);
+        push('SetUp', '1');
+    }
+
+    // extraHeaders: verbatim passthrough of anything un-indexed we caught
+    // on parse. Skip keys we've already emitted to avoid duplication.
+    const written = new Set(lines.map((l) => l.match(/^\[(\w+)/)[1]));
+    if (record.extraHeaders) {
+        for (const [k, v] of Object.entries(record.extraHeaders)) {
+            if (written.has(k)) continue;
+            push(k, v);
         }
     }
-    for (const [key, value] of Object.entries(headers)) {
-        if (!written.has(key) && value != null) {
-            lines.push(`[${key} "${sanitize(value)}"]`);
-        }
+    return lines;
+}
+
+/**
+ * Serialize a flat record to PGN wire format. Movetext source is chosen
+ * by opts: `moves` (flat SAN array with variations) or `tree` (node
+ * array from pgn.js's buildMoveTree). `readable: true` swaps numeric
+ * NAGs ($1) for their symbol forms (!) in tree serialization.
+ */
+export function serializePgn(record, opts = {}) {
+    const { moves, tree, readable = false } = opts;
+    const resultToken = opts.result || record.result || '*';
+
+    const lines = serializeHeaders(record);
+
+    let movetext = '';
+    if (moves) {
+        movetext = serializeMovesArray(moves, 1, true);
+    } else if (tree) {
+        movetext = serializeTree(tree, { readable });
     }
 
-    // Serialize moves
-    const resultToken = result || headers.Result || '*';
-    const moveText = serializeMoves(moves, 1, true);
-    const fullText = moveText ? moveText + ' ' + resultToken : resultToken;
-
-    // Word-wrap at ~80 chars
+    const fullText = movetext ? movetext + ' ' + resultToken : resultToken;
     if (lines.length > 0) lines.push('');
     lines.push(wordWrap(fullText, 80));
-
     return lines.join('\n') + '\n';
 }
 
-function serializeMoves(moves, moveNum, whiteToMove) {
+function serializeMovesArray(moves, moveNum, whiteToMove) {
     const parts = [];
     let num = moveNum;
     let forceNum = true; // Always print move number at start of a line/variation
@@ -450,35 +533,81 @@ function serializeMoves(moves, moveNum, whiteToMove) {
 
         parts.push(m.san);
 
-        // NAGs
         if (m.nags) {
-            for (const nag of m.nags) {
-                parts.push(`$${nag}`);
-            }
+            for (const nag of m.nags) parts.push(`$${nag}`);
         }
-
-        // Comment
         if (m.comment) {
             parts.push(`{${m.comment}}`);
             forceNum = true;
         }
-
-        // Variations — alternatives to THIS move, so they start at same color and move number
         if (m.variations) {
             for (const variation of m.variations) {
-                const varText = serializeMoves(variation, num, isWhite);
-                parts.push(`(${varText})`);
+                parts.push(`(${serializeMovesArray(variation, num, isWhite)})`);
             }
             forceNum = true;
         }
-
-        // Advance move number after Black's move
-        if (!isWhite) {
-            num++;
-        }
+        if (!isWhite) num++;
     }
 
     return parts.join(' ');
+}
+
+/**
+ * Walk a node tree (from pgn.js's buildMoveTree) and emit PGN movetext.
+ * Handles variations via sibling enumeration, skips deleted nodes, and
+ * (when readable) replaces numeric NAGs with symbol forms.
+ */
+function serializeTree(nodes, { readable = false } = {}) {
+    if (!nodes?.length || nodes[0].mainChild === null) return '';
+
+    function walkLine(startId, isVariationStart) {
+        const parts = [];
+        let id = startId;
+        let forceNum = true;
+        let skipSiblings = isVariationStart;
+        while (id !== null) {
+            const node = nodes[id];
+            if (!node || node.deleted) break;
+            const moveNum = Math.floor((node.ply - 1) / 2) + 1;
+            const isWhite = node.ply % 2 === 1;
+            if (isWhite) parts.push(`${moveNum}.`);
+            else if (forceNum) parts.push(`${moveNum}...`);
+            forceNum = false;
+
+            let san = node.san;
+            if (readable && node.nags) {
+                for (const nag of node.nags) san += NAG_INFO[nag]?.[0] || `$${nag}`;
+            }
+            parts.push(san);
+            if (!readable && node.nags) {
+                for (const nag of node.nags) parts.push(`$${nag}`);
+            }
+
+            if (node.comment || (!readable && node.annotations)) {
+                const annStr = readable ? '' : serializeAnnotations(node.annotations);
+                const text = node.comment && annStr ? `${node.comment} ${annStr}` : node.comment || annStr;
+                if (text) {
+                    parts.push(`{${text}}`);
+                    forceNum = true;
+                }
+            }
+
+            const parent = nodes[node.parentId];
+            if (!skipSiblings && parent && parent.children.length > 1) {
+                for (const altId of parent.children) {
+                    if (altId !== id && !nodes[altId].deleted) {
+                        parts.push(`(${walkLine(altId, true).join(' ')})`);
+                    }
+                }
+                forceNum = true;
+            }
+            skipSiblings = false;
+            id = node.mainChild;
+        }
+        return parts;
+    }
+
+    return walkLine(nodes[0].mainChild).join(' ');
 }
 
 function wordWrap(text, width) {
@@ -508,60 +637,80 @@ export function splitPgn(text) {
     });
 }
 
-export function pgnToGameObject(pgn, index) {
-    const white = getHeader(pgn, 'White') || 'Unknown';
-    const black = getHeader(pgn, 'Black') || 'Unknown';
-    const result = getHeader(pgn, 'Result') || '*';
-    const event = getHeader(pgn, 'Event') || '';
-    const date = getHeader(pgn, 'Date') || '';
-    const roundStr = getHeader(pgn, 'Round') || '';
-    const whiteElo = getHeader(pgn, 'WhiteElo');
-    const blackElo = getHeader(pgn, 'BlackElo');
-    const eco = getHeader(pgn, 'ECO');
-    const openingName = getHeader(pgn, 'Opening') || '';
-    const sectionHeader = getHeader(pgn, 'Section') || '';
+// Headers we pull out as first-class fields; anything else goes in
+// extraHeaders for faithful round-trip. KNOWN_PGN_TAGS comes from
+// FIELD_SCHEMA; the extras are compound/special-cased tags (Section
+// folds into Event, FEN/SetUp ride startFen) plus Site which is
+// preserved but not first-class.
+const KNOWN_HEADERS = new Set([...KNOWN_PGN_TAGS, 'Site', 'Section', 'FEN', 'SetUp']);
 
-    // Parse section from Event header (e.g., "2023 Spring TNM: Open" → section "Open")
-    let eventBase = event;
-    let eventSection = sectionHeader;
-    if (!eventSection && event.includes(': ')) {
-        const colonIdx = event.indexOf(': ');
-        eventBase = event.slice(0, colonIdx);
-        eventSection = event.slice(colonIdx + 2);
+function extractAllHeaders(pgn) {
+    const headers = {};
+    const headerRegex = /\[(\w+)\s+"([^"]*)"\]/g;
+    let m;
+    while ((m = headerRegex.exec(pgn)) !== null) {
+        headers[m[1]] = m[2];
+    }
+    return headers;
+}
+
+/**
+ * Parse a PGN string's headers into a flat record. No index / movetext
+ * scan — just the identity/metadata fields. First-class indexed fields
+ * land at the top level; unknown PGN headers (Site, TimeControl,
+ * Annotator, ...) are preserved verbatim in `extraHeaders` for
+ * lossless round-trip.
+ */
+export function parseRecord(pgn) {
+    const all = extractAllHeaders(pgn);
+
+    // Simple pgn→key copy for all first-class fields. Compound fields
+    // (tournament/section/round/board) are overwritten below.
+    const rec = {};
+    for (const { key, pgn: tag } of FIELD_SCHEMA) {
+        if (tag) rec[key] = all[tag] || null;
     }
 
-    // Parse round.board format (e.g., "4.18" → round=4, board=18)
-    let round = null;
-    let board = null;
+    // Event header folds tournament + section (e.g., "2023 Spring TNM: Open"
+    // → tournament "2023 Spring TNM", section "Open"). A separate
+    // [Section "..."] header wins if present.
+    const event = all.Event || '';
+    let tournament = event;
+    let section = all.Section || '';
+    if (!section && event.includes(': ')) {
+        const colonIdx = event.indexOf(': ');
+        tournament = event.slice(0, colonIdx);
+        section = event.slice(colonIdx + 2);
+    }
+    rec.tournament = tournament || null;
+    rec.section = section || null;
+
+    // Round unpacks "R.B" format (e.g., "4.18" → round=4, board=18).
+    const roundStr = all.Round || '';
+    rec.round = null;
+    rec.board = null;
     if (roundStr.includes('.')) {
         const parts = roundStr.split('.');
-        round = parseInt(parts[0], 10) || null;
-        board = parseInt(parts[1], 10) || null;
+        rec.round = parseInt(parts[0], 10) || null;
+        rec.board = parseInt(parts[1], 10) || null;
     } else if (roundStr && roundStr !== '-' && roundStr !== '?') {
-        round = parseInt(roundStr, 10) || null;
+        rec.round = parseInt(roundStr, 10) || null;
     }
 
-    // Check if movetext has actual moves
-    const moveText = extractMoveText(pgn).trim();
-    const hasMoves = /[KQRBNP]?[a-h]?[1-8]?x?[a-h][1-8]|O-O/.test(moveText);
+    // Required-field defaults.
+    rec.white = rec.white || 'Unknown';
+    rec.black = rec.black || 'Unknown';
+    rec.result = rec.result || '*';
 
-    return {
-        gameId: `local-${index}`,
-        tournament: eventBase || null,
-        tournamentSlug: null,
-        round,
-        board: board || index + 1,
-        white,
-        black,
-        whiteElo: whiteElo || null,
-        blackElo: blackElo || null,
-        result,
-        eco: eco || null,
-        openingName: openingName || null,
-        section: eventSection || null,
-        date: date || null,
-        hasPgn: hasMoves,
-        pgn,
-        submission: null,
-    };
+    // Stash non-first-class headers for faithful round-trip.
+    const extraHeaders = {};
+    for (const [k, v] of Object.entries(all)) {
+        if (!KNOWN_HEADERS.has(k) && v) extraHeaders[k] = v;
+    }
+    // Site is not first-class but we want to preserve it; keep in extraHeaders.
+    if (all.Site) extraHeaders.Site = all.Site;
+
+    if (Object.keys(extraHeaders).length > 0) rec.extraHeaders = extraHeaders;
+    if (all.FEN) rec.startFen = all.FEN;
+    return rec;
 }

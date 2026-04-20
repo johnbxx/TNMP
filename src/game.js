@@ -1,26 +1,31 @@
 /**
- * PGN Module — pure data layer for game move trees.
+ * Game session factory — per-tab game instance with move tree,
+ * navigation, annotations, comments, auto-play, and branch mode.
  *
- * createGame(pgnText, opts) returns an isolated game instance with its own
- * node tree, navigation, annotations, comments, auto-play, and branch mode.
- * Multiple instances can coexist (one per tab).
+ * Wire-layer PGN parsing/serialization is delegated to pgn-parser.js;
+ * this module owns the in-memory game state. The module name is
+ * deliberately singular to pair with games.js (plural, source-agnostic
+ * data layer for collections of games).
  *
- * Zero DOM manipulation. Notifies observer via onChange callback with
- * current state after every mutation so the view layer can re-render.
- *
- * Receives user moves from board.js via playMove(san).
- * Reports position changes upstream via onPositionChange callback.
+ * createGame(pgnText, opts) returns an isolated instance — multiple
+ * can coexist. Zero DOM manipulation; notifies the view via onChange
+ * after every mutation. Receives user moves from board.js via
+ * playMove(san) and reports position changes via onPositionChange.
  */
 
 import { Chess } from 'chess.js';
-import { parseMoveText, extractMoveText, NAG_INFO } from './pgn-parser.js';
+import {
+    parseMoveText,
+    extractMoveText,
+    parseRecord,
+    serializePgn,
+    NAG_INFO,
+    NAG_PAIRS,
+    NAG_PAIR_REVERSE,
+} from './pgn-parser.js';
 
 export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AUTO_PLAY_INTERVAL_MS = 1200;
-
-// NAG pairs: White/Black variants (e.g. 22=White zugzwang, 23=Black zugzwang).
-const NAG_PAIRS = { 22: 23, 32: 33, 36: 37, 40: 41, 44: 45, 132: 133, 138: 139 };
-const NAG_PAIR_REVERSE = Object.fromEntries(Object.entries(NAG_PAIRS).map(([w, b]) => [b, +w]));
 
 // ─── Pure helpers (shared across all instances) ────────────────────
 
@@ -82,138 +87,18 @@ function buildMoveTree(moves, fen) {
     return result;
 }
 
-function serializeAnnotations(annotations) {
-    if (!annotations) return '';
-    const parts = [];
-    if (annotations.clk) parts.push(`[%clk ${annotations.clk}]`);
-    if (annotations.eval != null) parts.push(`[%eval ${annotations.eval}]`);
-    if (annotations.arrows) parts.push(`[%cal ${annotations.arrows.join(',')}]`);
-    if (annotations.squares) parts.push(`[%csl ${annotations.squares.join(',')}]`);
-    for (const [k, v] of Object.entries(annotations)) {
-        if (!['clk', 'eval', 'arrows', 'squares'].includes(k)) parts.push(`[%${k} ${v}]`);
-    }
-    return parts.join(' ');
-}
-
-function serializeTree(nodes, headers) {
-    const lines = [];
-    const sanitize = (v) => String(v).replace(/"/g, '');
-    const order = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
-    const written = new Set();
-    for (const key of order) {
-        if (headers[key] != null) {
-            lines.push(`[${key} "${sanitize(headers[key])}"]`);
-            written.add(key);
-        }
-    }
-    for (const [key, value] of Object.entries(headers)) {
-        if (!written.has(key) && value != null) lines.push(`[${key} "${sanitize(value)}"]`);
-    }
-    function walkLine(startId, isVariationStart) {
-        const parts = [];
-        let id = startId;
-        let forceNum = true;
-        let skipSiblings = isVariationStart;
-        while (id !== null) {
-            const node = nodes[id];
-            if (!node || node.deleted) break;
-            const moveNum = Math.floor((node.ply - 1) / 2) + 1;
-            const isWhite = node.ply % 2 === 1;
-            if (isWhite) parts.push(`${moveNum}.`);
-            else if (forceNum) parts.push(`${moveNum}...`);
-            forceNum = false;
-            parts.push(node.san);
-            if (node.nags) for (const nag of node.nags) parts.push(`$${nag}`);
-            if (node.comment || node.annotations) {
-                const annStr = serializeAnnotations(node.annotations);
-                const text = node.comment && annStr ? `${node.comment} ${annStr}` : node.comment || annStr;
-                parts.push(`{${text}}`);
-                forceNum = true;
-            }
-            const parent = nodes[node.parentId];
-            if (!skipSiblings && parent && parent.children.length > 1) {
-                for (const altId of parent.children) {
-                    if (altId !== id && !nodes[altId].deleted) {
-                        parts.push(`(${walkLine(altId, true).join(' ')})`);
-                    }
-                }
-                forceNum = true;
-            }
-            skipSiblings = false;
-            id = node.mainChild;
-        }
-        return parts;
-    }
-    const resultToken = headers.Result || '*';
-    const moveText = nodes[0].mainChild !== null ? walkLine(nodes[0].mainChild).join(' ') : '';
-    const fullText = moveText ? moveText + ' ' + resultToken : resultToken;
-    if (lines.length > 0) lines.push('');
-    const words = fullText.split(/\s+/);
-    let line = '';
-    for (const word of words) {
-        if (line && line.length + 1 + word.length > 80) {
-            lines.push(line);
-            line = word;
-        } else line = line ? line + ' ' + word : word;
-    }
-    if (line) lines.push(line);
-    return lines.join('\n') + '\n';
-}
-
-function walkReadable(nodes, startId) {
-    const parts = [];
-    let id = startId;
-    let forceNum = true;
-    let isFirst = true;
-    while (id !== null) {
-        const node = nodes[id];
-        if (!node || node.deleted) break;
-        const moveNum = Math.floor((node.ply - 1) / 2) + 1;
-        const isWhite = node.ply % 2 === 1;
-        if (isWhite) parts.push(`${moveNum}.`);
-        else if (forceNum) parts.push(`${moveNum}...`);
-        forceNum = false;
-        let san = node.san;
-        if (node.nags) {
-            for (const nag of node.nags) {
-                san += NAG_INFO[nag]?.[0] || `$${nag}`;
-            }
-        }
-        parts.push(san);
-        if (node.comment) {
-            parts.push(`{${node.comment}}`);
-            forceNum = true;
-        }
-        const parent = nodes[node.parentId];
-        if (!isFirst && parent && parent.children.length > 1) {
-            for (const altId of parent.children) {
-                if (altId !== id && !nodes[altId].deleted) {
-                    parts.push(`(${walkReadable(nodes, altId)})`);
-                }
-            }
-            forceNum = true;
-        }
-        isFirst = false;
-        id = node.mainChild;
-    }
-    return parts.join(' ');
-}
-
 // ─── Game instance factory ─────────────────────────────────────────
 
 export function createGame(pgnText, { onPositionChange, onChange } = {}) {
-    // Parse headers
-    let headers = {};
-    const headerRegex = /\[(\w+)\s+"([^"]*)"\]/g;
-    let match;
-    while ((match = headerRegex.exec(pgnText)) !== null) {
-        headers[match[1]] = match[2];
-    }
+    // Parse PGN headers into a flat record (lowercase, typed). This is
+    // the one canonical shape — PGN's Title-Case convention only survives
+    // in pgn-parser.js at the wire boundary.
+    let record = parseRecord(pgnText);
 
     // Build tree
     const moveText = extractMoveText(pgnText);
     const moves = parseMoveText(moveText);
-    const startingFen = headers.FEN || START_FEN;
+    const startingFen = record.startFen || START_FEN;
     let nodes = buildMoveTree(moves, startingFen);
     let currentNodeId = 0;
     let autoPlayTimer = null;
@@ -228,8 +113,7 @@ export function createGame(pgnText, { onPositionChange, onChange } = {}) {
             commentsHidden,
             isPlaying: autoPlayTimer !== null,
             branchMode,
-            headers,
-            startingFen,
+            record,
         });
     }
 
@@ -446,41 +330,22 @@ export function createGame(pgnText, { onPositionChange, onChange } = {}) {
             return branchMode;
         },
 
-        getHeaders() {
-            return { ...headers };
+        getRecord() {
+            return { ...record };
         },
 
-        setHeaders(h) {
+        setRecord(r) {
             dirty = true;
-            headers = { ...h };
+            record = { ...r };
             notifyChange();
         },
 
         getPgn() {
-            return serializeTree(nodes, headers);
+            return serializePgn(record, { tree: nodes });
         },
 
         getReadablePgn() {
-            const lines = [];
-            const sanitize = (v) => String(v).replace(/"/g, '');
-            const order = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
-            const written = new Set();
-            for (const key of order) {
-                if (headers[key] != null) {
-                    lines.push(`[${key} "${sanitize(headers[key])}"]`);
-                    written.add(key);
-                }
-            }
-            for (const [key, value] of Object.entries(headers)) {
-                if (!written.has(key) && value != null) lines.push(`[${key} "${sanitize(value)}"]`);
-            }
-            if (nodes[0].mainChild === null) return lines.join('\n') + '\n';
-            const readableMoves = walkReadable(nodes, nodes[0].mainChild);
-            const result = headers.Result || '*';
-            const fullText = readableMoves + ' ' + result;
-            if (lines.length > 0) lines.push('');
-            lines.push(fullText);
-            return lines.join('\n') + '\n';
+            return serializePgn(record, { tree: nodes, readable: true });
         },
 
         getCurrentFen() {

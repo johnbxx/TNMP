@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fingerprint, deriveKind, mergeOnRefresh, ingestSource } from '../src/record.js';
+import { fingerprint, deriveKind, mergeOnRefresh, ingestSource, hashMoves, contentFingerprint } from '../src/record.js';
 
 // ─── Fingerprint ───────────────────────────────────────────────────
 
@@ -59,6 +59,75 @@ describe('fingerprint', () => {
     it('handles missing record', () => {
         expect(() => fingerprint(undefined)).not.toThrow();
         expect(() => fingerprint(null)).not.toThrow();
+    });
+});
+
+// ─── hashMoves / contentFingerprint ────────────────────────────────
+
+describe('hashMoves', () => {
+    it('returns the same number for the same mainline', () => {
+        const a = hashMoves(['e4', 'e5', 'Nf3', 'Nc6']);
+        const b = hashMoves(['e4', 'e5', 'Nf3', 'Nc6']);
+        expect(a).toBe(b);
+        expect(typeof a).toBe('number');
+    });
+
+    it('distinguishes different mainlines', () => {
+        const a = hashMoves(['e4', 'e5', 'Nf3', 'Nc6']);
+        const b = hashMoves(['e4', 'e5', 'Nf3', 'd6']);
+        expect(a).not.toBe(b);
+    });
+
+    it('distinguishes transposed move orders', () => {
+        // Same reached positions, different SAN sequences — the mainline
+        // hash is move-order sensitive (it's the sequence, not the position).
+        const a = hashMoves(['e4', 'c5', 'Nf3', 'd6']);
+        const b = hashMoves(['Nf3', 'd6', 'e4', 'c5']);
+        expect(a).not.toBe(b);
+    });
+
+    it('returns null for stubs below the minimum ply threshold', () => {
+        expect(hashMoves([])).toBeNull();
+        expect(hashMoves(['e4'])).toBeNull();
+        expect(hashMoves(['e4', 'e5', 'Nf3'])).toBeNull(); // 3 plies
+    });
+
+    it('handles non-array inputs safely', () => {
+        expect(hashMoves(null)).toBeNull();
+        expect(hashMoves(undefined)).toBeNull();
+    });
+});
+
+describe('contentFingerprint', () => {
+    const rec = { white: 'Alice', black: 'Bob', result: '1-0' };
+
+    it('is stable across normalized player names', () => {
+        const a = contentFingerprint(rec, 12345);
+        const b = contentFingerprint({ white: '  ALICE ', black: 'bob', result: '1-0' }, 12345);
+        expect(a).toBe(b);
+    });
+
+    it('changes when players differ', () => {
+        const a = contentFingerprint(rec, 12345);
+        const b = contentFingerprint({ ...rec, white: 'Carol' }, 12345);
+        expect(a).not.toBe(b);
+    });
+
+    it('changes when result differs', () => {
+        const a = contentFingerprint(rec, 12345);
+        const b = contentFingerprint({ ...rec, result: '0-1' }, 12345);
+        expect(a).not.toBe(b);
+    });
+
+    it('changes when moveHash differs', () => {
+        const a = contentFingerprint(rec, 12345);
+        const b = contentFingerprint(rec, 67890);
+        expect(a).not.toBe(b);
+    });
+
+    it('returns null when moveHash is null', () => {
+        expect(contentFingerprint(rec, null)).toBeNull();
+        expect(contentFingerprint(rec, undefined)).toBeNull();
     });
 });
 

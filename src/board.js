@@ -11,7 +11,7 @@
 
 import { Chess } from 'chess.js';
 import { Chessground } from '@lichess-org/chessground';
-import { START_FEN } from './pgn.js';
+import { START_FEN } from './game.js';
 
 // ─── Pure helpers (shared across all instances) ────────────────────
 

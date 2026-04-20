@@ -14,24 +14,45 @@
  * pass them here, and write the result back.
  */
 
-// Indexed fields that record.js understands and exposes as top-level
-// properties. Anything else a source carries lands in `extraHeaders`
-// keyed by its original PGN header name (e.g. ECO, Opening, TimeControl).
-const INDEXED_FIELDS = [
-    'tournament', // PGN: Event
-    'tournamentSlug', // source-supplied; stable id for the Event
-    'section',
-    'date',
-    'round',
-    'board',
-    'white',
-    'black',
-    'whiteElo',
-    'blackElo',
-    'result',
-    'termination',
-    'plyCount',
+// Canonical schema for first-class record fields. One-place edit to add
+// or remove a first-class field — consumed by record.js (indexed/merge),
+// pgn-parser.js (parse + serialize + extraHeaders split), and
+// game-panel.js (header editor display).
+//
+// `pgn` is the Title-Case tag this field maps to at the wire boundary.
+// `null` means no direct tag — either internal (tournamentSlug) or
+// folded into a compound tag (section → Event, board → Round).
+// `label` defaults to `pgn`; set it only when the display name differs
+// or when pgn is null but the field is still user-visible.
+//
+// Order here drives the header editor's display order and influences
+// (but doesn't dictate) PGN output order — serializeHeaders emits the
+// Seven Tag Roster in its own fixed order and then trails the rest.
+export const FIELD_SCHEMA = [
+    { key: 'tournament', pgn: 'Event' },
+    { key: 'section', pgn: null, label: 'Section' }, // folded into Event on serialize
+    { key: 'date', pgn: 'Date' },
+    { key: 'round', pgn: 'Round' }, // packed with board as "R.B"
+    { key: 'board', pgn: null, label: 'Board' }, // packed into Round
+    { key: 'white', pgn: 'White' },
+    { key: 'black', pgn: 'Black' },
+    { key: 'whiteElo', pgn: 'WhiteElo' },
+    { key: 'blackElo', pgn: 'BlackElo' },
+    { key: 'result', pgn: 'Result' },
+    { key: 'eco', pgn: 'ECO' }, // classified by us or carried from source
+    { key: 'opening', pgn: 'Opening' },
+    { key: 'termination', pgn: 'Termination' },
+    { key: 'plyCount', pgn: 'PlyCount' },
 ];
+
+// PGN tag names that map to a first-class field. Used by pgn-parser
+// to decide what to lift to top-level vs. stash in extraHeaders.
+export const KNOWN_PGN_TAGS = new Set(FIELD_SCHEMA.map((f) => f.pgn).filter(Boolean));
+
+// All indexed keys iterated by merge/ingest. tournamentSlug is internal
+// (no PGN tag, no user-visible label). moveHash + contentFingerprint are
+// derived dedup keys attached by the ingest layer (games.js).
+const INDEXED_FIELDS = [...FIELD_SCHEMA.map((f) => f.key), 'tournamentSlug', 'moveHash', 'contentFingerprint'];
 
 // Fields that CAN change between refreshes of the same game. Anything
 // not in this set is treated as set-once: once present in a record, it
@@ -75,6 +96,62 @@ function hasIdentity(r) {
 function normFp(v) {
     if (v == null) return '';
     return String(v).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// ─── Content fingerprint ───────────────────────────────────────────
+//
+// Context fingerprint (above) dedupes by tournament/date/round/board/
+// players — fragile when a user pastes a PGN with sloppy or missing
+// headers. Content fingerprint is the complement: hash of the moves
+// themselves, plus players + result as a sanity check against distinct
+// games that happen to share a prefix.
+//
+// Stored as numbers, not hex strings. IDB indexes numbers fine; parsing
+// hex on every lookup wastes cycles for no gain.
+
+// cyrb53 — deterministic 53-bit non-cryptographic hash. Fits in a JS
+// Number. Faster than SHA and the bit-budget is plenty for dedup use.
+function cyrb53(str, seed = 0) {
+    let h1 = 0xdeadbeef ^ seed;
+    let h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0, ch; i < str.length; i++) {
+        ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+    h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+    h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+// Minimum mainline ply count below which we refuse to compute a content
+// fingerprint. 1-3 ply games are dominated by forfeits and stubs; hashing
+// them would collide prolifically.
+const CONTENT_MIN_PLIES = 4;
+
+/**
+ * Hash of the mainline SAN sequence. Returns null when the sequence is
+ * too short to be meaningful for dedup (see CONTENT_MIN_PLIES).
+ */
+export function hashMoves(sans) {
+    if (!Array.isArray(sans) || sans.length < CONTENT_MIN_PLIES) return null;
+    return cyrb53(sans.join(' '));
+}
+
+/**
+ * Combined content fingerprint for a record: mainline move hash bound to
+ * normalized players + result. Catches the "same game, wrong headers"
+ * case without merging unrelated games that happen to share a move
+ * sequence. Returns null when moveHash is null.
+ */
+export function contentFingerprint(record, moveHash) {
+    if (moveHash == null) return null;
+    const w = normFp(record?.white);
+    const b = normFp(record?.black);
+    const r = String(record?.result ?? '').trim();
+    return cyrb53(`${w}|${b}|${r}|${moveHash}`);
 }
 
 // ─── Kind derivation ───────────────────────────────────────────────

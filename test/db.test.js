@@ -34,9 +34,9 @@ function makeGame(overrides = {}) {
         id: crypto.randomUUID(),
         kind: 'game',
         fingerprint: `fp-${Math.random().toString(36).slice(2)}`,
-        moveTree: null,
-        startFen: null,
-        headers: {},
+        white: 'Alice',
+        black: 'Bob',
+        result: '*',
         sources: [],
         createdAt: Date.now(),
         modifiedAt: Date.now(),
@@ -67,7 +67,12 @@ describe('openDB', () => {
         const db = await openDB();
         const tx = db.transaction('games', 'readonly');
         const store = tx.objectStore('games');
-        expect(Array.from(store.indexNames).sort()).toEqual(['fingerprint', 'kind', 'modifiedAt']);
+        expect(Array.from(store.indexNames).sort()).toEqual([
+            'contentFingerprint',
+            'fingerprint',
+            'kind',
+            'modifiedAt',
+        ]);
     });
 
     it('creates expected indexes on collections store', async () => {
@@ -86,18 +91,18 @@ describe('openDB', () => {
 
 describe('games CRUD', () => {
     it('putGame + getGame roundtrip', async () => {
-        const g = makeGame({ headers: { White: 'Alice' } });
+        const g = makeGame({ white: 'Alice' });
         await putGame(g);
         const fetched = await getGame(g.id);
         expect(fetched).toEqual(g);
     });
 
     it('putGame updates an existing record (same id)', async () => {
-        const g = makeGame({ headers: { Result: '*' } });
+        const g = makeGame({ result: '*' });
         await putGame(g);
-        await putGame({ ...g, headers: { Result: '1-0' } });
+        await putGame({ ...g, result: '1-0' });
         const fetched = await getGame(g.id);
-        expect(fetched.headers.Result).toBe('1-0');
+        expect(fetched.result).toBe('1-0');
     });
 
     it('deleteGame removes the record', async () => {

@@ -14,10 +14,12 @@ import { Chess } from 'chess.js';
 import { hashFen } from './tree.js';
 import { buildTrie, trieLookup, trieResolveGameIds, RESULT_TALLY } from './trie.js';
 import { getAllPlayers } from './tnm.js';
-import { fingerprint, ingestSource } from './record.js';
+import { fingerprint, ingestSource, hashMoves, contentFingerprint } from './record.js';
+import { parseRecord, extractMoveText, parseMoveText } from './pgn-parser.js';
 import {
     getGame,
     getGameByFingerprint,
+    getGameByContentFingerprint,
     putGame,
     getCollection,
     putCollection,
@@ -147,28 +149,58 @@ export function isValidLoadTarget(coll) {
 }
 
 /**
+ * Compute moveHash + contentFingerprint from a GameObject's PGN, if any.
+ * Returns a shallow-copy enriched game, or the original when PGN is
+ * missing / too short to hash. Cheap: mainline-only parse via
+ * parseMoveText, then two cyrb53 calls.
+ *
+ * Done at persist time rather than at ingest-adapter time so every
+ * source (TNM, pgnToRecord imports, future chess.com) gets fingerprints
+ * without each adapter having to remember.
+ */
+function _attachContentFingerprint(g) {
+    if (!g?.pgn) return g;
+    const moveText = extractMoveText(g.pgn);
+    if (!moveText) return g;
+    const sans = parseMoveText(moveText).map((m) => m.san);
+    const moveHash = hashMoves(sans);
+    if (moveHash == null) return g;
+    return { ...g, moveHash, contentFingerprint: contentFingerprint(g, moveHash) };
+}
+
+/**
  * Upsert a batch of GameObjects into IDB. Returns the record ids in the
  * same order as the input (bad rows skipped).
+ *
+ * Dedup resolution order for each game:
+ *   1. Context fingerprint (tournament/date/round/board/players).
+ *   2. Content fingerprint (hash of mainline + players + result) —
+ *      catches the "same game, sloppy or mismatched headers" case.
+ *   3. Otherwise create a new record.
  *
  * mergeExisting:
  *   - true (refresh path): append a source to already-stored records,
  *     merging mutable fields via record.js rules.
- *   - false (user-save path): if a fingerprint already exists, reuse
+ *   - false (user-save path): if a prior record already exists, reuse
  *     its id without appending another source entry.
  */
 async function _persistGames(games, sourceType, mergeExisting) {
     const ids = [];
     for (const g of games) {
         try {
-            const existing = await getGameByFingerprint(fingerprint(g));
+            const enriched = _attachContentFingerprint(g);
+            let existing = await getGameByFingerprint(fingerprint(enriched));
+            if (!existing && enriched.contentFingerprint != null) {
+                existing = await getGameByContentFingerprint(enriched.contentFingerprint);
+            }
             if (existing && !mergeExisting) {
                 ids.push(existing.id);
                 continue;
             }
-            const record = ingestSource(existing, g, {
+            const record = ingestSource(existing, enriched, {
                 type: sourceType,
-                refId: g.gameId ?? null,
-                raw: g.pgn ?? null,
+                refId: enriched.gameId ?? null,
+                raw: enriched.pgn ?? null,
             });
             await putGame(record);
             ids.push(record.id);
@@ -210,6 +242,32 @@ export async function writeDatasetToIdb(key, games, meta = null) {
     }
 
     return recordIds;
+}
+
+/**
+ * Parse a PGN string into an ingest-shaped record for the local-import
+ * path. Wraps the pure `parseRecord` with ingest-layer concerns:
+ *  - synthetic `gameId` keyed to the pasted game's position
+ *  - `pgn` attached verbatim (what the dataset holds as the raw source)
+ *  - `hasPgn` flag for UI (forfeits vs real games)
+ *  - `board` fallback to the 1-based index when the PGN didn't say
+ *  - `tournamentSlug: null` so downstream code doesn't need to check
+ *
+ * Lives here (rather than pgn-parser.js) because these concerns are
+ * shape-of-ingest, not wire-format. pgn-parser stays pure wire.
+ */
+export function pgnToRecord(pgn, index) {
+    const base = parseRecord(pgn);
+    const moveText = extractMoveText(pgn).trim();
+    const hasMoves = /[KQRBNP]?[a-h]?[1-8]?x?[a-h][1-8]|O-O/.test(moveText);
+    return {
+        ...base,
+        tournamentSlug: null,
+        board: base.board || index + 1,
+        gameId: `local-${index}`,
+        hasPgn: hasMoves,
+        pgn,
+    };
 }
 
 /**
@@ -699,9 +757,9 @@ function passesFilters(g, filters, playerNorm, sections, visibleSections) {
     }
     if (opponentNorm && g.whiteNorm !== opponentNorm && g.blackNorm !== opponentNorm) return false;
     if (event && g.tournament !== event) return false;
-    if (openingFamily && g.openingName) {
-        const sep = g.openingName.search(/[:,]/);
-        const family = sep > 0 ? g.openingName.slice(0, sep).trim() : g.openingName;
+    if (openingFamily && g.opening) {
+        const sep = g.opening.search(/[:,]/);
+        const family = sep > 0 ? g.opening.slice(0, sep).trim() : g.opening;
         if (family !== openingFamily) return false;
     } else if (openingFamily) return false;
     if (sections.length > 0 && g.section && !visibleSections.has(g.section)) return false;

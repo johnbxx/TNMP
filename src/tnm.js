@@ -55,9 +55,16 @@ export async function queryGames(queryParams = {}) {
     if (!response.ok) throw new Error('Failed to fetch games');
     const data = await response.json();
 
-    // Assign synthetic IDs to shell records (no game_id from server)
+    // Normalize wire shape → canonical record shape. The server returns
+    // `openingName` (from its `opening_name` column); the app speaks
+    // `opening` (lowercase, consistent with `eco`, `tournament`, etc.).
+    // Shell records without game_id get a synthetic deterministic id.
     for (const g of data.games) {
         if (!g.gameId) g.gameId = `${g.tournamentSlug}:${g.round}:${g.board}`;
+        if (g.openingName != null) {
+            g.opening = g.openingName;
+            delete g.openingName;
+        }
     }
 
     return data;

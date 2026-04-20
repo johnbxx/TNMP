@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    parseMoveText, extractMoveText, splitPgn, pgnToGameObject,
+    parseMoveText, extractMoveText, splitPgn,
     serializePgn, nagToHtml, NAG_INFO,
 } from '../src/pgn-parser.js';
 
@@ -178,70 +178,6 @@ describe('splitPgn', () => {
     });
 });
 
-describe('pgnToGameObject', () => {
-    const pgn = `[Event "2026 Spring TNM: 1600-1999"]
-[White "Boyer, John"]
-[Black "Chen, Quincy"]
-[Result "1-0"]
-[Round "2.18"]
-[WhiteElo "1740"]
-[BlackElo "2097"]
-[ECO "B30"]
-
-1. e4 c5 2. Nf3 Nc6 1-0`;
-
-    it('extracts player names', () => {
-        const game = pgnToGameObject(pgn, 0);
-        expect(game.white).toBe('Boyer, John');
-        expect(game.black).toBe('Chen, Quincy');
-    });
-
-    it('extracts round and board', () => {
-        const game = pgnToGameObject(pgn, 0);
-        expect(game.round).toBe(2);
-        expect(game.board).toBe(18);
-    });
-
-    it('extracts ratings', () => {
-        const game = pgnToGameObject(pgn, 0);
-        expect(game.whiteElo).toBe('1740');
-        expect(game.blackElo).toBe('2097');
-    });
-
-    it('extracts section from event header', () => {
-        const game = pgnToGameObject(pgn, 0);
-        expect(game.section).toBe('1600-1999');
-        expect(game.tournament).toBe('2026 Spring TNM');
-    });
-
-    it('detects games with moves', () => {
-        const game = pgnToGameObject(pgn, 0);
-        expect(game.hasPgn).toBe(true);
-    });
-
-    it('detects games without moves (forfeit)', () => {
-        const forfeit = `[White "A"]
-[Black "B"]
-[Result "1-0"]
-
-1-0`;
-        const game = pgnToGameObject(forfeit, 0);
-        expect(game.hasPgn).toBe(false);
-    });
-
-    it('assigns local gameId from index', () => {
-        const game = pgnToGameObject(pgn, 5);
-        expect(game.gameId).toBe('local-5');
-    });
-
-    it('handles round without board', () => {
-        const simple = `[Round "3"]
-1. e4 1-0`;
-        const game = pgnToGameObject(simple, 0);
-        expect(game.round).toBe(3);
-        expect(game.board).toBe(1); // falls back to index + 1
-    });
-});
 
 describe('serializePgn', () => {
     it('serializes simple moves with headers', () => {
@@ -249,7 +185,7 @@ describe('serializePgn', () => {
             { san: 'e4', comment: null, nags: null, variations: null },
             { san: 'e5', comment: null, nags: null, variations: null },
         ];
-        const result = serializePgn(moves, { White: 'A', Black: 'B' }, '1-0');
+        const result = serializePgn({ white: 'A', black: 'B', result: '1-0' }, { moves });
         expect(result).toContain('[White "A"]');
         expect(result).toContain('[Black "B"]');
         expect(result).toContain('1. e4 e5 1-0');
@@ -259,7 +195,7 @@ describe('serializePgn', () => {
         const moves = [
             { san: 'e4', comment: null, nags: [1], variations: null },
         ];
-        const result = serializePgn(moves, {}, '*');
+        const result = serializePgn({ result: '*' }, { moves });
         expect(result).toContain('e4 $1');
     });
 
@@ -267,7 +203,7 @@ describe('serializePgn', () => {
         const moves = [
             { san: 'e4', comment: 'Best', nags: null, variations: null },
         ];
-        const result = serializePgn(moves, {}, '*');
+        const result = serializePgn({ result: '*' }, { moves });
         expect(result).toContain('e4 {Best}');
     });
 
@@ -281,20 +217,21 @@ describe('serializePgn', () => {
                 ]],
             },
         ];
-        const result = serializePgn(moves, {}, '*');
+        const result = serializePgn({ result: '*' }, { moves });
         expect(result).toContain('(1... c5)');
     });
 
     it('sanitizes quotes in header values', () => {
-        const result = serializePgn([], { White: 'O"Brien' }, '*');
+        const result = serializePgn({ white: 'O"Brien', result: '*' }, { moves: [] });
         expect(result).toContain('[White "OBrien"]');
         expect(result).not.toContain('O"Brien');
     });
 
     it('preserves standard header order', () => {
-        const result = serializePgn([], {
-            Black: 'B', White: 'A', Result: '1-0', Event: 'Test',
-        }, '1-0');
+        const result = serializePgn(
+            { tournament: 'Test', white: 'A', black: 'B', result: '1-0' },
+            { moves: [] },
+        );
         const lines = result.split('\n');
         const headerLines = lines.filter(l => l.startsWith('['));
         expect(headerLines[0]).toContain('Event');

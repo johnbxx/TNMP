@@ -11,7 +11,8 @@
 
 import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
-import { nagToHtml, splitPgn, pgnToGameObject } from './pgn-parser.js';
+import { nagToHtml, splitPgn } from './pgn-parser.js';
+import { FIELD_SCHEMA } from './record.js';
 import { formatName, resultClass, resultSymbol, scorePercent } from './utils.js';
 import { CONFIG } from './config.js';
 import { refreshScheme } from './style.js';
@@ -20,7 +21,7 @@ import { classifyFen, loadEcoData } from './eco.js';
 import * as games from './games.js';
 import * as board from './board.js';
 import { Chessground } from '@lichess-org/chessground';
-import { createGame } from './pgn.js';
+import { createGame } from './game.js';
 import {
     switchTournament,
     fetchPlayerGames,
@@ -523,10 +524,10 @@ function updateTabLabel(tab) {
     if (!label) return;
 
     if (tab.game) {
-        const h = tab.game.getHeaders();
-        const w = formatName(h.White || '?');
-        const b = formatName(h.Black || '?');
-        const result = h.Result || '';
+        const r = tab.game.getRecord();
+        const w = formatName(r.white || '?');
+        const b = formatName(r.black || '?');
+        const result = r.result || '';
         const resultStr = result === '1-0' ? '1-0' : result === '0-1' ? '0-1' : result === '1/2-1/2' ? '½-½' : '';
         label.textContent = resultStr ? `${w} ${resultStr} ${b}` : `${w} vs ${b}`;
         if (iconEl) iconEl.outerHTML = TAB_ICON_BOARD;
@@ -1604,7 +1605,7 @@ export function openGamePanel(opts = {}) {
         if (game.round != null) meta.round = Number(game.round);
         if (game.board != null) meta.board = Number(game.board);
         if (!meta.eco) meta.eco = game.eco;
-        if (!meta.openingName) meta.openingName = game.openingName;
+        if (!meta.opening) meta.opening = game.opening;
         if (game.gameId) meta.gameId = game.gameId;
         if (game.hasPgn != null) meta.hasPgn = game.hasPgn;
     }
@@ -2328,17 +2329,16 @@ function updateExplorerSelection() {
 // ─── 5. HTML Builders ──────────────────────────────────────────────
 
 function updateGameHeader(meta) {
-    const h = _activeTab.game.getHeaders();
-    const white = formatName(h.White || '');
-    const black = formatName(h.Black || '');
-    const whiteElo = h.WhiteElo || '';
-    const blackElo = h.BlackElo || '';
-    const result = h.Result || '';
-    const ecoCode = h.ECO || '';
+    const r = _activeTab.game.getRecord();
+    const white = formatName(r.white || '');
+    const black = formatName(r.black || '');
+    const whiteElo = r.whiteElo || '';
+    const blackElo = r.blackElo || '';
+    const result = r.result || '';
+    const ecoCode = r.eco || '';
 
-    const roundTag = h.Round || '';
-    const round = meta.round || (roundTag ? parseInt(roundTag, 10) : null);
-    const boardNum = meta.board || (roundTag?.includes('.') ? parseInt(roundTag.split('.')[1], 10) : null);
+    const round = meta.round ?? r.round ?? null;
+    const boardNum = meta.board ?? r.board ?? null;
     const roundBoardLabel = [round && `Round ${round}`, boardNum && `Board ${boardNum}`]
         .filter(Boolean)
         .join(' \u00B7 ');
@@ -2361,9 +2361,9 @@ function updateGameHeader(meta) {
 
     // ECO / opening
     const openingEl = _activeTab.opening;
-    if (meta.eco && meta.openingName) {
+    if (meta.eco && meta.opening) {
         _activeTab.ecoCode.textContent = meta.eco;
-        _activeTab.ecoName.textContent = meta.openingName;
+        _activeTab.ecoName.textContent = meta.opening;
         openingEl.classList.remove('hidden');
     } else if (ecoCode) {
         _activeTab.ecoCode.textContent = ecoCode;
@@ -3713,7 +3713,7 @@ function importFromTexts(texts) {
     const pgnStrings = splitPgn(text);
     if (pgnStrings.length === 0) return;
 
-    const importedGames = pgnStrings.map((p, i) => pgnToGameObject(p, i));
+    const importedGames = pgnStrings.map((p, i) => games.pgnToRecord(p, i));
     hideImportDialog();
 
     // Delete old cloned ctx to free trie memory before importing new dataset
@@ -3745,15 +3745,25 @@ export function doImport() {
     importFromTexts([text]);
 }
 
-// Header editor (read-only display of all PGN headers)
+// Header editor (read-only display of game metadata)
 export function showHeaderEditor() {
     const popup = document.getElementById('editor-header-popup');
     const fields = document.getElementById('editor-header-fields');
-    const headers = _activeTab.game.getHeaders();
+    const record = _activeTab.game.getRecord();
 
-    // Skip internal/redundant/empty headers
-    const skip = new Set(['FEN', 'SetUp', 'GameId']);
-    const entries = Object.entries(headers).filter(([k, v]) => v && v !== '?' && v !== '-1' && !skip.has(k));
+    // First-class record fields in schema order, then any extraHeaders.
+    // Label falls back to the PGN tag when not explicitly set.
+    const isMeaningful = (v) => v != null && v !== '' && v !== '?' && v !== '-1';
+    const entries = [];
+    for (const { key, pgn, label } of FIELD_SCHEMA) {
+        const display = label ?? pgn;
+        if (display && isMeaningful(record[key])) entries.push([display, record[key]]);
+    }
+    if (record.extraHeaders) {
+        for (const [key, val] of Object.entries(record.extraHeaders)) {
+            if (isMeaningful(val)) entries.push([key, val]);
+        }
+    }
 
     if (entries.length === 0) {
         fields.innerHTML = '<div class="editor-header-empty">No game info available.</div>';

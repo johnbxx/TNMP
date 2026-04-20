@@ -11,6 +11,7 @@ import {
     saveGamesToCollection,
     initCrossTabSync,
     getActiveCtxKey,
+    pgnToRecord,
     _pendingIdbWriteForTests,
     _resetCrossTabSyncForTests,
 } from '../src/games.js';
@@ -473,6 +474,169 @@ describe('initCrossTabSync', () => {
         // No assertion other than "doesn't throw and doesn't leak".
         // Coverage of handler semantics is in the tests above.
         expect(true).toBe(true);
+    });
+});
+
+describe('pgnToRecord', () => {
+    const pgn = `[Event "2026 Spring TNM: 1600-1999"]
+[White "Boyer, John"]
+[Black "Chen, Quincy"]
+[Result "1-0"]
+[Round "2.18"]
+[WhiteElo "1740"]
+[BlackElo "2097"]
+[ECO "B30"]
+[Opening "Sicilian"]
+
+1. e4 c5 2. Nf3 Nc6 1-0`;
+
+    it('extracts player names', () => {
+        const rec = pgnToRecord(pgn, 0);
+        expect(rec.white).toBe('Boyer, John');
+        expect(rec.black).toBe('Chen, Quincy');
+    });
+
+    it('extracts round and board', () => {
+        const rec = pgnToRecord(pgn, 0);
+        expect(rec.round).toBe(2);
+        expect(rec.board).toBe(18);
+    });
+
+    it('extracts ratings', () => {
+        const rec = pgnToRecord(pgn, 0);
+        expect(rec.whiteElo).toBe('1740');
+        expect(rec.blackElo).toBe('2097');
+    });
+
+    it('extracts section from event header', () => {
+        const rec = pgnToRecord(pgn, 0);
+        expect(rec.section).toBe('1600-1999');
+        expect(rec.tournament).toBe('2026 Spring TNM');
+    });
+
+    it('promotes eco and opening to first-class fields', () => {
+        const rec = pgnToRecord(pgn, 0);
+        expect(rec.eco).toBe('B30');
+        expect(rec.opening).toBe('Sicilian');
+    });
+
+    it('stashes non-first-class headers in extraHeaders', () => {
+        const withExtras = `[White "A"]
+[Black "B"]
+[Result "*"]
+[Site "Online"]
+[TimeControl "300+3"]
+[Annotator "Stockfish"]
+
+*`;
+        const rec = pgnToRecord(withExtras, 0);
+        expect(rec.extraHeaders).toEqual({
+            Site: 'Online',
+            TimeControl: '300+3',
+            Annotator: 'Stockfish',
+        });
+    });
+
+    it('detects games with moves', () => {
+        const rec = pgnToRecord(pgn, 0);
+        expect(rec.hasPgn).toBe(true);
+    });
+
+    it('detects games without moves (forfeit)', () => {
+        const forfeit = `[White "A"]
+[Black "B"]
+[Result "1-0"]
+
+1-0`;
+        const rec = pgnToRecord(forfeit, 0);
+        expect(rec.hasPgn).toBe(false);
+    });
+
+    it('assigns local gameId from index', () => {
+        const rec = pgnToRecord(pgn, 5);
+        expect(rec.gameId).toBe('local-5');
+    });
+
+    it('handles round without board', () => {
+        const simple = `[Round "3"]
+1. e4 1-0`;
+        const rec = pgnToRecord(simple, 0);
+        expect(rec.round).toBe(3);
+        expect(rec.board).toBe(1); // falls back to index + 1
+    });
+});
+
+// ─── content-fingerprint dedup ─────────────────────────────────────
+//
+// Context-fingerprint (tournament/date/round/board/players) fails
+// when the same game is re-imported with sloppy or missing headers.
+// Content-fingerprint (move hash + players + result) is the safety
+// net. These tests pin that behavior end-to-end through _persistGames.
+
+describe('content-fingerprint dedup', () => {
+    const longMoves = '1. e4 c5 2. Nf3 Nc6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 d6 1-0';
+
+    function withPgn(overrides, moves = longMoves) {
+        return makeGame({
+            pgn: `[White "${overrides.white || 'Alice Smith'}"]
+[Black "${overrides.black || 'Bob Jones'}"]
+[Result "1-0"]
+${moves}`,
+            ...overrides,
+        });
+    }
+
+    it('stores moveHash and contentFingerprint on persisted records', async () => {
+        await writeDatasetToIdb('import:1', [withPgn({ gameId: 'g-1' })]);
+        const [rec] = await getAllGames();
+        expect(typeof rec.moveHash).toBe('number');
+        expect(typeof rec.contentFingerprint).toBe('number');
+    });
+
+    it('merges two games with same content but mismatched headers', async () => {
+        // First import: full headers. Second import: different tournament
+        // name (typo) — context fingerprint will miss, content fingerprint
+        // should rescue the dedup.
+        await writeDatasetToIdb('import:1', [
+            withPgn({ gameId: 'a', tournament: 'TNM Spring 2026', round: 4, board: 18 }),
+        ]);
+        await writeDatasetToIdb('import:2', [
+            withPgn({ gameId: 'b', tournament: 'TMN Spring 26', round: null, board: null }),
+        ]);
+        const all = await getAllGames();
+        expect(all).toHaveLength(1);
+        // The merged record kept the first-seen identity and appended the
+        // second import as an additional source.
+        expect(all[0].sources.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('keeps genuinely different games separate', async () => {
+        const pgn1 = withPgn({ gameId: 'g1' }, '1. e4 c5 2. Nf3 Nc6 3. d4 1-0');
+        const pgn2 = withPgn(
+            { gameId: 'g2', white: 'Carol', black: 'Dave' },
+            '1. d4 d5 2. c4 e6 3. Nc3 1-0',
+        );
+        await writeDatasetToIdb('import:1', [pgn1, pgn2]);
+        const all = await getAllGames();
+        expect(all).toHaveLength(2);
+    });
+
+    it('does not attempt content dedup for short stubs (below ply threshold)', async () => {
+        // 1-move stubs share the same SAN but are too short to hash.
+        // Without a content fingerprint, only context fingerprint decides.
+        const stub1 = withPgn({ gameId: 's1', tournament: 'A' }, '1. e4 *');
+        const stub2 = withPgn({ gameId: 's2', tournament: 'B' }, '1. e4 *');
+        await writeDatasetToIdb('import:1', [stub1, stub2]);
+        const all = await getAllGames();
+        expect(all).toHaveLength(2);
+        expect(all.every((r) => r.contentFingerprint == null)).toBe(true);
+    });
+
+    it('preserves existing content dedup on refresh (same game through twice)', async () => {
+        await writeDatasetToIdb('import:1', [withPgn({ gameId: 'a' })]);
+        await writeDatasetToIdb('import:1', [withPgn({ gameId: 'a' })]);
+        const all = await getAllGames();
+        expect(all).toHaveLength(1);
     });
 });
 
