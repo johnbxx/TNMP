@@ -1,6 +1,6 @@
-import { WORKER_URL } from './config.js';
 import { openModal, closeModal, onModalClose } from './modal.js';
 import { selectPlayer } from './games.js';
+import { queryGames } from './tnm.js';
 // openViewer = openGamePanel (opens modal + board + explorer mode)
 import { openGamePanel as openViewer, setBoardOrientation } from './game-panel.js';
 
@@ -20,10 +20,7 @@ async function fetchAllPlayerGames(playerName) {
     let offset = 0;
     const limit = 500;
     while (true) {
-        const url = `${WORKER_URL}/query?player=${encodeURIComponent(playerName)}&tournament=all&include=pgn&limit=${limit}&offset=${offset}`;
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error('Server error');
-        const data = await resp.json();
+        const data = await queryGames({ player: playerName, tournament: 'all', include: 'pgn', limit, offset });
         allGames.push(...data.games);
         if (data.uscfId) uscfId = data.uscfId;
         if (data.playerRating) playerRating = data.playerRating;
