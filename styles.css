@@ -5143,3 +5143,8 @@ input.browser-search-input {
     }
 }
 
+/* Collections UI hidden pending design — remove these three lines to re-enable. */
+.browser-save,
+.browser-load,
+.share-option[data-action="viewer-save"] { display: none; }
+
