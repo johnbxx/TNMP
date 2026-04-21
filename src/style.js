@@ -23,6 +23,12 @@ const PIECE_THEMES = [
     { id: 'spatial', name: 'Spatial' },
     { id: 'horsey', name: 'Horsey' },
     { id: 'pixel', name: 'Pixel' },
+    { id: 'caliente', name: 'Caliente' },
+    { id: 'gioco', name: 'Gioco' },
+    { id: 'kiwen-suwi', name: 'Kiwen Suwi' },
+    { id: 'letter', name: 'Letter' },
+    { id: 'maestro', name: 'Maestro' },
+    { id: 'xkcd', name: 'XKCD' },
 ];
 
 const WHITE_PIECES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP'];
