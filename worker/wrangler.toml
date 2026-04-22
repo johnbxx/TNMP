@@ -7,8 +7,9 @@ workers_dev = false
 # Pairings: every minute Mon 7PM-midnight Pacific → Tue in UTC
 # Results: every 5 min Tue 6PM-midnight Pacific → Wed in UTC
 # Cache refresh: every 20 min 24/7
+# USCF discovery: daily at 20:00 UTC (noon PT during PDT, 1PM PT during PST)
 # Windows cover both PST (UTC-8) and PDT (UTC-7) — starts 1h early in PST, harmless.
-crons = ["* 2-8 * * TUE", "*/5 2-8 * * WED", "*/20 * * * *"]
+crons = ["* 2-8 * * TUE", "*/5 2-8 * * WED", "*/20 * * * *", "0 20 * * *"]
 
 [vars]
 ALLOWED_ORIGIN = "https://tnmpairings.com"

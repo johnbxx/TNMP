@@ -14,6 +14,9 @@ import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealt
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
 import { handleScheduled, TournamentCron, pairingsExpiresAt } from './cron.js';
+import { runUscfDiscovery } from './uscf.js';
+
+const USCF_CRON = '0 20 * * *';
 
 // Re-export Durable Object class (required by wrangler)
 export { TournamentCron };
@@ -73,6 +76,16 @@ export default {
                 }
             }
 
+            // Manual USCF discovery trigger
+            if (path === '/uscf-discovery' && request.method === 'POST') {
+                try {
+                    const results = await runUscfDiscovery(env);
+                    return corsResponse({ ok: true, ...results }, 200, env, request);
+                } catch (err) {
+                    return corsResponse({ error: err.message, stack: err.stack }, 500, env, request);
+                }
+            }
+
             // NNUE proxy — fetch from stockfishchess.org, add CORS headers
             if (path.startsWith('/nnue/') && request.method === 'GET') {
                 const name = path.slice(6);
@@ -99,6 +112,10 @@ export default {
     },
 
     async scheduled(event, env, ctx) {
+        if (event.cron === USCF_CRON) {
+            await runUscfDiscovery(env);
+            return;
+        }
         await handleScheduled(env);
     },
 };
