@@ -222,14 +222,16 @@ export async function runUscfDiscovery(env, { refreshSlug } = {}) {
         }
         const meta = await fetchEventMetadata(eventId);
 
-        // player/game counts always refresh (USCF is source of truth).
-        // Other fields preserve existing value if USCF returns null.
+        // COALESCE everywhere: if a USCF sub-request flakes and a field
+        // comes back null, preserve the existing D1 value rather than
+        // clobbering good data with null. A successful fetch always has
+        // non-null values so refreshes still overwrite as expected.
         await env.DB.prepare(
             `UPDATE tournaments
              SET uscf_event_id = ?,
                  time_control  = COALESCE(?, time_control),
-                 player_count  = ?,
-                 game_count    = ?,
+                 player_count  = COALESCE(?, player_count),
+                 game_count    = COALESCE(?, game_count),
                  director      = COALESCE(?, director),
                  organizer     = COALESCE(?, organizer)
              WHERE slug = ?`
