@@ -39,7 +39,23 @@ async function fetchJson(url) {
     }
 }
 
-async function getCandidates(env) {
+async function getCandidates(env, { refreshSlug } = {}) {
+    // refreshSlug: bypass filters and re-fetch metadata for one tournament by slug.
+    // Used to repair stale data after an algorithm change.
+    if (refreshSlug) {
+        const row = await env.DB.prepare(
+            `SELECT slug, name, round_dates, uscf_event_id FROM tournaments WHERE slug = ?`
+        ).bind(refreshSlug).first();
+        if (!row) return [];
+        let roundDates;
+        try { roundDates = JSON.parse(row.round_dates || '[]'); } catch { roundDates = []; }
+        return [{
+            slug: row.slug, name: row.name,
+            startDate: roundDates[0]?.slice(0, 10),
+            knownEventId: row.uscf_event_id || null,
+        }];
+    }
+
     const rows = await env.DB.prepare(
         `SELECT slug, name, round_dates FROM tournaments WHERE uscf_event_id IS NULL`
     ).all();
@@ -140,12 +156,37 @@ function titleCaseFull(s) {
     return s.replace(/\b\w+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
 }
 
+function isExtraRatedName(name) {
+    return /extra/i.test(name || '');
+}
+
 async function fetchEventMetadata(eventId) {
-    const [event, section1, officials] = await Promise.all([
+    const [event, officials] = await Promise.all([
         fetchJson(`${USCF_BASE}/rated-events/${eventId}`),
-        fetchJson(`${USCF_BASE}/rated-events/${eventId}/sections/1`),
         fetchJson(`${USCF_BASE}/rated-events/${eventId}/officials`),
     ]);
+
+    const sections = event?.sections || [];
+    const details = await Promise.all(
+        sections.map(s => fetchJson(`${USCF_BASE}/rated-events/${eventId}/sections/${s.number}`))
+    );
+
+    // playerCount: sum across non-Extra-Rated sections (counts registered
+    // main-section players, including those who only took half-point byes).
+    // gameCount: sum across all sections (real rated games submitted to USCF).
+    // timeControl: first non-Extra-Rated section's — identical across sections in practice.
+    let playerCount = 0, gameCount = 0, timeControl = null;
+    for (let i = 0; i < sections.length; i++) {
+        const sec = sections[i];
+        const detail = details[i];
+        if (!detail) continue;
+        const extra = isExtraRatedName(sec.name);
+        if (!extra) {
+            playerCount += detail.playerCount || 0;
+            if (!timeControl) timeControl = detail.timeControl || null;
+        }
+        gameCount += detail.gameCount || 0;
+    }
 
     const unique = (role) => {
         if (!Array.isArray(officials)) return null;
@@ -158,46 +199,50 @@ async function fetchEventMetadata(eventId) {
     };
 
     return {
-        playerCount: event?.playerCount || null,
-        timeControl: section1?.timeControl || null,
-        gameCount: section1?.gameCount || null,
+        playerCount: playerCount || null,
+        gameCount: gameCount || null,
+        timeControl,
         director: unique('Director'),
         organizer: unique('Organizer'),
     };
 }
 
-export async function runUscfDiscovery(env) {
-    const candidates = await getCandidates(env);
-    console.log(`USCF discovery: ${candidates.length} candidate(s)`);
+export async function runUscfDiscovery(env, { refreshSlug } = {}) {
+    const candidates = await getCandidates(env, { refreshSlug });
+    console.log(`USCF discovery: ${candidates.length} candidate(s)${refreshSlug ? ` (refresh: ${refreshSlug})` : ''}`);
 
     const results = { found: 0, pending: 0 };
     for (const c of candidates) {
-        const hit = await discoverEventId(env, c);
-        if (!hit) {
+        // If we already know the event ID (refresh path), skip rediscovery.
+        const eventId = c.knownEventId || (await discoverEventId(env, c))?.eventId;
+        if (!eventId) {
             results.pending++;
             console.log(`  PENDING  ${c.slug}`);
             continue;
         }
-        const meta = await fetchEventMetadata(hit.eventId);
+        const meta = await fetchEventMetadata(eventId);
+
+        // player/game counts always refresh (USCF is source of truth).
+        // Other fields preserve existing value if USCF returns null.
         await env.DB.prepare(
             `UPDATE tournaments
              SET uscf_event_id = ?,
-                 time_control  = COALESCE(time_control, ?),
-                 player_count  = COALESCE(player_count, ?),
-                 game_count    = COALESCE(game_count, ?),
-                 director      = COALESCE(director, ?),
-                 organizer     = COALESCE(organizer, ?)
+                 time_control  = COALESCE(?, time_control),
+                 player_count  = ?,
+                 game_count    = ?,
+                 director      = COALESCE(?, director),
+                 organizer     = COALESCE(?, organizer)
              WHERE slug = ?`
         ).bind(
-            hit.eventId,
+            eventId,
             meta.timeControl, meta.playerCount, meta.gameCount,
             meta.director, meta.organizer,
             c.slug,
         ).run();
         results.found++;
         console.log(
-            `  FOUND    ${c.slug} → ${hit.eventId} (${hit.votes} votes, ` +
-            `${meta.playerCount || '?'}p, ${meta.gameCount || '?'}g, ` +
+            `  WROTE    ${c.slug} → ${eventId} ` +
+            `(${meta.playerCount ?? '?'}p, ${meta.gameCount ?? '?'}g, ` +
             `${meta.director || 'no director'})`
         );
     }

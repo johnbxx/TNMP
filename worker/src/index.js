@@ -76,10 +76,12 @@ export default {
                 }
             }
 
-            // Manual USCF discovery trigger
+            // Manual USCF discovery trigger. ?refresh=<slug> re-fetches metadata
+            // for a specific tournament (bypasses normal candidate filters).
             if (path === '/uscf-discovery' && request.method === 'POST') {
                 try {
-                    const results = await runUscfDiscovery(env);
+                    const refreshSlug = url.searchParams.get('refresh') || undefined;
+                    const results = await runUscfDiscovery(env, { refreshSlug });
                     return corsResponse({ ok: true, ...results }, 200, env, request);
                 } catch (err) {
                     return corsResponse({ error: err.message, stack: err.stack }, 500, env, request);
