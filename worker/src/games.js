@@ -219,7 +219,7 @@ export async function handleQuery(request, env) {
     const includePgn = includeSet.has('pgn');
     const includeSubmissions = includeSet.has('submissions');
 
-    const tournamentCols = ', t.name as tournament_name, t.total_rounds, t.sections as tournament_sections, t.round_dates, t.time_control, t.player_count, t.game_count, t.director, t.organizer, t.url as tournament_url';
+    const tournamentCols = ', t.name as tournament_name, t.total_rounds, t.sections as tournament_sections, t.round_dates, t.time_control, t.player_count, t.game_count, t.director, t.organizer, t.url as tournament_url, t.uscf_event_id';
     let selectCols;
     if (includePgn) {
         selectCols = 'g.*' + tournamentCols;
@@ -319,26 +319,26 @@ export async function handleQuery(request, env) {
     // Extract tournament metadata from first row (same for all rows in a single-tournament query)
     const firstRow = gamesResult.results[0];
     const response = { games, total: countResult.total, limit, offset };
-    if (firstRow?.total_rounds) response.totalRounds = firstRow.total_rounds;
-    if (firstRow?.tournament_sections) {
-        try { response.sections = JSON.parse(firstRow.tournament_sections); } catch { /* ignore */ }
+    if (firstRow) {
+        const meta = tournamentMeta({
+            slug: firstRow.tournament_slug,
+            name: firstRow.tournament_name,
+            round_dates: firstRow.round_dates,
+            sections: firstRow.tournament_sections,
+            url: firstRow.tournament_url,
+            uscf_event_id: firstRow.uscf_event_id,
+            total_rounds: firstRow.total_rounds,
+            time_control: firstRow.time_control,
+            player_count: firstRow.player_count,
+            game_count: firstRow.game_count,
+            director: firstRow.director,
+            organizer: firstRow.organizer,
+        });
+        for (const k of ['totalRounds', 'sections', 'startDate', 'endDate', 'timeControl',
+                         'playerCount', 'gameCount', 'director', 'organizer', 'tournamentUrl']) {
+            if (meta[k] != null) response[k] = meta[k];
+        }
     }
-    // Tournament detail metadata
-    if (firstRow?.round_dates) {
-        try {
-            const dates = JSON.parse(firstRow.round_dates);
-            if (dates.length) {
-                response.startDate = dates[0].split('T')[0];
-                response.endDate = dates[dates.length - 1].split('T')[0];
-            }
-        } catch { /* ignore */ }
-    }
-    if (firstRow?.time_control) response.timeControl = firstRow.time_control;
-    if (firstRow?.player_count) response.playerCount = firstRow.player_count;
-    if (firstRow?.game_count) response.gameCount = firstRow.game_count;
-    if (firstRow?.director) response.director = firstRow.director;
-    if (firstRow?.organizer) response.organizer = firstRow.organizer;
-    if (firstRow?.tournament_url) response.tournamentUrl = firstRow.tournament_url;
     if (byeResult) {
         response.byes = byeResult.results.map(r => ({ round: r.round, type: r.bye_type }));
     }
@@ -350,21 +350,42 @@ export async function handleQuery(request, env) {
 
 // --- Tournaments Endpoint ---
 
+/**
+ * Map a D1 `tournaments` row to its canonical API response shape.
+ * Shared by /tournaments (list view) and /query (per-tournament detail).
+ */
+export function tournamentMeta(t) {
+    let roundDates;
+    try { roundDates = JSON.parse(t.round_dates || '[]'); } catch { roundDates = []; }
+    let sections = null;
+    try { sections = t.sections ? JSON.parse(t.sections) : null; } catch { /* ignore */ }
+
+    return {
+        slug: t.slug,
+        name: t.name,
+        roundDates,
+        startDate: roundDates[0]?.slice(0, 10) || null,
+        endDate: roundDates[roundDates.length - 1]?.slice(0, 10) || null,
+        sections,
+        totalRounds: t.total_rounds || null,
+        timeControl: t.time_control || null,
+        playerCount: t.player_count || null,
+        gameCount: t.game_count || null,
+        director: t.director || null,
+        organizer: t.organizer || null,
+        tournamentUrl: t.url || null,
+        uscfEventId: t.uscf_event_id || null,
+    };
+}
+
 export async function handleTournaments(request, env) {
     const result = await env.DB.prepare(
         `SELECT * FROM tournaments ORDER BY json_extract(round_dates, '$[0]') DESC`
     ).all();
-    return corsResponse({
-        tournaments: result.results.map(t => {
-            let roundDates;
-            try { roundDates = JSON.parse(t.round_dates || '[]'); } catch { roundDates = []; }
-            return {
-                slug: t.slug, name: t.name,
-                roundDates, url: t.url,
-                uscfEventId: t.uscf_event_id || null,
-            };
-        }),
-    }, 200, env, request);
+    return corsResponse(
+        { tournaments: result.results.map(tournamentMeta) },
+        200, env, request
+    );
 }
 
 // --- Players Endpoint ---
