@@ -99,15 +99,18 @@
     --board-capture: rgba(20, 160, 255, 0.35);
     --board-highlight: rgba(255, 255, 100, 0.4);
 
-    /* ── Fixed colors: NAG move assessment (Lichess-style) ── */
-    --nag-brilliant: #26c6da;
-    --nag-good: #66bb6a;
-    --nag-interesting: #ab7ae6;
-    --nag-dubious: #42a5f5;
-    --nag-mistake: #e8a735;
-    --nag-blunder: #e74c3c;
-    --nag-worst: #c0392b;
-    --nag-forced: #78909c;
+    /* ── NAG move assessment colors (Lichess-style) ──
+       light-dark() resolves via each element's inherited color-scheme —
+       so the move list in a light-scheme modal gets deeper/contrasty
+       values, dark mode keeps the original vivid-on-dark tones. */
+    --nag-brilliant:   light-dark(#1fb9cf, #26c6da);
+    --nag-good:        light-dark(#3f8d42, #66bb6a);
+    --nag-interesting: light-dark(#7d4bc0, #ab7ae6);
+    --nag-dubious:     light-dark(#1976d2, #42a5f5);
+    --nag-mistake:     light-dark(#d18324, #e8a735);
+    --nag-blunder:     light-dark(#c0392b, #e74c3c);
+    --nag-worst:       light-dark(#8e2a1e, #c0392b);
+    --nag-forced:      light-dark(#546e7a, #78909c);
     
 }
 
@@ -1039,7 +1042,9 @@ select.editor-header-input option {
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.tm-search {
+/* input.tm-search selector (tag + class) outranks any host-page `input[type=text]`
+   rules when the embed ships inside a site with its own input styling. */
+input.tm-search {
     width: 100%;
     padding: 0.5rem 0.75rem;
     font-size: 0.95rem;
@@ -1053,8 +1058,8 @@ select.editor-header-input option {
     transition: box-shadow var(--transition-fast);
     margin-bottom: 0.6rem;
 }
-.tm-search::placeholder { color: var(--text-faint); }
-.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
+input.tm-search::placeholder { color: var(--text-faint); }
+input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
 
 /* Year range slider */
 .tm-range-filter { padding: 0 0.2rem; margin-bottom: 0.6rem; }
@@ -1248,9 +1253,11 @@ select.editor-header-input option {
     flex-shrink: 0;
     opacity: 0.75;
 }
-.tm-stat-players { color: #98b8d0; }
-.tm-stat-rounds  { color: #b0c898; }
-.tm-stat-games   { color: #d0b888; }
+/* Stat colors: deeper on light bg for contrast, lighter on dark bg.
+   light-dark() resolves via the popover's inline color-scheme (see syncScheme). */
+.tm-stat-players { color: light-dark(#2c6ca8, #8fb6dd); }
+.tm-stat-rounds  { color: light-dark(#466d33, #a9cd88); }
+.tm-stat-games   { color: light-dark(#9a6f1d, #e0bb72); }
 
 .tm-count {
     text-align: center;
@@ -2538,6 +2545,34 @@ button.viewer-close {
 .move-nag [data-nag="4"],  .move:has([data-nag="4"]),  .move-variation:has([data-nag="4"])  { color: var(--nag-blunder); }
 .move-nag [data-nag="9"],  .move:has([data-nag="9"]),  .move-variation:has([data-nag="9"])  { color: var(--nag-worst); }
 .move-nag [data-nag="7"],  .move:has([data-nag="7"]),  .move-variation:has([data-nag="7"])  { color: var(--nag-forced); }
+
+/* Current-move highlight on an annotated move: swap the subtle accent-tint
+   for a vivid fill in the NAG's own color and flip text/NAG-symbol to white
+   for contrast. Non-annotated current moves keep the default accent tint.
+   Each selector carries both the main-line and variation context so it
+   beats the existing `.move-table .move.move-current` / `.move-variation.move-current`
+   rules on specificity. */
+.move-table .move.move-current:has([data-nag="3"]),
+.move-variation.move-current:has([data-nag="3"]) { background: var(--nag-brilliant); }
+.move-table .move.move-current:has([data-nag="1"]),
+.move-variation.move-current:has([data-nag="1"]) { background: var(--nag-good); }
+.move-table .move.move-current:has([data-nag="5"]),
+.move-variation.move-current:has([data-nag="5"]) { background: var(--nag-interesting); }
+.move-table .move.move-current:has([data-nag="6"]),
+.move-variation.move-current:has([data-nag="6"]) { background: var(--nag-dubious); }
+.move-table .move.move-current:has([data-nag="2"]),
+.move-variation.move-current:has([data-nag="2"]) { background: var(--nag-mistake); }
+.move-table .move.move-current:has([data-nag="4"]),
+.move-variation.move-current:has([data-nag="4"]) { background: var(--nag-blunder); }
+.move-table .move.move-current:has([data-nag="9"]),
+.move-variation.move-current:has([data-nag="9"]) { background: var(--nag-worst); }
+.move-table .move.move-current:has([data-nag="7"]),
+.move-variation.move-current:has([data-nag="7"]) { background: var(--nag-forced); }
+
+.move-table .move.move-current:has([data-nag]),
+.move-variation.move-current:has([data-nag]),
+.move-table .move.move-current:has([data-nag]) .move-nag [data-nag],
+.move-variation.move-current:has([data-nag]) .move-nag [data-nag] { color: #fff; }
 
 .move-comment {
     color: var(--text-faint);
