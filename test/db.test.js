@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import {
     openDB,
@@ -244,76 +244,64 @@ describe('settings', () => {
 });
 
 describe('BroadcastChannel events', () => {
-    // BroadcastChannel only delivers to OTHER contexts, so we subscribe via
-    // a separate channel instance (simulating a second tab) and listen.
-    let received;
-    let channel;
+    // Spy directly on BroadcastChannel.prototype.postMessage rather than
+    // listening via a sibling channel. We're testing that db.js calls post()
+    // with the right payloads — platform delivery is the browser's job, not
+    // ours. Bypasses setTimeout-based races that flake on busy CI runners.
+    let postSpy;
 
     beforeEach(() => {
-        received = [];
-        channel = new BroadcastChannel('tnmp-db');
-        channel.addEventListener('message', (e) => received.push(e.data));
+        postSpy = vi.spyOn(BroadcastChannel.prototype, 'postMessage');
     });
 
     afterEach(() => {
-        channel.close();
+        postSpy.mockRestore();
     });
 
-    // Helper: wait a microtask+ so BroadcastChannel deliveries land.
-    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const posts = () => postSpy.mock.calls.map((c) => c[0]);
 
     it('putGame fires game.put', async () => {
         const g = makeGame();
         await putGame(g);
-        await flush();
-        expect(received).toEqual([{ type: 'game.put', id: g.id, fingerprint: g.fingerprint, kind: 'game' }]);
+        expect(posts()).toEqual([{ type: 'game.put', id: g.id, fingerprint: g.fingerprint, kind: 'game' }]);
     });
 
     it('deleteGame fires game.deleted', async () => {
         const g = makeGame();
         await putGame(g);
-        await flush();
-        received.length = 0;
+        postSpy.mockClear();
         await deleteGame(g.id);
-        await flush();
-        expect(received).toEqual([{ type: 'game.deleted', id: g.id }]);
+        expect(posts()).toEqual([{ type: 'game.deleted', id: g.id }]);
     });
 
     it('putCollection fires collection.put', async () => {
         const c = makeCollection();
         await putCollection(c);
-        await flush();
-        expect(received).toEqual([{ type: 'collection.put', id: c.id, kind: 'user' }]);
+        expect(posts()).toEqual([{ type: 'collection.put', id: c.id, kind: 'user' }]);
     });
 
     it('deleteCollection fires collection.deleted', async () => {
         const c = makeCollection();
         await putCollection(c);
-        await flush();
-        received.length = 0;
+        postSpy.mockClear();
         await deleteCollection(c.id);
-        await flush();
-        expect(received).toEqual([{ type: 'collection.deleted', id: c.id }]);
+        expect(posts()).toEqual([{ type: 'collection.deleted', id: c.id }]);
     });
 
     it('addGamesToCollection fires when ids actually added', async () => {
         const c = makeCollection({ gameIds: ['a'] });
         await putCollection(c);
-        await flush();
-        received.length = 0;
+        postSpy.mockClear();
         await addGamesToCollection(c.id, ['b']);
-        await flush();
-        expect(received).toEqual([{ type: 'collection.put', id: c.id, added: ['b'] }]);
+        expect(posts()).toEqual([{ type: 'collection.put', id: c.id, added: ['b'] }]);
     });
 
     it('addGamesToCollection does NOT fire when no-op', async () => {
         const c = makeCollection({ gameIds: ['a'] });
         await putCollection(c);
-        await flush();
-        received.length = 0;
+        postSpy.mockClear();
         await addGamesToCollection(c.id, ['a']); // dup
-        await flush();
-        expect(received).toEqual([]);
+        expect(posts()).toEqual([]);
     });
 
     it('removeGamesFromCollection fires when ids actually removed', async () => {
@@ -321,40 +309,39 @@ describe('BroadcastChannel events', () => {
         const other = makeCollection({ gameIds: ['a'] }); // keeps 'a' from orphaning
         await putCollection(c);
         await putCollection(other);
-        await flush();
-        received.length = 0;
+        postSpy.mockClear();
         await removeGamesFromCollection(c.id, ['a']);
-        await flush();
-        expect(received).toEqual([{ type: 'collection.put', id: c.id, removed: ['a'] }]);
+        expect(posts()).toEqual([{ type: 'collection.put', id: c.id, removed: ['a'] }]);
     });
 
     it('removeGamesFromCollection also fires Inbox adoption event when game orphans', async () => {
         const c = makeCollection({ gameIds: ['a'] });
         await putCollection(c);
-        await flush();
-        received.length = 0;
+        postSpy.mockClear();
         await removeGamesFromCollection(c.id, ['a']);
-        await flush();
-        expect(received).toEqual([
+        expect(posts()).toEqual([
             { type: 'collection.put', id: c.id, removed: ['a'] },
             { type: 'collection.put', id: INBOX_COLLECTION_ID, added: ['a'] },
         ]);
     });
 
     it('subscribeDB returns a working unsubscribe', async () => {
+        // This one still needs real cross-context delivery — subscribeDB's
+        // whole job is receiving messages from other tabs, and we're
+        // simulating that via a sibling channel. Spying on postMessage
+        // would bypass delivery entirely and not test the subscription.
         const events = [];
         const unsub = subscribeDB((ev) => events.push(ev));
-        // subscribeDB uses the SAME local channel as the writer, and
-        // BroadcastChannel doesn't deliver to its own posting context —
-        // so local events won't arrive here. Simulate a "remote" event
-        // via a separate channel instance.
         const remote = new BroadcastChannel('tnmp-db');
         remote.postMessage({ type: 'game.put', id: 'x' });
-        await flush();
+        // Poll until delivered (up to 100ms) so this doesn't flake on CI.
+        for (let i = 0; i < 20 && events.length === 0; i++) {
+            await new Promise((r) => setTimeout(r, 5));
+        }
         expect(events).toEqual([{ type: 'game.put', id: 'x' }]);
         unsub();
         remote.postMessage({ type: 'game.put', id: 'y' });
-        await flush();
+        await new Promise((r) => setTimeout(r, 20));
         expect(events).toHaveLength(1); // no new delivery after unsub
         remote.close();
     });
