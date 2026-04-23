@@ -13,7 +13,7 @@ import { ingestDataset, setPlayerList } from './games.js';
 
 const GAMES_CACHE_KEY = 'gamesData';
 let _allPlayers = null; // [{ name, norm, uscfId }]
-let _tournamentList = null; // [{ slug, name }]
+let _tournamentList = null; // see /tournaments response — full tournament metadata
 let _activeTournamentSlug = null;
 let _tournamentScope = null; // embed-only
 let _fetchGeneration = 0;

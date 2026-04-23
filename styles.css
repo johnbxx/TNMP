@@ -972,6 +972,303 @@ select.editor-header-input option {
     background: #fff;
 }
 
+/* ── Tournament picker (custom dropdown replacing <select>) ─────────── */
+
+.browser-title-trigger {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--surface);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.5rem;
+    box-shadow: var(--shadow-xs);
+    width: 100%;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    overflow: hidden;
+    transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.browser-title-trigger:hover {
+    background: var(--overlay-light);
+}
+.browser-title-trigger[aria-expanded="true"] {
+    background: var(--overlay-light);
+    box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent);
+}
+.browser-title-trigger-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.browser-title-trigger-chevron {
+    color: var(--text-faint);
+    flex-shrink: 0;
+    transition: transform var(--transition-fast), color var(--transition-fast);
+}
+.browser-title-trigger[aria-expanded="true"] .browser-title-trigger-chevron {
+    transform: rotate(180deg);
+    color: var(--accent);
+}
+
+/* Popover panel — anchored via JS (position: fixed) */
+.tm-popover {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    background: var(--popup-bg);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    padding: 0.75rem 0.75rem 0.5rem;
+    font-family: inherit;
+    color: var(--text-primary);
+    animation: tm-popover-in 180ms ease-out both;
+}
+.tm-popover.hidden { display: none; }
+
+@keyframes tm-popover-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.tm-search {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    background: var(--overlay-light);
+    border: none;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-xs);
+    outline: none;
+    font-family: inherit;
+    transition: box-shadow var(--transition-fast);
+    margin-bottom: 0.6rem;
+}
+.tm-search::placeholder { color: var(--text-faint); }
+.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
+
+/* Year range slider */
+.tm-range-filter { padding: 0 0.2rem; margin-bottom: 0.6rem; }
+.tm-range-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 0.3rem;
+}
+.tm-range-label {
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.tm-range-reset {
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-family: inherit;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+.tm-range-reset:hover { color: var(--text-primary); background: var(--overlay-light); }
+.tm-range-reset.hidden { display: none; }
+
+.tm-dual-range { position: relative; height: 24px; }
+.tm-dual-range input[type="range"] {
+    position: absolute; top: 0; left: 0; width: 100%; height: 24px;
+    -webkit-appearance: none; appearance: none;
+    background: transparent; pointer-events: none; margin: 0;
+}
+.tm-dual-range input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px; background: transparent;
+}
+.tm-dual-range input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text-primary);
+    border: none;
+    box-shadow: 0 1px 3px var(--shadow-color);
+    margin-top: -5px; cursor: pointer; pointer-events: all;
+    transition: transform var(--transition-fast);
+}
+.tm-dual-range input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.tm-dual-range input[type="range"]::-webkit-slider-thumb:active { transform: scale(1.25); }
+.tm-dual-range input[type="range"]::-moz-range-track {
+    height: 4px; border-radius: 2px; background: transparent;
+}
+.tm-dual-range input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text-primary); border: none;
+    cursor: pointer; pointer-events: all;
+}
+.tm-range-track {
+    position: absolute; top: 10px; left: 0; right: 0; height: 4px;
+    border-radius: 2px; background: var(--overlay-light); pointer-events: none;
+}
+.tm-range-fill {
+    position: absolute; top: 0; height: 100%;
+    background: var(--accent); border-radius: 2px; opacity: 0.85;
+    transition: left 0.05s, width 0.05s;
+    pointer-events: auto; /* override parent track's pointer-events: none */
+    cursor: grab;
+    touch-action: none;   /* prevent browser from scrolling during drag */
+}
+.tm-range-fill::before {
+    /* Expand vertical hit area for easier grabbing (track is only 4px tall) */
+    content: '';
+    position: absolute;
+    inset: -10px 0;
+}
+.tm-range-fill:active { cursor: grabbing; }
+.tm-range-ticks {
+    position: relative;
+    height: 12px;
+    margin-top: 0.15rem;
+}
+.tm-range-ticks span {
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
+    font-size: 0.58rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    line-height: 1;
+}
+.tm-range-ticks span::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -4px;
+    width: 1px;
+    height: 3px;
+    background: var(--text-faint);
+    opacity: 0.4;
+    transform: translateX(-50%);
+}
+.tm-range-ticks span.tm-tick-first { transform: translateX(0); }
+.tm-range-ticks span.tm-tick-last  { transform: translateX(-100%); }
+.tm-range-ticks span.tm-tick-first::before { left: 0; transform: none; }
+.tm-range-ticks span.tm-tick-last::before  { left: auto; right: 0; transform: none; }
+
+/* Scrollable list */
+.tm-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 120px;
+    border-radius: var(--radius-sm);
+    padding: 0.15rem 0;
+    margin: 0 -0.15rem;
+}
+.tm-empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+}
+
+.tm-year-header {
+    padding: 0.6rem 0.4rem 0.2rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-subtle);
+    letter-spacing: -0.01em;
+    border-top: 1px solid var(--border-color);
+    margin-top: 0.2rem;
+}
+.tm-year-header:first-child { border-top: none; margin-top: 0; padding-top: 0.2rem; }
+.tm-year-header.hidden { display: none; }
+
+.tm-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    background: none;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    gap: 0.5rem;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.tm-row:hover,
+.tm-row.focused {
+    background: var(--overlay-light);
+    border-left-color: var(--accent);
+    color: var(--text-primary);
+}
+.tm-row.active {
+    background: var(--surface);
+    color: var(--text-primary);
+    border-left-color: var(--accent);
+}
+.tm-row.hidden { display: none; }
+
+.tm-row-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tm-row-meta {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.tm-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+.tm-stat svg {
+    width: 12px; height: 12px;
+    fill: currentColor;
+    flex-shrink: 0;
+    opacity: 0.75;
+}
+.tm-stat-players { color: #98b8d0; }
+.tm-stat-rounds  { color: #b0c898; }
+.tm-stat-games   { color: #d0b888; }
+
+.tm-count {
+    text-align: center;
+    color: var(--text-faint);
+    margin: 0.4rem 0 0.2rem;
+    font-size: 0.72rem;
+}
+
+/* Side-popover preview — purely a positioning wrapper.
+   All visual styling comes from .editor-header-inner.tournament-info-inner inside. */
+.tm-info-popover {
+    position: fixed;
+    z-index: 10001;
+    animation: tm-popover-in 160ms ease-out both;
+}
+.tm-info-popover.hidden { display: none; }
+
+/* Touch devices: no hover → no preview */
+@media (hover: none) {
+    .tm-info-popover { display: none !important; }
+}
+
 .setting-group {
     margin-bottom: 1.5rem;
 }
@@ -2824,9 +3121,10 @@ button.viewer-close {
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .viewer-navbar-title .browser-title-select {
+    .viewer-navbar-title .browser-title-select,
+    .viewer-navbar-title .browser-title-trigger {
         font-size: 1rem;
-        padding: 0.35rem 1.5rem 0.35rem 0.5rem;
+        padding: 0.35rem 0.5rem;
         box-shadow: none;
         background: transparent;
         font-weight: 600;

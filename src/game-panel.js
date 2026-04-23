@@ -29,7 +29,10 @@ import {
     getActiveTournamentSlug,
     getPlayerUscfId,
 } from './tnm.js';
+import { createTournamentMenu, renderTournamentInfoHtml } from './tournament-menu.js';
 import * as engine from './engine.js';
+
+let _tournamentMenu = null;
 
 loadEcoData();
 
@@ -830,15 +833,7 @@ export function initGamePanel(mount, { features, pieceSrc } = {}) {
                 </div>
             </div>
             <div id="tournament-info-popup" class="editor-header-popup hidden">
-                <div class="editor-header-inner tournament-info-inner">
-                    <h3 class="editor-header-title" id="tournament-info-title"></h3>
-                    <div class="tournament-info-dates" id="tournament-info-dates"></div>
-                    <div class="editor-header-fields" id="tournament-info-fields"></div>
-                    <div class="tournament-info-link" id="tournament-info-link"></div>
-                    <div class="editor-header-actions">
-                        <button type="button" data-action="tournament-info-close" class="editor-h-btn">Close</button>
-                    </div>
-                </div>
+                <div class="editor-header-inner tournament-info-inner"></div>
             </div>
             <div id="editor-dirty-dialog" class="editor-import-dialog hidden">
                 <div class="editor-import-content editor-dirty-content">
@@ -2939,9 +2934,12 @@ function renderBrowserTitle(panelEl, state) {
         return;
     }
 
-    // Don't clobber existing server dropdown (avoids re-render flicker on every onChange)
-    const existingSelect = titleEl.querySelector('.browser-title-select');
-    if (existingSelect && existingSelect.dataset.mode === 'server' && !games.getEvents()) return;
+    // Don't clobber existing server trigger (avoids re-render flicker on every onChange)
+    const existingTrigger = titleEl.querySelector('.browser-title-trigger');
+    if (existingTrigger && !games.getEvents()) {
+        updateTournamentTrigger(titleEl);
+        return;
+    }
 
     // Multiple events: dropdown with "All Events (N games)" default
     const localEvents = games.getEvents();
@@ -2958,26 +2956,48 @@ function renderBrowserTitle(panelEl, state) {
         return;
     }
 
-    // Server mode: dropdown from prefetched tournament list
+    // Server mode: rich popover picker
     const tournaments = getTournamentList();
     if (!tournaments || tournaments.length <= 1) {
         titleEl.textContent = games.getTitle();
         return;
     }
 
-    const slug = getActiveTournamentSlug();
-    const options = tournaments
-        .map(
-            (t) =>
-                `<option value="${t.slug}"${t.slug === slug || (!slug && t.name === games.getTitle()) ? ' selected' : ''}>${t.name}</option>`,
-        )
-        .join('');
+    titleEl.innerHTML = `
+        <button type="button" class="browser-title-trigger" aria-haspopup="listbox" aria-expanded="false">
+            <span class="browser-title-trigger-text"></span>
+            <svg class="browser-title-trigger-chevron" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+    `;
+    const trigger = titleEl.querySelector('.browser-title-trigger');
+    updateTournamentTrigger(titleEl);
 
-    titleEl.innerHTML = `<select class="browser-title-select" data-mode="server">${options}</select>`;
-    titleEl.querySelector('.browser-title-select').addEventListener('change', (e) => {
-        games.switchDataSource(e.target.value, slug, { onSwitch: switchTournament });
-        e.target.blur();
+    // Tear down any previous menu (happens when the user switches between
+    // player mode and server mode — the trigger gets rebuilt but the old
+    // popover would otherwise leak on document.body).
+    if (_tournamentMenu) _tournamentMenu.destroy();
+    _tournamentMenu = createTournamentMenu({
+        trigger,
+        getTournaments: getTournamentList,
+        getActiveSlug: () => getActiveTournamentSlug() || findSlugForTitle(games.getTitle()),
+        onSelect: (nextSlug) => {
+            const currentSlug = getActiveTournamentSlug();
+            games.switchDataSource(nextSlug, currentSlug, { onSwitch: switchTournament });
+        },
     });
+}
+
+// Keep the trigger's label in sync with games.getTitle(). Cheap enough to run on every render.
+function updateTournamentTrigger(titleEl) {
+    const text = titleEl.querySelector('.browser-title-trigger-text');
+    if (text) text.textContent = games.getTitle();
+}
+
+// When getActiveTournamentSlug() is null (cold start, title driven by cache), find
+// the slug matching the currently-displayed title so the menu can mark it active.
+function findSlugForTitle(name) {
+    const list = getTournamentList();
+    return list?.find((t) => t.name === name)?.slug || null;
 }
 
 function renderBrowserChips(panelEl, state) {
@@ -3769,86 +3789,13 @@ export function saveHeaderEditor() {
     document.getElementById('editor-header-popup')?.classList.add('hidden');
 }
 
-// Tournament info popup
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-const TI_ICONS = {
-    players:
-        '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M12 13c-4.4 0-8 2-8 4.5V19h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/></svg>',
-    rounds: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/></svg>',
-    games: '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
-    clock: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 16,14"/></svg>',
-};
-
 export function showTournamentInfo() {
     const popup = document.getElementById('tournament-info-popup');
+    const inner = popup.querySelector('.tournament-info-inner');
     const meta = games.getTournamentMeta();
-
-    const title = document.getElementById('tournament-info-title');
-    title.textContent = meta?.name || games.getTitle();
-
-    const dates = document.getElementById('tournament-info-dates');
-    if (meta?.startDate && meta?.endDate) {
-        dates.textContent = `${formatDate(meta.startDate)} – ${formatDate(meta.endDate)}`;
-    } else if (meta?.startDate) {
-        dates.textContent = formatDate(meta.startDate);
-    } else {
-        dates.textContent = '';
-    }
-
-    const fields = document.getElementById('tournament-info-fields');
-
-    // Stats row with icons
-    const stats = [];
-    if (meta?.playerCount) stats.push(`<span class="ti-stat">${TI_ICONS.players} ${meta.playerCount} Players</span>`);
-    if (meta?.totalRounds) stats.push(`<span class="ti-stat">${TI_ICONS.rounds} ${meta.totalRounds} Rounds</span>`);
-    if (meta?.gameCount) stats.push(`<span class="ti-stat">${TI_ICONS.games} ${meta.gameCount} Games</span>`);
-    if (meta?.timeControl) stats.push(`<span class="ti-stat">${TI_ICONS.clock} ${meta.timeControl}</span>`);
-
-    let html = '';
-    if (stats.length) {
-        html += `<div class="ti-stats">${stats.join('')}</div>`;
-    }
-
-    // Sections
-    if (meta?.sections?.length) {
-        html += `<div class="ti-section-title">Sections</div>`;
-        html += `<div class="ti-sections">${meta.sections
-            .map((s) => `<span class="ti-section">${s}</span>`)
-            .join('')}</div>`;
-    }
-
-    // Officials
-    const officials = [];
-    if (meta?.director)
-        officials.push(
-            `<div class="ti-official"><span class="ti-official-role">Director</span> ${meta.director}</div>`,
-        );
-    if (meta?.organizer)
-        officials.push(
-            `<div class="ti-official"><span class="ti-official-role">Organizer</span> ${meta.organizer}</div>`,
-        );
-    if (officials.length) {
-        html += `<div class="ti-officials">${officials.join('')}</div>`;
-    }
-
-    if (!html) {
-        html = '<div class="editor-header-empty">No tournament info available.</div>';
-    }
-
-    fields.innerHTML = html;
-
-    const link = document.getElementById('tournament-info-link');
-    if (meta?.tournamentUrl) {
-        link.innerHTML = `<a href="${meta.tournamentUrl}" target="_blank" rel="noopener">View on MI website ›</a>`;
-    } else {
-        link.innerHTML = '';
-    }
-
+    inner.innerHTML =
+        renderTournamentInfoHtml(meta, games.getTitle()) +
+        '<div class="editor-header-actions"><button type="button" data-action="tournament-info-close" class="editor-h-btn">Close</button></div>';
     popup.classList.remove('hidden');
     wirePopupDismiss(popup);
 }
