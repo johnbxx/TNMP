@@ -105,10 +105,15 @@ const PREVIEW_HIDE_DELAY_MS = 250; // delay after mouse leaves — gives time to
  * @param {(slug: string) => void} opts.onSelect - called when user picks a tournament
  */
 export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, onSelect }) {
-    // Mount inside the nearest modal so the modal's focus trap doesn't
-    // block keyboard focus from landing in the popover. Fall back to body
-    // if the trigger isn't inside a modal.
+    // Mount inside the nearest modal (respects its focus trap). We avoid
+    // mounting inside .modal-content-viewer because its `transform`/`filter`
+    // creates a containing block that breaks `position: fixed` positioning.
     const container = trigger.closest('.modal') || document.body;
+    // style.js applies the color-scheme vars (mi-light etc.) inline on
+    // .modal-content-viewer. Since our popover sits outside that element,
+    // it wouldn't inherit them — so we mirror .light-scheme onto the
+    // popover at open() time.
+    const schemeSource = trigger.closest('.modal-content-viewer');
 
     const popover = document.createElement('div');
     popover.className = 'tm-popover hidden';
@@ -531,8 +536,24 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
         popover.style.maxHeight = `${maxHeight}px`;
     }
 
+    // Mirror color-scheme from the .modal-content-viewer that style.js targets,
+    // so the popover (mounted outside that element) picks up mi-light vars.
+    function syncScheme(el) {
+        if (!schemeSource) return;
+        const isLight = schemeSource.classList.contains('light-scheme');
+        el.classList.toggle('light-scheme', isLight);
+        // Copy the inline vars style.js sets on the scheme source
+        for (const prop of ['--modal-bg', '--accent', 'color-scheme']) {
+            const val = schemeSource.style.getPropertyValue(prop);
+            if (val) el.style.setProperty(prop, val);
+            else el.style.removeProperty(prop);
+        }
+    }
+
     function open() {
         if (isOpen) return;
+        syncScheme(popover);
+        syncScheme(preview);
         renderList();
         position();
         popover.classList.remove('hidden');

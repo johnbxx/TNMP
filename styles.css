@@ -1016,13 +1016,15 @@ select.editor-header-input option {
     color: var(--accent);
 }
 
-/* Popover panel — anchored via JS (position: fixed) */
+/* Popover panel — anchored via JS (position: fixed).
+   Uses fully-opaque modal bg (not --popup-bg's 97%) because any transparency
+   leaks host-page content through when the embed is on a light page. */
 .tm-popover {
     position: fixed;
     z-index: 10000;
     display: flex;
     flex-direction: column;
-    background: var(--popup-bg);
+    background: var(--modal-bg);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
     padding: 0.75rem 0.75rem 0.5rem;
@@ -1083,9 +1085,11 @@ select.editor-header-input option {
 .tm-dual-range { position: relative; height: 24px; }
 .tm-dual-range input[type="range"] {
     position: absolute; top: 0; left: 0; width: 100%; height: 24px;
-    -webkit-appearance: none; appearance: none;
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
     background: transparent; pointer-events: none; margin: 0;
+    border: none; outline: none; padding: 0;
 }
+.tm-dual-range input[type="range"]:focus { outline: none; }
 .tm-dual-range input[type="range"]::-webkit-slider-runnable-track {
     height: 4px; border-radius: 2px; background: transparent;
 }
