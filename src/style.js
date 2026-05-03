@@ -58,6 +58,7 @@ const BOARD_PRESETS = [
     { id: 'blue', name: 'Blue', light: '#dee3e6', dark: '#7192ab' },
     { id: 'purple', name: 'Purple', light: '#e8dff0', dark: '#9b72b0' },
     { id: 'wood', name: 'Wood', light: '#e8c889', dark: '#b48b4e' },
+    { id: 'paper', name: 'Paper', light: '#ffffff', dark: '#1a1a1a', pattern: 'hash' },
 ];
 
 // --- App color schemes ---
@@ -85,6 +86,7 @@ function getStored() {
         pieceTheme: localStorage.getItem('pieceTheme') || 'default',
         boardLight: localStorage.getItem('boardLight') || '#dee3e6',
         boardDark: localStorage.getItem('boardDark') || '#8ca2ad',
+        boardPattern: localStorage.getItem('boardPattern') || '',
         appScheme: localStorage.getItem('appScheme') || 'default',
     };
 }
@@ -120,28 +122,66 @@ function applyPieceTheme(theme) {
 
 // --- Board color application ---
 
-function buildBoardSvg(light, dark) {
+function buildBoardSvg(light, dark, pattern) {
+    if (pattern === 'hash') return buildHashBoardSvg(light, dark);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/1999/xlink" viewBox="0 0 8 8" shape-rendering="crispEdges"><g id="a"><g id="b"><g id="c"><g id="d"><rect width="1" height="1" id="e" fill="${light}"/><use x="1" y="1" href="#e" x:href="#e"/><rect y="1" width="1" height="1" id="f" fill="${dark}"/><use x="1" y="-1" href="#f" x:href="#f"/></g><use x="2" href="#d" x:href="#d"/></g><use x="4" href="#c" x:href="#c"/></g><use y="2" href="#b" x:href="#b"/></g><use y="4" href="#a" x:href="#a"/></svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
-function applyBoardColors(light, dark) {
+// Old-school paper diagram: dark squares are diagonal hatching on the light background.
+function buildHashBoardSvg(light, dark) {
+    const squares = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if ((r + c) % 2 === 1) squares.push(`<rect x="${c}" y="${r}" width="1" height="1" fill="url(#h)"/>`);
+        }
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><defs><pattern id="h" patternUnits="userSpaceOnUse" width="0.09" height="0.09" patternTransform="rotate(45)"><rect width="0.09" height="0.09" fill="${light}"/><line x1="0" y1="0" x2="0" y2="0.09" stroke="${dark}" stroke-width="0.045"/></pattern><filter id="ink"><feTurbulence type="fractalNoise" baseFrequency="8" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="0.018"/></filter></defs><rect width="8" height="8" fill="${light}"/><g filter="url(#ink)">${squares.join('')}</g></svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
+// Hidden SVG holding the ink filter referenced by CSS `filter: url(#tnmp-ink-pieces)`.
+function ensureInkFilter() {
+    if (document.getElementById('tnmp-ink-svg')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'tnmp-ink-svg';
+    wrap.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
+    wrap.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg"><defs><filter id="tnmp-ink-pieces" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="9" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"/></filter></defs></svg>`;
+    document.body.appendChild(wrap);
+}
+
+function applyBoardColors(light, dark, pattern = '') {
     if (!_boardStyleEl) {
         _boardStyleEl = document.createElement('style');
         _boardStyleEl.id = 'board-colors';
         document.head.appendChild(_boardStyleEl);
     }
 
+    if (pattern === 'hash') ensureInkFilter();
+    const pieceFilterRule = pattern === 'hash' ? `.tnmp .cg-wrap piece { filter: url(#tnmp-ink-pieces); }` : '';
+    // Paper theme reads better with a warm highlighter tint than the default cool yellow.
+    const highlightOverride = pattern === 'hash' ? `--board-highlight: rgba(255, 210, 60, 0.55);` : '';
+
     _boardStyleEl.textContent = `
-        :root { --board-light: ${light}; --board-dark: ${dark}; }
+        :root { --board-light: ${light}; --board-dark: ${dark}; ${highlightOverride} }
         .cg-wrap cg-board {
             background-color: ${light};
-            background-image: url('${buildBoardSvg(light, dark)}');
+            background-image: url('${buildBoardSvg(light, dark, pattern)}');
         }
+        ${pieceFilterRule}
     `;
 
     localStorage.setItem('boardLight', light);
     localStorage.setItem('boardDark', dark);
+    localStorage.setItem('boardPattern', pattern);
+}
+
+// CSS background for a single dark square, used in preview tiles and dropdown swatches.
+function darkSquareCss(light, dark, pattern) {
+    if (pattern === 'hash') {
+        return `repeating-linear-gradient(45deg, ${dark} 0 1px, ${light} 1px 4px)`;
+    }
+    return dark;
 }
 
 // --- App scheme application ---
@@ -218,7 +258,8 @@ const FEN_MAP = {
     P: 'wP',
 };
 
-function renderPreviewBoard(light, dark, theme) {
+function renderPreviewBoard(light, dark, theme, pattern) {
+    const darkBg = darkSquareCss(light, dark, pattern);
     const rows = PREVIEW_FEN.split('/');
     let html = '';
     for (let r = 0; r < 8; r++) {
@@ -228,13 +269,13 @@ function renderPreviewBoard(light, dark, theme) {
             if (ch >= '1' && ch <= '8') {
                 for (let i = 0; i < parseInt(ch); i++) {
                     const isLight = (r + col) % 2 === 0;
-                    html += `<div class="preview-sq" style="background:${isLight ? light : dark}"></div>`;
+                    html += `<div class="preview-sq" style="background:${isLight ? light : darkBg}"></div>`;
                     col++;
                 }
             } else {
                 const isLight = (r + col) % 2 === 0;
                 const piece = FEN_MAP[ch];
-                html += `<div class="preview-sq" style="background:${isLight ? light : dark}"><img src="${pieceSrc(theme, piece)}" alt="" draggable="false"></div>`;
+                html += `<div class="preview-sq" style="background:${isLight ? light : darkBg}"><img src="${pieceSrc(theme, piece)}" alt="" draggable="false"></div>`;
                 col++;
             }
         }
@@ -284,10 +325,11 @@ function piecePreviewHtml(themeId) {
     ).join('');
 }
 
-function boardSwatchHtml(light, dark) {
+function boardSwatchHtml(light, dark, pattern) {
+    const darkBg = darkSquareCss(light, dark, pattern);
     return `<span class="style-board-swatch">
-        <span style="background:${light}"></span><span style="background:${dark}"></span>
-        <span style="background:${dark}"></span><span style="background:${light}"></span>
+        <span style="background:${light}"></span><span style="background:${darkBg}"></span>
+        <span style="background:${darkBg}"></span><span style="background:${light}"></span>
     </span>`;
 }
 
@@ -307,14 +349,15 @@ function buildPieceMenu(currentId) {
     ).join('');
 }
 
-function buildBoardMenu(currentLight, currentDark) {
-    return BOARD_PRESETS.map(
-        (p) =>
-            `<div class="style-dropdown-item${p.light === currentLight && p.dark === currentDark ? ' active' : ''}" data-value="${p.id}">
-            ${boardSwatchHtml(p.light, p.dark)}
+function buildBoardMenu(currentLight, currentDark, currentPattern) {
+    return BOARD_PRESETS.map((p) => {
+        const active =
+            p.light === currentLight && p.dark === currentDark && (p.pattern || '') === (currentPattern || '');
+        return `<div class="style-dropdown-item${active ? ' active' : ''}" data-value="${p.id}">
+            ${boardSwatchHtml(p.light, p.dark, p.pattern)}
             <span class="style-dropdown-label">${p.name}</span>
-        </div>`,
-    ).join('');
+        </div>`;
+    }).join('');
 }
 
 function buildSchemeMenu(currentId) {
@@ -335,10 +378,12 @@ function updatePieceTrigger(themeId) {
          <span class="style-dropdown-arrow">▾</span>`;
 }
 
-function updateBoardTrigger(light, dark) {
-    const preset = BOARD_PRESETS.find((p) => p.light === light && p.dark === dark);
+function updateBoardTrigger(light, dark, pattern) {
+    const preset = BOARD_PRESETS.find(
+        (p) => p.light === light && p.dark === dark && (p.pattern || '') === (pattern || ''),
+    );
     const name = preset ? preset.name : 'Custom';
-    document.querySelector('#style-board .style-dropdown-trigger').innerHTML = `${boardSwatchHtml(light, dark)}
+    document.querySelector('#style-board .style-dropdown-trigger').innerHTML = `${boardSwatchHtml(light, dark, pattern)}
          <span class="style-dropdown-label">${name}</span>
          <span class="style-dropdown-arrow">▾</span>`;
 }
@@ -420,19 +465,21 @@ export function initStyle(mount) {
     initDropdown('style-board', (presetId) => {
         const preset = BOARD_PRESETS.find((p) => p.id === presetId);
         if (!preset) return;
-        applyBoardColors(preset.light, preset.dark);
-        updateBoardTrigger(preset.light, preset.dark);
+        const pattern = preset.pattern || '';
+        applyBoardColors(preset.light, preset.dark, pattern);
+        updateBoardTrigger(preset.light, preset.dark, pattern);
         document.getElementById('board-light-picker').value = preset.light;
         document.getElementById('board-dark-picker').value = preset.dark;
         refreshPreview();
     });
 
-    // Wire up custom color pickers
+    // Wire up custom color pickers (preserves current pattern)
     const lightPicker = document.getElementById('board-light-picker');
     const darkPicker = document.getElementById('board-dark-picker');
     const onColorChange = () => {
-        applyBoardColors(lightPicker.value, darkPicker.value);
-        updateBoardTrigger(lightPicker.value, darkPicker.value);
+        const pattern = localStorage.getItem('boardPattern') || '';
+        applyBoardColors(lightPicker.value, darkPicker.value, pattern);
+        updateBoardTrigger(lightPicker.value, darkPicker.value, pattern);
         refreshPreview();
     };
     lightPicker.addEventListener('input', onColorChange);
@@ -460,7 +507,7 @@ export function initStyle(mount) {
     initDarkMode();
     const stored = getStored();
     applyPieceTheme(stored.pieceTheme);
-    applyBoardColors(stored.boardLight, stored.boardDark);
+    applyBoardColors(stored.boardLight, stored.boardDark, stored.boardPattern);
     if (stored.appScheme !== 'default') applyAppScheme(stored.appScheme);
 }
 
@@ -473,7 +520,14 @@ function initDarkMode() {
 function refreshPreview() {
     const stored = getStored();
     const board = document.getElementById('style-preview-board');
-    if (board) board.innerHTML = renderPreviewBoard(stored.boardLight, stored.boardDark, stored.pieceTheme);
+    if (board) {
+        board.innerHTML = renderPreviewBoard(
+            stored.boardLight,
+            stored.boardDark,
+            stored.pieceTheme,
+            stored.boardPattern,
+        );
+    }
 }
 
 export function openStyle() {
@@ -484,12 +538,13 @@ export function openStyle() {
     document.querySelector('#style-board .style-dropdown-menu').innerHTML = buildBoardMenu(
         stored.boardLight,
         stored.boardDark,
+        stored.boardPattern,
     );
     document.querySelector('#style-theme .style-dropdown-menu').innerHTML = buildSchemeMenu(stored.appScheme);
 
     // Set triggers
     updatePieceTrigger(stored.pieceTheme);
-    updateBoardTrigger(stored.boardLight, stored.boardDark);
+    updateBoardTrigger(stored.boardLight, stored.boardDark, stored.boardPattern);
     updateSchemeTrigger(stored.appScheme);
 
     // Set color pickers
