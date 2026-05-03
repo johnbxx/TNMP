@@ -153,7 +153,15 @@ function extractMoveTokens(pgn) {
             if (c <= 32 || c === 123 || c === 40 || c === 41 || c === 59) break;
             i++;
         }
-        const tok = moveText.slice(start, i);
+        let tokEnd = i;
+        // Strip trailing NAG suffixes (?, !, ?!, !?, ??, !!) that lichess/chess.com
+        // sometimes concatenate onto SAN tokens.
+        while (tokEnd > start) {
+            const c = moveText.charCodeAt(tokEnd - 1);
+            if (c === 33 || c === 63) tokEnd--;
+            else break;
+        }
+        const tok = moveText.slice(start, tokEnd);
         const first = tok.charCodeAt(0);
         if (first >= 48 && first <= 57) {
             if (tok === '1-0' || tok === '0-1' || tok === '1/2-1/2' || tok === '*' || tok.includes('.')) continue;
