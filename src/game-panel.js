@@ -13,16 +13,7 @@ import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn } from './pgn-parser.js';
 import { FIELD_SCHEMA } from './record.js';
-import {
-    formatName,
-    resultClass,
-    resultSymbol,
-    scorePercent,
-    openMenu,
-    closeMenu,
-    toggleMenu,
-    closeAllMenus,
-} from './utils.js';
+import { formatName, resultClass, resultSymbol, scorePercent, openMenu, closeMenu, closeAllMenus } from './utils.js';
 import { CONFIG } from './config.js';
 import { refreshScheme } from './style.js';
 import { showToast } from './toast.js';
