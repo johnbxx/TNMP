@@ -30,9 +30,11 @@ export async function resolveTournament(env) {
         }
 
         let nextStartDate = null;
+        let nextRoundDates = [];
         if (next) {
             try {
-                const r1 = JSON.parse(next.round_dates || '[]')[0];
+                nextRoundDates = JSON.parse(next.round_dates || '[]');
+                const r1 = nextRoundDates[0];
                 nextStartDate = r1 ? r1.slice(0, 10) : null;
             } catch { /* corrupted */ }
         }
@@ -41,7 +43,8 @@ export async function resolveTournament(env) {
             name: current.name, slug: current.slug, url, roundDates,
             totalRounds: roundDates.length,
             nextTournament: next ? {
-                name: next.name, url: next.url, startDate: nextStartDate,
+                name: next.name, slug: next.slug, url: next.url,
+                startDate: nextStartDate, roundDates: nextRoundDates,
             } : null,
         };
     }
@@ -217,6 +220,21 @@ export function getTimeState(roundDates, nextTournament) {
     return 'results_window';
 }
 
+// During off-season, the "displayed" tournament is the upcoming one — that's
+// what the user is counting down to, not the one that just ended.
+export function displayTournament(state, tournament) {
+    const next = tournament?.nextTournament;
+    if (state === 'off_season' && next?.roundDates?.length > 0) {
+        return { name: next.name, slug: next.slug, url: next.url, roundDates: next.roundDates };
+    }
+    return {
+        name: tournament?.name || 'Tuesday Night Marathon',
+        slug: tournament?.slug || null,
+        url: tournament?.url || null,
+        roundDates: tournament?.roundDates || [],
+    };
+}
+
 const OG_STATE_CONFIG = {
     yes:         { title: 'YES — Pairings Are Up!', color: '#00c853', image: 'og-yes.png' },
     no:          { title: 'Waiting for Pairings...', color: '#ff1744', image: 'og-no.png' },
@@ -323,11 +341,12 @@ export async function handleTournamentState(request, env) {
         resolveTournament(env),
     ]);
     const appState = computeAppState(cached, meta);
+    const display = displayTournament(appState.state, meta);
 
     return corsResponse({
         state: appState.state, round: appState.round,
-        tournamentName: appState.tournamentName, tournamentUrl: meta?.url || null,
-        tournamentSlug: meta?.slug || null, roundDates: meta?.roundDates || [],
+        tournamentName: display.name, tournamentUrl: display.url,
+        tournamentSlug: display.slug, roundDates: display.roundDates,
         fetchedAt: cached?.fetchedAt || null,
     }, 200, env, request);
 }
@@ -338,13 +357,14 @@ export async function handleOgState(request, env) {
         resolveTournament(env),
     ]);
     const appState = computeAppState(cached, meta);
+    const display = displayTournament(appState.state, meta);
     const ogConfig = OG_STATE_CONFIG[appState.state] || OG_STATE_CONFIG.no;
     const title = appState.state === 'in_progress' && appState.round
         ? `ROUND ${appState.round} — In Progress` : ogConfig.title;
 
     return corsResponse({
         state: appState.state, roundNumber: appState.round,
-        tournamentName: appState.tournamentName, title,
+        tournamentName: display.name, title,
         description: appState.info, color: ogConfig.color, image: ogConfig.image,
     }, 200, env, request);
 }

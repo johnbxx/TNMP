@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
-import { resolveTournament, computeAppState, discoverUpcomingTournaments } from './tournament.js';
+import { resolveTournament, computeAppState, discoverUpcomingTournaments, displayTournament } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings,
@@ -109,12 +109,12 @@ async function runCronLogic(env) {
         await retryPendingNotifications(env);
 
         // Recompute time-dependent app state even when HTML hasn't changed
-        const slug = slugifyTournament(tournament.name);
         const appState = computeAppState(cached, tournament);
+        const display = displayTournament(appState.state, tournament);
         await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
             state: appState.state, round: appState.round,
-            tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
-            tournamentSlug: slug, roundDates: tournament.roundDates || [],
+            tournamentName: display.name, tournamentUrl: display.url,
+            tournamentSlug: display.slug, roundDates: display.roundDates,
             fetchedAt: new Date().toISOString(),
         }));
         await updateLastCheck(env, { pairingsFound: hasPairingsFlag });
@@ -272,12 +272,13 @@ async function runCronLogic(env) {
     const appState = computeAppState(cached, tournament);
     t.computeAppState = performance.now() - t0;
     const slug = slugifyTournament(tournament.name);
+    const display = displayTournament(appState.state, tournament);
 
     t0 = performance.now();
     await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
         state: appState.state, round: appState.round,
-        tournamentName: appState.tournamentName, tournamentUrl: tournament.url,
-        tournamentSlug: slug, roundDates: tournament.roundDates || [],
+        tournamentName: display.name, tournamentUrl: display.url,
+        tournamentSlug: display.slug, roundDates: display.roundDates,
         fetchedAt: new Date().toISOString(),
     }));
     console.log(`Cached appState in KV.`);
