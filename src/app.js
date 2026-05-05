@@ -75,7 +75,7 @@ import {
 } from './games.js';
 import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
-import { formatName, getHeader, resultDisplay } from './utils.js';
+import { formatName, getHeader, resultDisplay, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 
 function downloadPgn(pgnText, filename) {
@@ -393,8 +393,8 @@ const ACTIONS = {
         btn.classList.toggle('active', toggleBranchMode());
     },
     'viewer-analysis': async () => {
-        getActiveTabEl()?.querySelector('.share-popover')?.classList.add('hidden');
-        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.share-popover'));
+        closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
         const pgn = getGamePgn();
         if (!pgn) return;
         const nodes = getNodes();
@@ -423,13 +423,16 @@ const ACTIONS = {
     },
     'viewer-share': (e) => {
         e.stopPropagation();
-        getActiveTabEl()?.querySelector('.share-popover').classList.toggle('hidden');
+        const popover = getActiveTabEl()?.querySelector('.share-popover');
+        closeAllMenus(popover);
+        toggleMenu(popover);
     },
     'viewer-overflow': (e) => {
         e.stopPropagation();
         const menu = getActiveTabEl()?.querySelector('.overflow-menu');
-        const stillHidden = menu.classList.toggle('hidden');
-        if (!stillHidden) {
+        closeAllMenus(menu);
+        const opened = toggleMenu(menu);
+        if (opened) {
             // Sync toggle states when opening
             const commentsBtn = getActiveTabEl()?.querySelector('.viewer-comments-btn');
             const branchBtn = getActiveTabEl()?.querySelector('.viewer-branch-btn');
@@ -455,7 +458,7 @@ const ACTIONS = {
     },
     'viewer-engine': () => toggleEngine(),
     'overflow-engine': () => {
-        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
         toggleEngine();
     },
     'engine-confirm': () => {
@@ -472,11 +475,11 @@ const ACTIONS = {
         document.getElementById('engine-settings-dialog')?.classList.add('hidden');
     },
     'overflow-analysis': () => {
-        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
         ACTIONS['viewer-analysis']();
     },
     'overflow-headers': () => {
-        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
         ACTIONS['editor-headers']();
     },
     // Explorer
@@ -517,8 +520,8 @@ const ACTIONS = {
     'dirty-cancel': () => resolveDirtyDialog('cancel'),
     // Share popover
     'viewer-save': () => {
-        getActiveTabEl()?.querySelector('.share-popover')?.classList.add('hidden');
-        getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.share-popover'));
+        closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
         const game = getActiveTabGame();
         if (!game) return;
         openCollectionBrowser({
@@ -556,14 +559,12 @@ document.addEventListener('click', (e) => {
 
     // Dismiss share popover on outside click
     if (!e.target.closest('.share-btn-wrapper') && !e.target.closest('.overflow-btn-wrapper')) {
-        const popover = getActiveTabEl()?.querySelector('.share-popover');
-        if (popover) popover.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.share-popover'));
     }
 
     // Dismiss overflow menu on outside click
     if (!e.target.closest('.overflow-btn-wrapper')) {
-        const menu = getActiveTabEl()?.querySelector('.overflow-menu');
-        if (menu) menu.classList.add('hidden');
+        closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
     }
 
     // Browser export
@@ -678,8 +679,8 @@ async function shareStatus() {
 }
 
 async function handleShareAction(action) {
-    getActiveTabEl()?.querySelector('.share-popover').classList.add('hidden');
-    getActiveTabEl()?.querySelector('.overflow-menu')?.classList.add('hidden');
+    closeMenu(getActiveTabEl()?.querySelector('.share-popover'));
+    closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {

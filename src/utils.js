@@ -78,3 +78,45 @@ export function scorePercent(whiteWins, draws, blackWins) {
     if (total === 0) return 50;
     return Math.round(((whiteWins + draws * 0.5) / total) * 100);
 }
+
+// macOS-style menu open/close: open is instant, close fades over 200ms.
+// Use for popovers, dropdowns, right-click menus paired with a matching
+// `.closing` CSS rule that animates opacity out.
+export function openMenu(el) {
+    if (el) el.classList.remove('hidden', 'closing');
+}
+
+export function closeMenu(el) {
+    if (!el || el.classList.contains('hidden') || el.classList.contains('closing')) return;
+    el.classList.add('closing');
+    let done = false;
+    const onDone = () => {
+        if (done) return;
+        done = true;
+        if (!el.classList.contains('closing')) return; // reopened mid-fade
+        el.classList.add('hidden');
+        el.classList.remove('closing');
+    };
+    el.addEventListener('animationend', onDone, { once: true });
+    setTimeout(onDone, 230);
+}
+
+export function toggleMenu(el) {
+    if (!el) return false;
+    if (el.classList.contains('hidden')) {
+        openMenu(el);
+        return true;
+    }
+    closeMenu(el);
+    return false;
+}
+
+// Close every popover/right-click menu in the document. Pass `exceptEl` to
+// keep one open — used by show/toggle handlers so opening menu A dismisses
+// any other menus without flashing A itself closed-then-open.
+const MENU_SELECTORS = '.editor-context-menu, .share-popover, .overflow-menu';
+export function closeAllMenus(exceptEl = null) {
+    for (const el of document.querySelectorAll(MENU_SELECTORS)) {
+        if (el !== exceptEl) closeMenu(el);
+    }
+}

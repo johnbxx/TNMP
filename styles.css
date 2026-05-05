@@ -3552,7 +3552,7 @@ button.viewer-close {
     padding: 0.25rem;
 }
 .viewer-browser-panel .browser-game-row {
-    padding: 0.35rem 0.75rem;
+    padding: calc(0.35rem + 1.5px) 0.75rem;
     font-size: 0.82rem;
 }
 .viewer-browser-panel .browser-game-row.active {
@@ -3721,20 +3721,31 @@ button.viewer-close {
     color: var(--text-subtle);
 }
 
-/* Move context menu (right-click / long-press) */
+/* Move context menu (right-click / long-press) — opens instantly, fades on close */
 .editor-context-menu {
     position: fixed;
     z-index: 2001;
     background: var(--popup-bg);
     border-radius: var(--radius-sm);
-    padding: 6px;
+    padding: 0;
+    overflow: hidden;
     box-shadow: var(--shadow-md);
     min-width: 180px;
+}
+.editor-context-menu.closing,
+.share-popover.closing,
+.overflow-menu.closing {
+    animation: menu-fade-out 200ms ease-out both;
+    pointer-events: none;
+}
+@keyframes menu-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }
 .ctx-nag-row {
     display: flex;
     gap: 2px;
-    padding: 2px 2px 6px;
+    padding: 6px 6px 8px;
     border-bottom: 1px solid var(--overlay-light);
     margin-bottom: 4px;
 }
@@ -3764,11 +3775,13 @@ button.viewer-close {
     border: none;
     color: var(--text-primary);
     font-size: 0.85rem;
-    padding: 6px 8px;
-    border-radius: var(--radius-xs);
+    padding: 6px 12px;
+    border-radius: 0;
     cursor: pointer;
     text-align: left;
 }
+.editor-context-menu .ctx-item:first-child { padding-top: 8px; }
+.editor-context-menu .ctx-item:last-child { padding-bottom: 8px; }
 .ctx-item:hover { background: var(--overlay-light); }
 
 /* Promotion picker */
@@ -4441,7 +4454,9 @@ input.browser-search-input {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.35rem 0.5rem;
+    /* Extra 1.5px top/bottom absorbs the inter-row gap into each row's hit
+       area, so the cursor never falls into dead space between rows. */
+    padding: calc(0.35rem + 1.5px) 0.5rem;
     border-radius: var(--radius-sm);
     cursor: pointer;
 }
@@ -4718,8 +4733,9 @@ input.browser-search-input {
     padding: 0.6rem 0.75rem;
     margin-bottom: 0.35rem;
     background: var(--surface);
-    border: 1px solid var(--surface);
+    border: none;
     border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-xs);
     cursor: pointer;
     text-align: left;
     color: inherit;
@@ -4738,7 +4754,7 @@ input.browser-search-input {
     padding: 0.35rem 0.5rem;
     margin-bottom: 0.15rem;
     background: none;
-    border-color: transparent;
+    box-shadow: none;
 }
 
 .profile-row-compact .profile-row-label {
@@ -4848,7 +4864,7 @@ input.browser-search-input {
 
 .profile-tab-header {
     flex-shrink: 0;
-    padding-top: 0.75rem;
+    padding: 0.75rem 0.4rem 0;
 }
 
 .profile-tab-content {
@@ -4856,6 +4872,7 @@ input.browser-search-input {
     overflow-y: auto;
     overscroll-behavior: contain;
     min-height: 0;
+    padding: 0 0.4rem;
 }
 
 .profile-section-title {
@@ -5176,7 +5193,7 @@ input.browser-search-input {
     .viewer-filter-chip { margin-bottom: 0.25rem; }
 
     /* Browser */
-    .browser-game-row { padding: 0.3rem 0.3rem; gap: 0.25rem; }
+    .browser-game-row { padding: calc(0.3rem + 1.5px) 0.3rem; gap: 0.25rem; }
     .browser-result-half { padding: 0.15rem 0.25rem; }
     .browser-name { font-size: 0.7rem; }
     .browser-elo { display: none; }

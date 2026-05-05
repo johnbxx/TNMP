@@ -34,7 +34,7 @@ const FEAT = {
 import { trapFocus } from './modal.js';
 import { openStyle, initStyle } from './style.js';
 import { showToast } from './toast.js';
-import { formatName, getHeader } from './utils.js';
+import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import {
     openGamePanel,
@@ -121,8 +121,8 @@ const ACTIONS = {
         btn.classList.toggle('active', toggleBranchMode());
     },
     'viewer-analysis': async () => {
-        document.querySelector('.share-popover')?.classList.add('hidden');
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(document.querySelector('.share-popover'));
+        closeMenu(document.querySelector('.overflow-menu'));
         const pgn = getGamePgn();
         if (!pgn) return;
         const nodes = getNodes();
@@ -151,13 +151,16 @@ const ACTIONS = {
     },
     'viewer-share': (e) => {
         e.stopPropagation();
-        document.querySelector('.share-popover').classList.toggle('hidden');
+        const popover = document.querySelector('.share-popover');
+        closeAllMenus(popover);
+        toggleMenu(popover);
     },
     'viewer-overflow': (e) => {
         e.stopPropagation();
         const menu = document.querySelector('.overflow-menu');
-        const stillHidden = menu.classList.toggle('hidden');
-        if (!stillHidden) {
+        closeAllMenus(menu);
+        const opened = toggleMenu(menu);
+        if (opened) {
             const commentsBtn = document.querySelector('.viewer-comments-btn');
             const branchBtn = document.querySelector('.viewer-branch-btn');
             menu.querySelector('[data-action="overflow-comments"]')?.classList.toggle(
@@ -185,7 +188,7 @@ const ACTIONS = {
         else ACTIONS['viewer-analysis']();
     },
     'overflow-engine': () => {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(document.querySelector('.overflow-menu'));
         if (FEAT.localEngine) toggleEngine();
         else ACTIONS['viewer-analysis']();
     },
@@ -207,11 +210,11 @@ const ACTIONS = {
     },
     'engine-settings-cancel': () => document.getElementById('engine-settings-dialog')?.classList.add('hidden'),
     'overflow-analysis': () => {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(document.querySelector('.overflow-menu'));
         ACTIONS['viewer-analysis']();
     },
     'overflow-headers': () => {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(document.querySelector('.overflow-menu'));
         ACTIONS['editor-headers']();
     },
     // Explorer
@@ -253,8 +256,8 @@ const ACTIONS = {
 };
 
 function handleShareAction(action) {
-    document.querySelector('.share-popover').classList.add('hidden');
-    document.querySelector('.overflow-menu')?.classList.add('hidden');
+    closeMenu(document.querySelector('.share-popover'));
+    closeMenu(document.querySelector('.overflow-menu'));
     const pgn = getGamePgn();
     if (!pgn) return;
     if (action === 'copy-pgn') {
@@ -328,10 +331,10 @@ document.addEventListener('click', (e) => {
         return;
     }
     if (!e.target.closest('.share-btn-wrapper') && !e.target.closest('.overflow-btn-wrapper')) {
-        document.querySelector('.share-popover')?.classList.add('hidden');
+        closeMenu(document.querySelector('.share-popover'));
     }
     if (!e.target.closest('.overflow-btn-wrapper')) {
-        document.querySelector('.overflow-menu')?.classList.add('hidden');
+        closeMenu(document.querySelector('.overflow-menu'));
     }
     if (e.target.closest('.browser-export')) {
         handleBrowserExport();

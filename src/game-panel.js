@@ -13,7 +13,16 @@ import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn } from './pgn-parser.js';
 import { FIELD_SCHEMA } from './record.js';
-import { formatName, resultClass, resultSymbol, scorePercent } from './utils.js';
+import {
+    formatName,
+    resultClass,
+    resultSymbol,
+    scorePercent,
+    openMenu,
+    closeMenu,
+    toggleMenu,
+    closeAllMenus,
+} from './utils.js';
 import { CONFIG } from './config.js';
 import { refreshScheme } from './style.js';
 import { showToast } from './toast.js';
@@ -587,17 +596,19 @@ export function openExplorerInTab(ctxKey) {
 
 let _browserCtxGameId = null;
 
-function showBrowserContextMenu(gameId, anchor) {
+function showBrowserContextMenu(gameId, anchor, point) {
     const menu = document.getElementById('browser-context-menu');
     if (!menu) return;
+    closeAllMenus(menu);
     _browserCtxGameId = gameId;
-    menu.classList.remove('hidden');
-    positionPopup(menu, anchor);
+    openMenu(menu);
+    if (point) positionPopupAtPoint(menu, point.x, point.y);
+    else positionPopup(menu, anchor);
 }
 
 function hideBrowserContextMenu() {
-    document.getElementById('browser-context-menu')?.classList.add('hidden');
     _browserCtxGameId = null;
+    closeMenu(document.getElementById('browser-context-menu'));
 }
 
 function updateActiveTabGradient() {
@@ -1766,6 +1777,22 @@ function positionPopup(popup, anchor) {
     popup.style.left = `${Math.max(margin, left)}px`;
 }
 
+// macOS-style: open at cursor. Flips to keep menu on-screen if near edges.
+function positionPopupAtPoint(popup, x, y) {
+    const margin = 4;
+    popup.style.left = '0';
+    popup.style.top = '0';
+    const pRect = popup.getBoundingClientRect();
+    let top = y;
+    if (top + pRect.height > window.innerHeight - margin) top = y - pRect.height;
+    top = Math.max(margin, Math.min(top, window.innerHeight - pRect.height - margin));
+    let left = x;
+    if (left + pRect.width > window.innerWidth - margin) left = x - pRect.width;
+    left = Math.max(margin, Math.min(left, window.innerWidth - pRect.width - margin));
+    popup.style.top = `${top}px`;
+    popup.style.left = `${left}px`;
+}
+
 function syncNagButtons(elId, selector, nodeId) {
     const el = document.getElementById(elId);
     if (el && !el.classList.contains('hidden') && nodeId != null) {
@@ -1794,13 +1821,14 @@ function hideNagPicker() {
     _nagTargetNodeId = null;
 }
 
-function showContextMenu(nodeId, anchorEl) {
+function showContextMenu(nodeId, anchorEl, point) {
     const menu = document.getElementById('editor-context-menu');
     if (!menu || !nodeId || nodeId === 0) return;
+    closeAllMenus(menu);
     hideNagPicker();
     _ctxTargetNodeId = nodeId;
     _ctxAnchorEl = anchorEl;
-    menu.classList.remove('hidden');
+    openMenu(menu);
 
     const nodes = _activeTab.game.getNodes();
     const node = nodes[nodeId];
@@ -1818,7 +1846,8 @@ function showContextMenu(nodeId, anchorEl) {
     if (commentBtn) commentBtn.textContent = hasComment ? 'Edit comment' : 'Add comment';
     if (deleteCommentBtn) deleteCommentBtn.classList.toggle('hidden', !hasComment);
 
-    positionPopup(menu, anchorEl);
+    if (point) positionPopupAtPoint(menu, point.x, point.y);
+    else positionPopup(menu, anchorEl);
     refreshNagHighlights();
 }
 
@@ -1861,9 +1890,9 @@ function countMoves(nodes, startId) {
 }
 
 function hideContextMenu() {
-    document.getElementById('editor-context-menu')?.classList.add('hidden');
     _ctxTargetNodeId = null;
     _ctxAnchorEl = null;
+    closeMenu(document.getElementById('editor-context-menu'));
 }
 
 // ─── Inline comment editing ─────────────────────────────────────
@@ -1926,18 +1955,19 @@ function startCommentEdit(nodeId) {
 function wireContextMenu() {
     const container = _activeTab.viewerMoves;
 
-    // Right-click (desktop)
+    // Right-click (desktop) — open at cursor position
     container.addEventListener('contextmenu', (e) => {
+        const point = { x: e.clientX, y: e.clientY };
         const moveEl = e.target.closest('[data-node-id]');
         if (moveEl) {
             e.preventDefault();
-            showContextMenu(parseInt(moveEl.dataset.nodeId, 10), moveEl);
+            showContextMenu(parseInt(moveEl.dataset.nodeId, 10), moveEl, point);
             return;
         }
         const commentEl = e.target.closest('[data-comment-node]');
         if (commentEl) {
             e.preventDefault();
-            showContextMenu(parseInt(commentEl.dataset.commentNode, 10), commentEl);
+            showContextMenu(parseInt(commentEl.dataset.commentNode, 10), commentEl, point);
         }
     });
 
@@ -3232,7 +3262,7 @@ function renderBrowserGameList(panelEl, state) {
         populatePoolElement(probe, probeItem, '');
         probe.el.style.top = '0';
         gamesEl.appendChild(probe.el);
-        vl.rowH = probe.el.offsetHeight + 3;
+        vl.rowH = probe.el.offsetHeight;
         gamesEl.removeChild(probe.el);
     }
     if (!vl.rowH) vl.rowH = 32;
@@ -3578,14 +3608,14 @@ function wireBrowserListeners(panelEl) {
         { signal },
     );
 
-    // Right-click context menu on game rows
+    // Right-click context menu on game rows — open at cursor position
     panelEl.addEventListener(
         'contextmenu',
         (e) => {
             const row = e.target.closest('[data-game-id]');
             if (row && row.dataset.hasPgn === '1') {
                 e.preventDefault();
-                showBrowserContextMenu(row.dataset.gameId, row);
+                showBrowserContextMenu(row.dataset.gameId, row, { x: e.clientX, y: e.clientY });
             }
         },
         { signal },
