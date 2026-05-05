@@ -64,6 +64,63 @@ async function discoverTournamentUrl(env, tournamentName) {
     return null;
 }
 
+export async function discoverUpcomingTournaments(env) {
+    const UA = { 'User-Agent': 'TNMP-Notification-Worker/1.0' };
+
+    let listHtml;
+    try {
+        const res = await fetch(TOURNAMENTS_LIST_URL, { headers: UA });
+        if (!res.ok) return 0;
+        listHtml = await res.text();
+    } catch { return 0; }
+
+    const listed = parseTournamentList(listHtml);
+    if (listed.length === 0) return 0;
+
+    const knownSlugs = new Set();
+    try {
+        const rows = await env.DB.prepare('SELECT slug FROM tournaments').all();
+        for (const r of rows.results) knownSlugs.add(r.slug);
+    } catch { /* tournaments table missing — surface via caller */ }
+
+    const today = new Date().toISOString().split('T')[0];
+    let added = 0;
+
+    for (const t of listed) {
+        if (knownSlugs.has(slugifyTournament(t.name))) continue;
+
+        let pageHtml;
+        try {
+            const res = await fetch(MI_BASE_URL + t.url, { headers: UA });
+            if (!res.ok) continue;
+            pageHtml = await res.text();
+        } catch { continue; }
+
+        const name = extractTournamentName(pageHtml) || t.name;
+        const slug = slugifyTournament(name);
+        if (knownSlugs.has(slug)) continue;
+
+        const yearMatch = name.match(/\b(20\d{2})\b/);
+        const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+        const roundDates = parseRoundDates(pageHtml, year);
+        if (roundDates.length === 0) continue;
+        if (roundDates[roundDates.length - 1].slice(0, 10) < today) continue;
+
+        await env.DB.prepare(
+            `INSERT INTO tournaments (slug, name, round_dates, url)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(slug) DO UPDATE SET name=excluded.name,
+             round_dates=excluded.round_dates, url=excluded.url`
+        ).bind(slug, name, JSON.stringify(roundDates), MI_BASE_URL + t.url).run();
+
+        knownSlugs.add(slug);
+        added++;
+        console.log(`Discovered upcoming tournament: ${name} (${roundDates.length} rounds, R1 ${roundDates[0]})`);
+    }
+
+    return added;
+}
+
 async function discoverTournament(env, today) {
     const UA = { 'User-Agent': 'TNMP-Notification-Worker/1.0' };
 

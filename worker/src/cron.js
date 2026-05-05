@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
-import { resolveTournament, computeAppState } from './tournament.js';
+import { resolveTournament, computeAppState, discoverUpcomingTournaments } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings,
@@ -51,6 +51,15 @@ async function runCronLogic(env) {
     console.log('Cron triggered: checking for pairings...');
     const t = {};
     let t0;
+
+    t0 = performance.now();
+    try {
+        const added = await discoverUpcomingTournaments(env);
+        if (added > 0) console.log(`Tournament discovery: added ${added} new tournament(s).`);
+    } catch (err) {
+        console.error('Tournament discovery failed:', err.message);
+    }
+    t.discoverTournaments = performance.now() - t0;
 
     t0 = performance.now();
     const tournament = await resolveTournament(env);
