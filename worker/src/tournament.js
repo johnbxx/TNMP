@@ -31,7 +31,10 @@ export async function resolveTournament(env) {
 
         let nextStartDate = null;
         if (next) {
-            try { nextStartDate = JSON.parse(next.round_dates || '[]')[0] || null; } catch { /* corrupted */ }
+            try {
+                const r1 = JSON.parse(next.round_dates || '[]')[0];
+                nextStartDate = r1 ? r1.slice(0, 10) : null;
+            } catch { /* corrupted */ }
         }
 
         return {
