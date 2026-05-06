@@ -164,7 +164,14 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
     // ── Build list from tournament data ───────────────────────────────
 
     function renderList() {
-        const tournaments = getTournaments() || [];
+        // Hide future tournaments — discovery seeds them as soon as MI lists
+        // the schedule, but they have no games to browse and shouldn't appear
+        // as picker entries until their first round actually starts.
+        const today = new Date().toISOString().slice(0, 10);
+        const tournaments = (getTournaments() || []).filter((t) => {
+            const r1 = t.startDate || t.roundDates?.[0]?.slice(0, 10) || '';
+            return r1 && r1 <= today;
+        });
         if (tournaments.length === 0) {
             listEl.innerHTML = '<div class="tm-empty">No tournaments available.</div>';
             items = [];
