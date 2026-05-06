@@ -110,7 +110,7 @@ async function runCronLogic(env) {
 
         // Recompute time-dependent app state even when HTML hasn't changed
         const appState = computeAppState(cached, tournament);
-        const display = displayTournament(appState.state, tournament);
+        const display = displayTournament(tournament);
         await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
             state: appState.state, round: appState.round,
             tournamentName: display.name, tournamentUrl: display.url,
@@ -271,8 +271,8 @@ async function runCronLogic(env) {
     const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
     const appState = computeAppState(cached, tournament);
     t.computeAppState = performance.now() - t0;
-    const slug = slugifyTournament(tournament.name);
-    const display = displayTournament(appState.state, tournament);
+    const slug = tournament.slug || slugifyTournament(tournament.name);
+    const display = displayTournament(tournament);
 
     t0 = performance.now();
     await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
@@ -500,21 +500,31 @@ async function dispatchAllNotifications(parsed, tournament, env) {
     }
 
     const round = parsed.roundNumber;
+    const slug = tournament.slug || slugifyTournament(tournament.name);
     const pushSubs = await listPushSubscriptions(env);
     const isInTournament = (record) =>
         !record.playerName || findPlayerPairingFromSections(parsed.pairingsSections, record.playerName) !== null;
+    const trackKey = (kind) => `${slug}:${kind}:${round}`;
 
+    // Legacy KV state had only {round} — treat a round-only match as same-
+    // tournament for backward compat, so we don't re-fire on first post-deploy
+    // cron tick.
+    const stateMatches = (s) => s && s.round === round && (!s.tournamentSlug || s.tournamentSlug === slug);
+
+    let pairingsJustFired = false;
     const pairingsState = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
-    if (pairingsState && pairingsState.round === round) {
-        console.log(`Already notified pairings for round ${round}.`);
+    if (stateMatches(pairingsState)) {
+        console.log(`Already notified pairings for ${slug} r${round}.`);
     } else {
         let count = 0;
         try {
             count = await dispatchPushNotifications({
                 subscribers: pushSubs,
                 prefKey: 'notifyPairings',
-                trackKey: 'lastNotifiedRound',
-                round,
+                trackKey: 'lastNotifiedPairings',
+                trackValue: trackKey('p'),
+                legacyKey: 'lastNotifiedRound',
+                legacyValue: round,
                 shouldNotify: isInTournament,
                 buildPayload: (record) => {
                     const pairing = record.playerName
@@ -532,25 +542,35 @@ async function dispatchAllNotifications(parsed, tournament, env) {
         } catch (err) { console.error('Push pairings dispatch error:', err.message); }
 
         await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
-            round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
+            round, tournamentSlug: slug,
+            detectedAt: new Date().toISOString(), pushNotifiedCount: count,
         }));
-        console.log(`Notified ${count} push subscriber(s) for round ${round} pairings.`);
+        console.log(`Notified ${count} push subscriber(s) for ${slug} r${round} pairings.`);
+        pairingsJustFired = true;
     }
 
+    // Hold results dispatch when pairings just fired this tick — keeps the
+    // user from getting "Pairings Are Up!" and "Results Are In!" within
+    // seconds of each other if MI publishes both at once. Results will
+    // dispatch on the next cron run.
     if (!parsed.hasResults) {
         console.log('No results found yet for current round.');
+    } else if (pairingsJustFired) {
+        console.log(`Holding results dispatch — pairings notification just fired this tick.`);
     } else {
         const resultsState = await env.SUBSCRIBERS.get('state:resultsPosted', 'json');
-        if (resultsState && resultsState.round === round) {
-            console.log(`Already notified results for round ${round}.`);
+        if (stateMatches(resultsState)) {
+            console.log(`Already notified results for ${slug} r${round}.`);
         } else {
             let count = 0;
             try {
                 count = await dispatchPushNotifications({
                     subscribers: pushSubs,
                     prefKey: 'notifyResults',
-                    trackKey: 'lastNotifiedResultsRound',
-                    round,
+                    trackKey: 'lastNotifiedResults',
+                    trackValue: trackKey('r'),
+                    legacyKey: 'lastNotifiedResultsRound',
+                    legacyValue: round,
                     shouldNotify: isInTournament,
                     buildPayload: (record) => {
                         const pairing = record.playerName
@@ -571,9 +591,10 @@ async function dispatchAllNotifications(parsed, tournament, env) {
             } catch (err) { console.error('Push results dispatch error:', err.message); }
 
             await env.SUBSCRIBERS.put('state:resultsPosted', JSON.stringify({
-                round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
+                round, tournamentSlug: slug,
+                detectedAt: new Date().toISOString(), pushNotifiedCount: count,
             }));
-            console.log(`Notified ${count} push subscriber(s) of results for round ${round}.`);
+            console.log(`Notified ${count} push subscriber(s) of results for ${slug} r${round}.`);
         }
     }
 
@@ -585,17 +606,23 @@ async function checkPendingGamesNotification(tournament, env) {
     if (!appState) return;
     const round = appState.round;
     const slug = appState.tournamentSlug;
+    if (!slug || !round) return;
 
     const gamesState = await env.SUBSCRIBERS.get('state:gamesPosted', 'json');
-    if (gamesState && gamesState.round === round) return;
+    // Legacy KV state had only {round} — treat round-only match as same-tournament.
+    if (gamesState && gamesState.round === round && (!gamesState.tournamentSlug || gamesState.tournamentSlug === slug)) return;
 
+    // COALESCE guards against SUM-of-empty-set returning NULL when the
+    // (slug, round) has no rows in games — without it, !== 0 would slip past
+    // the readiness gate and dispatch on a tournament that has no games yet.
     const { totalGames, gamesWithPgn } = (await env.DB.prepare(
-        `SELECT COUNT(*) as totalGames, SUM(CASE WHEN pgn IS NOT NULL AND pgn != '' THEN 1 ELSE 0 END) as gamesWithPgn
+        `SELECT COUNT(*) as totalGames,
+                COALESCE(SUM(CASE WHEN pgn IS NOT NULL AND pgn != '' THEN 1 ELSE 0 END), 0) as gamesWithPgn
          FROM games WHERE tournament_slug = ? AND round = ?`
     ).bind(slug, round).first()) || { totalGames: 0, gamesWithPgn: 0 };
 
-    if (gamesWithPgn === 0 || (totalGames > 0 && gamesWithPgn <= totalGames / 2)) {
-        console.log(`Games check: ${gamesWithPgn}/${totalGames} PGN games for round ${round} — not ready.`);
+    if (!gamesWithPgn || gamesWithPgn <= totalGames / 2) {
+        console.log(`Games check: ${gamesWithPgn}/${totalGames} PGN games for ${slug} r${round} — not ready.`);
         return;
     }
 
@@ -605,8 +632,10 @@ async function checkPendingGamesNotification(tournament, env) {
         count = await dispatchPushNotifications({
             subscribers: pushSubs,
             prefKey: 'notifyResults',
-            trackKey: 'lastNotifiedGamesRound',
-            round,
+            trackKey: 'lastNotifiedGames',
+            trackValue: `${slug}:g:${round}`,
+            legacyKey: 'lastNotifiedGamesRound',
+            legacyValue: round,
             shouldNotify: () => true,
             buildPayload: () => ({
                 title: `Round ${round} Games Are Up!`,
@@ -619,9 +648,10 @@ async function checkPendingGamesNotification(tournament, env) {
     } catch (err) { console.error('Push games dispatch error:', err.message); }
 
     await env.SUBSCRIBERS.put('state:gamesPosted', JSON.stringify({
-        round, detectedAt: new Date().toISOString(), pushNotifiedCount: count,
+        round, tournamentSlug: slug,
+        detectedAt: new Date().toISOString(), pushNotifiedCount: count,
     }));
-    console.log(`Notified ${count} push subscriber(s) of games for round ${round}.`);
+    console.log(`Notified ${count} push subscriber(s) of games for ${slug} r${round}.`);
 
     try {
         const deleted = await env.DB.prepare(

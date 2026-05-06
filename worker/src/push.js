@@ -56,8 +56,9 @@ export async function handlePushSubscribe(request, env) {
         deviceId: deviceId || null,
         endpoint: subscription.endpoint,
         keys: subscription.keys,
-        lastNotifiedRound: existing?.lastNotifiedRound || null,
-        lastNotifiedResultsRound: existing?.lastNotifiedResultsRound || null,
+        lastNotifiedPairings: existing?.lastNotifiedPairings || null,
+        lastNotifiedResults: existing?.lastNotifiedResults || null,
+        lastNotifiedGames: existing?.lastNotifiedGames || null,
         createdAt: existing?.createdAt || new Date().toISOString(),
         lastDeliveredAt: existing?.lastDeliveredAt || null,
         lastDisplayedAt: existing?.lastDisplayedAt || null,
@@ -239,12 +240,21 @@ export async function listPushSubscriptions(env) {
     return subs;
 }
 
-export async function dispatchPushNotifications({ subscribers, prefKey, trackKey, round, buildPayload, shouldNotify, env, label }) {
+export async function dispatchPushNotifications({ subscribers, prefKey, trackKey, trackValue, legacyKey, legacyValue, buildPayload, shouldNotify, env, label }) {
     let count = 0, skipped = 0, retried = 0;
 
     for (const { key, record } of subscribers) {
         if (!record || record[prefKey] === false) continue;
-        if (record[trackKey] === round) continue;
+        if (record[trackKey] === trackValue) continue;
+        // Backward-compat: pre-tournament-aware records track only round number
+        // under a different field name. Treat a legacy-field match as already
+        // notified, then quietly migrate to the new field.
+        if (legacyKey && legacyValue !== undefined && record[legacyKey] === legacyValue) {
+            record[trackKey] = trackValue;
+            delete record[legacyKey];
+            await putRecord(env, key, record);
+            continue;
+        }
         if (shouldNotify && !shouldNotify(record)) { skipped++; continue; }
 
         const payloadObj = await buildPayload(record);
@@ -258,7 +268,7 @@ export async function dispatchPushNotifications({ subscribers, prefKey, trackKey
         );
 
         if (result.success) {
-            record[trackKey] = round;
+            record[trackKey] = trackValue;
             record.lastDeliveredAt = new Date().toISOString();
             record.failCount = 0;
             record.retryAfter = null;

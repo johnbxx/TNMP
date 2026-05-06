@@ -220,18 +220,25 @@ export function getTimeState(roundDates, nextTournament) {
     return 'results_window';
 }
 
-// During off-season, the "displayed" tournament is the upcoming one — that's
-// what the user is counting down to, not the one that just ended.
-export function displayTournament(state, tournament) {
+// Pick the tournament to show the user — the one they're actually waiting on.
+// Until current's last round is in the past, that's current (covers pre-R1,
+// in-progress, and the post-R1 results window). Only after current is fully
+// done do we switch to next, so the countdown points at the upcoming TNM.
+export function displayTournament(tournament) {
     const next = tournament?.nextTournament;
-    if (state === 'off_season' && next?.roundDates?.length > 0) {
-        return { name: next.name, slug: next.slug, url: next.url, roundDates: next.roundDates };
+    const roundDates = tournament?.roundDates || [];
+    if (roundDates.length > 0) {
+        const lastRound = new Date(roundDates[roundDates.length - 1]);
+        const currentDone = !isNaN(lastRound) && Date.now() >= lastRound.getTime();
+        if (currentDone && next?.roundDates?.length > 0) {
+            return { name: next.name, slug: next.slug, url: next.url, roundDates: next.roundDates };
+        }
     }
     return {
         name: tournament?.name || 'Tuesday Night Marathon',
         slug: tournament?.slug || null,
         url: tournament?.url || null,
-        roundDates: tournament?.roundDates || [],
+        roundDates: roundDates,
     };
 }
 
@@ -245,45 +252,52 @@ const OG_STATE_CONFIG = {
 };
 
 export function computeAppState(cached, meta) {
-    const rawRound = cached?.round || null;
-    const tournamentName = meta?.name || 'Tuesday Night Marathon';
-    const roundDates = meta?.roundDates || [];
+    // The displayed tournament drives every (slug, round, roundDates) field
+    // we expose. State and time logic still use CURRENT (meta) — that's the
+    // source of truth for "where are we in time" — but everything the user
+    // sees in the response describes the displayed tournament, so slug and
+    // round can never describe two different tournaments.
+    const display = displayTournament(meta);
+    const tournamentName = display.name;
+    const displayRoundDates = display.roundDates;
+    const currentRoundDates = meta?.roundDates || [];
     const nextTournament = meta?.nextTournament || null;
     const totalRounds = meta?.totalRounds || 0;
+
+    // cached.round comes from parsing CURRENT's HTML — only valid when we're
+    // displaying current. When we've swapped display to next, ignore cached.round.
+    const isDisplayCurrent = display.slug === (meta?.slug || null);
+    const rawRound = isDisplayCurrent ? (cached?.round || null) : null;
     let roundNumber = rawRound || null;
-    if (!roundNumber && roundDates.length > 0) {
+    if (!roundNumber && displayRoundDates.length > 0) {
         const nowMs = Date.now();
-        for (let i = roundDates.length - 1; i >= 0; i--) {
-            if (nowMs >= new Date(roundDates[i]).getTime()) { roundNumber = i + 1; break; }
+        for (let i = displayRoundDates.length - 1; i >= 0; i--) {
+            if (nowMs >= new Date(displayRoundDates[i]).getTime()) { roundNumber = i + 1; break; }
         }
         if (!roundNumber) roundNumber = 1;
     }
 
-    const timeState = getTimeState(roundDates, nextTournament);
+    const timeState = getTimeState(currentRoundDates, nextTournament);
     let state, info, offSeason = null;
 
     if (timeState === 'off_season' || timeState === 'off_season_r1') {
         state = 'off_season';
+        const r1 = displayRoundDates?.[0];
+        const r1Date = r1 ? new Date(r1) : null;
         if (timeState === 'off_season_r1') {
-            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-            const [ty, tm, td] = today.split('-').map(Number);
-            offSeason = { targetDate: pacificDatetime(ty, tm, td, '18:30:00') };
-            info = 'Round 1 pairings will be posted onsite at 6:30PM';
+            offSeason = { targetDate: r1 };
+            info = 'Round 1 pairings will be posted onsite';
+        } else if (r1Date && r1Date.getTime() > Date.now()) {
+            const dateStr = r1Date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+            info = `${tournamentName || 'The next TNM'} starts ${dateStr}. Round 1 pairings will be posted onsite.`;
+            offSeason = { targetDate: r1 };
+        } else if (nextTournament?.startDate) {
+            const [ny, nm, nd] = nextTournament.startDate.split('-').map(Number);
+            const dateStr = new Date(pacificDatetime(ny, nm, nd)).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+            info = `The next TNM starts ${dateStr}. Round 1 pairings will be posted onsite.`;
+            offSeason = { targetDate: pacificDatetime(ny, nm, nd, '18:30:00') };
         } else {
-            const r1 = roundDates?.[0];
-            const r1Date = r1 ? new Date(r1) : null;
-            if (r1Date && r1Date.getTime() > Date.now()) {
-                const dateStr = r1Date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
-                info = `${tournamentName || 'The next TNM'} starts ${dateStr}. Round 1 pairings will be posted onsite.`;
-                offSeason = { targetDate: r1 };
-            } else if (nextTournament?.startDate) {
-                const [ny, nm, nd] = nextTournament.startDate.split('-').map(Number);
-                const dateStr = new Date(pacificDatetime(ny, nm, nd)).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
-                info = `The next TNM starts ${dateStr}. Round 1 pairings will be posted onsite.`;
-                offSeason = { targetDate: pacificDatetime(ny, nm, nd, '18:30:00') };
-            } else {
-                info = 'Check back for the next TNM schedule.';
-            }
+            info = 'Check back for the next TNM schedule.';
         }
     } else if (timeState === 'too_early') {
         const pairingsUp = cached?.html ? hasPairings(cached.html) : false;
@@ -341,7 +355,7 @@ export async function handleTournamentState(request, env) {
         resolveTournament(env),
     ]);
     const appState = computeAppState(cached, meta);
-    const display = displayTournament(appState.state, meta);
+    const display = displayTournament(meta);
 
     return corsResponse({
         state: appState.state, round: appState.round,
@@ -357,7 +371,7 @@ export async function handleOgState(request, env) {
         resolveTournament(env),
     ]);
     const appState = computeAppState(cached, meta);
-    const display = displayTournament(appState.state, meta);
+    const display = displayTournament(meta);
     const ogConfig = OG_STATE_CONFIG[appState.state] || OG_STATE_CONFIG.no;
     const title = appState.state === 'in_progress' && appState.round
         ? `ROUND ${appState.round} — In Progress` : ogConfig.title;
