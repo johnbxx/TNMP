@@ -239,8 +239,13 @@ export function showState(state, info, offSeasonData = null) {
         } else {
             memeEl.innerHTML = '';
         }
-        const tracker = document.getElementById('round-tracker');
-        if (tracker) tracker.innerHTML = '';
+        // Hide the tracker section but leave its children (the round tabs and
+        // detail panels live in static HTML; renderRoundTracker queries them
+        // by data-round). Wiping innerHTML here used to delete those tabs,
+        // and the next non-off-season render would crash trying to set
+        // className on a nulled querySelector result.
+        const trackerSection = document.getElementById('tracker-section');
+        if (trackerSection) trackerSection.classList.add('hidden');
     } else {
         const meme = getRandomMeme(state);
         memeEl.innerHTML = `
