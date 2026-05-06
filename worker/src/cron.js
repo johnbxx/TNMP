@@ -6,6 +6,7 @@ import {
     parseTournamentPage, parseStandings,
     parsePlayerInfo, parseGameResult, findPlayerPairingFromSections,
     findPlayerResultFromSections, composeMessage, composeResultsMessage, composeGamesMessage,
+    composeRecapMessage, composeFinalMessage,
 } from './parser.js';
 import { classifyOpening } from './eco.js';
 
@@ -99,13 +100,9 @@ async function runCronLogic(env) {
     if (hash === storedHash) {
         console.log('HTML unchanged, skipping HTML processing.');
         const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
-        let hasPairingsFlag = false;
-        if (cached?.html) {
-            const parsed = parseTournamentPage(cached.html);
-            hasPairingsFlag = parsed.hasPairings;
-            await dispatchAllNotifications(parsed, tournament, env);
-        }
-        await checkPendingGamesNotification(tournament, env);
+        const parsed = cached?.html ? parseTournamentPage(cached.html) : null;
+        const hasPairingsFlag = !!parsed?.hasPairings;
+        await dispatchAllNotifications(parsed, tournament, env);
         await retryPendingNotifications(env);
 
         // Recompute time-dependent app state even when HTML hasn't changed
@@ -493,172 +490,197 @@ export function pairingsExpiresAt(roundDates, round) {
     return new Date(dateStr).toISOString();
 }
 
+// Combinatorial notification dispatcher.
+//
+// On each cron tick we observe up to three signals:
+//   pairings_new — page has fresh pairings we haven't notified for
+//   results_new  — page has fresh results we haven't notified for
+//   games_new    — D1 has enough PGN games to consider the round "playable"
+//
+// Rather than firing one notification per signal (the old design, which sent
+// 2-3 buzzes within 3 seconds when MI published everything at once on Round 1),
+// we look at the signal combination and emit a single notification whose
+// framing fits the situation. Final-round signals get a "Tournament Complete!"
+// framing instead of "Round X."
+//
+// Selection priority: high-information notifications outrank narrow ones.
+// If recap fires (pairings + results both new), games stays unmarked so it
+// can fire on its own subsequent tick once PGNs are uploaded.
+function selectNotificationKind({ pairingsNew, resultsNew, gamesNew, isFinalRound }) {
+    if (pairingsNew && resultsNew) return isFinalRound ? 'final-recap' : 'recap';
+    if (resultsNew) return isFinalRound ? 'final' : 'results';
+    if (pairingsNew) return 'pairings';
+    if (gamesNew) return 'games';
+    return null;
+}
+
+// Which signals each notification "consumes" — i.e., which KV state keys to
+// write so subsequent ticks dedup correctly.
+const KIND_CONSUMES = {
+    pairings: ['pairings'],
+    results: ['results'],
+    games: ['games'],
+    recap: ['pairings', 'results'],
+    'final-recap': ['pairings', 'results'],
+    final: ['results'],
+};
+
+const STATE_KEY = { pairings: 'state:pairingsUp', results: 'state:resultsPosted', games: 'state:gamesPosted' };
+const TRACK_KEY = { pairings: 'lastNotifiedPairings', results: 'lastNotifiedResults', games: 'lastNotifiedGames' };
+const LEGACY_TRACK_KEY = { pairings: 'lastNotifiedRound', results: 'lastNotifiedResultsRound', games: 'lastNotifiedGamesRound' };
+const SIGNAL_LETTER = { pairings: 'p', results: 'r', games: 'g' };
+
 async function dispatchAllNotifications(parsed, tournament, env) {
-    if (!parsed.hasPairings) {
-        console.log('No pairings found on page, skipping notifications.');
+    const slug = tournament.slug || slugifyTournament(tournament.name);
+    const round = parsed?.roundNumber || (await env.SUBSCRIBERS.get('cache:appState', 'json'))?.round;
+    if (!round) {
+        console.log('No round number known, skipping notifications.');
         return;
     }
-
-    const round = parsed.roundNumber;
-    const slug = tournament.slug || slugifyTournament(tournament.name);
-    const pushSubs = await listPushSubscriptions(env);
-    const isInTournament = (record) =>
-        !record.playerName || findPlayerPairingFromSections(parsed.pairingsSections, record.playerName) !== null;
-    const trackKey = (kind) => `${slug}:${kind}:${round}`;
+    const totalRounds = tournament.totalRounds || 0;
+    const isFinalRound = totalRounds > 0 && round === totalRounds;
 
     // Legacy KV state had only {round} — treat a round-only match as same-
     // tournament for backward compat, so we don't re-fire on first post-deploy
-    // cron tick.
+    // cron tick (and don't lose suppression of yesterday's spurious dispatches).
     const stateMatches = (s) => s && s.round === round && (!s.tournamentSlug || s.tournamentSlug === slug);
 
-    let pairingsJustFired = false;
-    const pairingsState = await env.SUBSCRIBERS.get('state:pairingsUp', 'json');
-    if (stateMatches(pairingsState)) {
-        console.log(`Already notified pairings for ${slug} r${round}.`);
-    } else {
-        let count = 0;
+    const [pairingsState, resultsState, gamesState] = await Promise.all([
+        env.SUBSCRIBERS.get('state:pairingsUp', 'json'),
+        env.SUBSCRIBERS.get('state:resultsPosted', 'json'),
+        env.SUBSCRIBERS.get('state:gamesPosted', 'json'),
+    ]);
+
+    const pairingsNew = !!parsed?.hasPairings && !stateMatches(pairingsState);
+    const resultsNew = !!parsed?.hasResults && !stateMatches(resultsState);
+    const gamesNew = !stateMatches(gamesState) && (await isGamesReady(slug, round, env));
+
+    const kind = selectNotificationKind({ pairingsNew, resultsNew, gamesNew, isFinalRound });
+    if (!kind) {
+        console.log(`Nothing new to notify for ${slug} r${round}.`);
+        return;
+    }
+
+    const pushSubs = await listPushSubscriptions(env);
+    const sections = parsed?.pairingsSections || [];
+    const isInTournament = (record) =>
+        !record.playerName || findPlayerPairingFromSections(sections, record.playerName) !== null;
+    const buildPairingFor = (record) => record.playerName
+        ? findPlayerPairingFromSections(sections, record.playerName)
+        : null;
+    const buildResultFor = (record) => record.playerName
+        ? findPlayerResultFromSections(sections, record.playerName)
+        : null;
+
+    const consumed = KIND_CONSUMES[kind];
+    const marks = consumed.map(sig => ({
+        trackKey: TRACK_KEY[sig],
+        trackValue: `${slug}:${SIGNAL_LETTER[sig]}:${round}`,
+        legacyKey: LEGACY_TRACK_KEY[sig],
+        legacyValue: round,
+    }));
+
+    const spec = buildNotificationSpec(kind, { round, tournament, parsed });
+    let count = 0;
+    try {
+        count = await dispatchPushNotifications({
+            subscribers: pushSubs,
+            prefKey: spec.prefKey,
+            marks,
+            shouldNotify: spec.audienceAll ? () => true : isInTournament,
+            buildPayload: (record) => {
+                const pairing = buildPairingFor(record);
+                const result = buildResultFor(record);
+                return {
+                    title: spec.title,
+                    body: spec.body(pairing, result),
+                    url: '/', type: kind, round,
+                    expiresAt: spec.expiresAt,
+                };
+            },
+            env, label: kind,
+        });
+    } catch (err) { console.error(`Push ${kind} dispatch error:`, err.message); }
+
+    // Mark all consumed signals in KV state.
+    const now = new Date().toISOString();
+    await Promise.all(consumed.map(sig => env.SUBSCRIBERS.put(STATE_KEY[sig], JSON.stringify({
+        round, tournamentSlug: slug, detectedAt: now, pushNotifiedCount: count, kind,
+    }))));
+    console.log(`Notified ${count} push subscriber(s) of ${kind} for ${slug} r${round}.`);
+
+    // After a successful games-bearing dispatch, sweep stale shell records
+    // (pairings rows that never got real PGN attached).
+    if (consumed.includes('games')) {
         try {
-            count = await dispatchPushNotifications({
-                subscribers: pushSubs,
-                prefKey: 'notifyPairings',
-                trackKey: 'lastNotifiedPairings',
-                trackValue: trackKey('p'),
-                legacyKey: 'lastNotifiedRound',
-                legacyValue: round,
-                shouldNotify: isInTournament,
-                buildPayload: (record) => {
-                    const pairing = record.playerName
-                        ? findPlayerPairingFromSections(parsed.pairingsSections, record.playerName)
-                        : null;
-                    return {
-                        title: `Round ${round} Pairings Are Up!`,
-                        body: composeMessage(pairing, round),
-                        url: '/', type: 'pairings', round,
-                        expiresAt: pairingsExpiresAt(tournament.roundDates, round),
-                    };
-                },
-                env, label: 'pairings',
-            });
-        } catch (err) { console.error('Push pairings dispatch error:', err.message); }
-
-        await env.SUBSCRIBERS.put('state:pairingsUp', JSON.stringify({
-            round, tournamentSlug: slug,
-            detectedAt: new Date().toISOString(), pushNotifiedCount: count,
-        }));
-        console.log(`Notified ${count} push subscriber(s) for ${slug} r${round} pairings.`);
-        pairingsJustFired = true;
+            const deleted = await env.DB.prepare(
+                `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND game_id IS NULL AND (pgn IS NULL OR pgn = '')`
+            ).bind(slug, round).run();
+            if (deleted.meta.changes > 0) {
+                console.log(`Cleaned up ${deleted.meta.changes} stale shell record(s) for ${slug} r${round}.`);
+            }
+        } catch (err) { console.error('Failed to clean stale shells:', err.message); }
     }
-
-    // Hold results dispatch when pairings just fired this tick — keeps the
-    // user from getting "Pairings Are Up!" and "Results Are In!" within
-    // seconds of each other if MI publishes both at once. Results will
-    // dispatch on the next cron run.
-    if (!parsed.hasResults) {
-        console.log('No results found yet for current round.');
-    } else if (pairingsJustFired) {
-        console.log(`Holding results dispatch — pairings notification just fired this tick.`);
-    } else {
-        const resultsState = await env.SUBSCRIBERS.get('state:resultsPosted', 'json');
-        if (stateMatches(resultsState)) {
-            console.log(`Already notified results for ${slug} r${round}.`);
-        } else {
-            let count = 0;
-            try {
-                count = await dispatchPushNotifications({
-                    subscribers: pushSubs,
-                    prefKey: 'notifyResults',
-                    trackKey: 'lastNotifiedResults',
-                    trackValue: trackKey('r'),
-                    legacyKey: 'lastNotifiedResultsRound',
-                    legacyValue: round,
-                    shouldNotify: isInTournament,
-                    buildPayload: (record) => {
-                        const pairing = record.playerName
-                            ? findPlayerPairingFromSections(parsed.pairingsSections, record.playerName)
-                            : null;
-                        const playerResult = record.playerName
-                            ? findPlayerResultFromSections(parsed.pairingsSections, record.playerName)
-                            : null;
-                        return {
-                            title: `Round ${round} Results Are In!`,
-                            body: composeResultsMessage(pairing, playerResult, round),
-                            url: '/', type: 'results', round,
-                            expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
-                        };
-                    },
-                    env, label: 'results',
-                });
-            } catch (err) { console.error('Push results dispatch error:', err.message); }
-
-            await env.SUBSCRIBERS.put('state:resultsPosted', JSON.stringify({
-                round, tournamentSlug: slug,
-                detectedAt: new Date().toISOString(), pushNotifiedCount: count,
-            }));
-            console.log(`Notified ${count} push subscriber(s) of results for ${slug} r${round}.`);
-        }
-    }
-
-    await checkPendingGamesNotification(tournament, env);
 }
 
-async function checkPendingGamesNotification(tournament, env) {
-    const appState = await env.SUBSCRIBERS.get('cache:appState', 'json');
-    if (!appState) return;
-    const round = appState.round;
-    const slug = appState.tournamentSlug;
-    if (!slug || !round) return;
-
-    const gamesState = await env.SUBSCRIBERS.get('state:gamesPosted', 'json');
-    // Legacy KV state had only {round} — treat round-only match as same-tournament.
-    if (gamesState && gamesState.round === round && (!gamesState.tournamentSlug || gamesState.tournamentSlug === slug)) return;
-
-    // COALESCE guards against SUM-of-empty-set returning NULL when the
-    // (slug, round) has no rows in games — without it, !== 0 would slip past
-    // the readiness gate and dispatch on a tournament that has no games yet.
+// COALESCE guards against SUM-of-empty-set returning NULL when the (slug,
+// round) has no rows in games — without it, !== 0 would slip past the
+// readiness gate and dispatch on a tournament that has no games yet.
+async function isGamesReady(slug, round, env) {
     const { totalGames, gamesWithPgn } = (await env.DB.prepare(
         `SELECT COUNT(*) as totalGames,
                 COALESCE(SUM(CASE WHEN pgn IS NOT NULL AND pgn != '' THEN 1 ELSE 0 END), 0) as gamesWithPgn
          FROM games WHERE tournament_slug = ? AND round = ?`
     ).bind(slug, round).first()) || { totalGames: 0, gamesWithPgn: 0 };
+    return !!gamesWithPgn && gamesWithPgn > totalGames / 2;
+}
 
-    if (!gamesWithPgn || gamesWithPgn <= totalGames / 2) {
-        console.log(`Games check: ${gamesWithPgn}/${totalGames} PGN games for ${slug} r${round} — not ready.`);
-        return;
-    }
+function buildNotificationSpec(kind, { round, tournament, parsed }) {
+    const tournamentName = tournament?.name || 'Tuesday Night Marathon';
+    const pairingsExpiry = pairingsExpiresAt(tournament.roundDates, round);
+    const twelveHours = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    const oneDay = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const twoDays = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
-    const pushSubs = await listPushSubscriptions(env);
-    let count = 0;
-    try {
-        count = await dispatchPushNotifications({
-            subscribers: pushSubs,
-            prefKey: 'notifyResults',
-            trackKey: 'lastNotifiedGames',
-            trackValue: `${slug}:g:${round}`,
-            legacyKey: 'lastNotifiedGamesRound',
-            legacyValue: round,
-            shouldNotify: () => true,
-            buildPayload: () => ({
+    switch (kind) {
+        case 'pairings':
+            return {
+                prefKey: 'notifyPairings',
+                title: `Round ${round} Pairings Are Up!`,
+                body: (pairing) => composeMessage(pairing, round),
+                expiresAt: pairingsExpiry,
+            };
+        case 'results':
+            return {
+                prefKey: 'notifyResults',
+                title: `Round ${round} Results Are In!`,
+                body: (pairing, result) => composeResultsMessage(pairing, result, round),
+                expiresAt: twelveHours,
+            };
+        case 'games':
+            return {
+                prefKey: 'notifyResults',
+                audienceAll: true,
                 title: `Round ${round} Games Are Up!`,
-                body: composeGamesMessage(round),
-                url: '/', type: 'games', round,
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            }),
-            env, label: 'games',
-        });
-    } catch (err) { console.error('Push games dispatch error:', err.message); }
-
-    await env.SUBSCRIBERS.put('state:gamesPosted', JSON.stringify({
-        round, tournamentSlug: slug,
-        detectedAt: new Date().toISOString(), pushNotifiedCount: count,
-    }));
-    console.log(`Notified ${count} push subscriber(s) of games for ${slug} r${round}.`);
-
-    try {
-        const deleted = await env.DB.prepare(
-            `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND game_id IS NULL AND (pgn IS NULL OR pgn = '')`
-        ).bind(slug, round).run();
-        if (deleted.meta.changes > 0) {
-            console.log(`Cleaned up ${deleted.meta.changes} stale shell record(s) for round ${round}.`);
-        }
-    } catch (err) { console.error('Failed to clean stale shells:', err.message); }
+                body: () => composeGamesMessage(round),
+                expiresAt: oneDay,
+            };
+        case 'recap':
+            return {
+                prefKey: 'notifyResults',
+                title: `Round ${round} is in the books!`,
+                body: (pairing, result) => composeRecapMessage(pairing, result, round),
+                expiresAt: twelveHours,
+            };
+        case 'final-recap':
+        case 'final':
+            return {
+                prefKey: 'notifyResults',
+                title: `${tournamentName} is complete!`,
+                body: (pairing, result) => composeFinalMessage(pairing, result, round, tournamentName),
+                expiresAt: twoDays,
+            };
+        default:
+            throw new Error(`Unknown notification kind: ${kind}`);
+    }
 }

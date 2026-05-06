@@ -427,6 +427,42 @@ export function composeGamesMessage(round) {
     return `TNM Round ${round} games are ready to replay at ${SITE_URL}`;
 }
 
+// "Round just happened" recap — title carries the framing, body re-uses the
+// existing results message so the user gets pairing + outcome in one shot.
+export function composeRecapMessage(pairing, result, round) {
+    const link = SITE_URL;
+    if (!pairing || !result) {
+        return `TNM Round ${round} is in the books! Check standings at ${link}`;
+    }
+    if (pairing.isBye) {
+        return `TNM Round ${round} is in the books! You had a ${pairing.byeType === 'full' ? 'full' : 'half'}-point bye. Standings at ${link}`;
+    }
+    let outcomeStr;
+    if (result === '1') outcomeStr = 'Won';
+    else if (result === '0') outcomeStr = 'Lost';
+    else outcomeStr = 'Drew';
+    const ratingStr = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
+    return `TNM Round ${round} is in the books! ${outcomeStr} with ${pairing.color} vs. ${pairing.opponent}${ratingStr}. Standings at ${link}`;
+}
+
+// Final-round message — frames as "tournament complete," not "round X."
+export function composeFinalMessage(pairing, result, round, tournamentName) {
+    const link = SITE_URL;
+    const tName = tournamentName || 'the TNM';
+    if (!pairing || !result) {
+        return `${tName} is complete! Final standings at ${link}`;
+    }
+    if (pairing.isBye) {
+        return `${tName} is complete! You had a ${pairing.byeType === 'full' ? 'full' : 'half'}-point bye in the final round. Final standings at ${link}`;
+    }
+    let outcomeStr;
+    if (result === '1') outcomeStr = 'Won';
+    else if (result === '0') outcomeStr = 'Lost';
+    else outcomeStr = 'Drew';
+    const ratingStr = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
+    return `${tName} is complete! Final round: ${outcomeStr} with ${pairing.color} vs. ${pairing.opponent}${ratingStr}. Final standings at ${link}`;
+}
+
 export function parseTournamentList(html) {
     const tnmSectionRegex = /<h2>Tuesday Night Marathon<\/h2>([\s\S]*?)(?:<h2>|$)/i;
     const sectionMatch = html.match(tnmSectionRegex);
