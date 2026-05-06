@@ -22,7 +22,8 @@ const USCF_CRON = '0 20 * * *';
 export { TournamentCron };
 
 // Re-export for tests
-export { getTimeState, computeAppState } from './tournament.js';
+export { getTimeState, computeAppState, displayTournament } from './tournament.js';
+export { selectNotificationKind, KIND_CONSUMES, isGamesReady } from './cron.js';
 export { pairingsExpiresAt };
 
 export default {

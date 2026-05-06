@@ -506,7 +506,7 @@ export function pairingsExpiresAt(roundDates, round) {
 // Selection priority: high-information notifications outrank narrow ones.
 // If recap fires (pairings + results both new), games stays unmarked so it
 // can fire on its own subsequent tick once PGNs are uploaded.
-function selectNotificationKind({ pairingsNew, resultsNew, gamesNew, isFinalRound }) {
+export function selectNotificationKind({ pairingsNew, resultsNew, gamesNew, isFinalRound }) {
     // Final round consumes any combination of pairings/results into one
     // "Tournament Complete!" message — no separate final-recap needed since
     // it'd be functionally identical.
@@ -522,7 +522,7 @@ function selectNotificationKind({ pairingsNew, resultsNew, gamesNew, isFinalRoun
 // write so subsequent ticks dedup correctly. `final` consumes both pairings
 // and results so that, in the rare case where both arrive together on the
 // final round, neither fires separately on a later tick.
-const KIND_CONSUMES = {
+export const KIND_CONSUMES = {
     pairings: ['pairings'],
     results: ['results'],
     games: ['games'],
@@ -631,7 +631,7 @@ async function dispatchAllNotifications(parsed, tournament, env) {
 // COALESCE guards against SUM-of-empty-set returning NULL when the (slug,
 // round) has no rows in games — without it, !== 0 would slip past the
 // readiness gate and dispatch on a tournament that has no games yet.
-async function isGamesReady(slug, round, env) {
+export async function isGamesReady(slug, round, env) {
     const { totalGames, gamesWithPgn } = (await env.DB.prepare(
         `SELECT COUNT(*) as totalGames,
                 COALESCE(SUM(CASE WHEN pgn IS NOT NULL AND pgn != '' THEN 1 ELSE 0 END), 0) as gamesWithPgn
