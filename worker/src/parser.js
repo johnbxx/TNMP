@@ -356,7 +356,9 @@ export function parseStandings(html) {
                 }
                 const code = cellText.charAt(0).toUpperCase();
                 const rest = cellText.substring(1).trim();
-                if (code === 'W' || code === 'L' || code === 'D') {
+                if (code === 'W' || code === 'L' || code === 'D' || code === 'X' || code === 'F') {
+                    // X = forfeit win against rank N; F = forfeit loss against rank N.
+                    // The F-marked player is the forfeiter; their opponent (rank N) gets X.
                     rounds.push({ result: code, opponentRank: parseInt(rest, 10) });
                 } else if (code === 'H' || code === 'B' || code === 'U') {
                     rounds.push({ result: code, opponentRank: null });

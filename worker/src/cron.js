@@ -313,6 +313,40 @@ async function runCronLogic(env) {
     }
     t.byes = performance.now() - t0;
 
+    // Forfeit cleanup: standings F markers identify rounds where a player
+    // forfeited. Their game record is a shell (no PGN, never will get one),
+    // so delete it. The pgn-IS-NULL guard ensures we never delete a real
+    // game that somehow matched — only shells.
+    t0 = performance.now();
+    try {
+        const forfeitStmts = [];
+        for (const section of standings) {
+            for (const p of section.players) {
+                const resolved = canonicalizeByIdOrName(p.id || null, p.name);
+                for (let i = 0; i < p.rounds.length; i++) {
+                    const rd = p.rounds[i];
+                    if (rd?.result !== 'F') continue;
+                    forfeitStmts.push(
+                        env.DB.prepare(
+                            `DELETE FROM games WHERE tournament_slug = ? AND round = ?
+                             AND (white_norm = ? OR black_norm = ?)
+                             AND (pgn IS NULL OR pgn = '')`
+                        ).bind(slug, i + 1, resolved.norm, resolved.norm)
+                    );
+                }
+            }
+        }
+        if (forfeitStmts.length > 0) {
+            for (let i = 0; i < forfeitStmts.length; i += 100) {
+                await env.DB.batch(forfeitStmts.slice(i, i + 100));
+            }
+            console.log(`Cleaned up ${forfeitStmts.length} forfeit shell(s) from D1.`);
+        }
+    } catch (err) {
+        console.error('Failed to clean forfeit shells:', err.message);
+    }
+    t.forfeitCleanup = performance.now() - t0;
+
     let newCount = 0;
     let updatedCount = 0;
     const existingMap = new Map();
@@ -613,19 +647,6 @@ async function dispatchAllNotifications(parsed, tournament, env) {
         round, tournamentSlug: slug, detectedAt: now, pushNotifiedCount: count, kind,
     }))));
     console.log(`Notified ${count} push subscriber(s) of ${kind} for ${slug} r${round}.`);
-
-    // After a successful games-bearing dispatch, sweep stale shell records
-    // (pairings rows that never got real PGN attached).
-    if (consumed.includes('games')) {
-        try {
-            const deleted = await env.DB.prepare(
-                `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND game_id IS NULL AND (pgn IS NULL OR pgn = '')`
-            ).bind(slug, round).run();
-            if (deleted.meta.changes > 0) {
-                console.log(`Cleaned up ${deleted.meta.changes} stale shell record(s) for ${slug} r${round}.`);
-            }
-        } catch (err) { console.error('Failed to clean stale shells:', err.message); }
-    }
 }
 
 // COALESCE guards against SUM-of-empty-set returning NULL when the (slug,
