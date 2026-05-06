@@ -507,22 +507,27 @@ export function pairingsExpiresAt(roundDates, round) {
 // If recap fires (pairings + results both new), games stays unmarked so it
 // can fire on its own subsequent tick once PGNs are uploaded.
 function selectNotificationKind({ pairingsNew, resultsNew, gamesNew, isFinalRound }) {
-    if (pairingsNew && resultsNew) return isFinalRound ? 'final-recap' : 'recap';
-    if (resultsNew) return isFinalRound ? 'final' : 'results';
+    // Final round consumes any combination of pairings/results into one
+    // "Tournament Complete!" message — no separate final-recap needed since
+    // it'd be functionally identical.
+    if (resultsNew && isFinalRound) return 'final';
+    if (pairingsNew && resultsNew) return 'recap';
+    if (resultsNew) return 'results';
     if (pairingsNew) return 'pairings';
     if (gamesNew) return 'games';
     return null;
 }
 
 // Which signals each notification "consumes" — i.e., which KV state keys to
-// write so subsequent ticks dedup correctly.
+// write so subsequent ticks dedup correctly. `final` consumes both pairings
+// and results so that, in the rare case where both arrive together on the
+// final round, neither fires separately on a later tick.
 const KIND_CONSUMES = {
     pairings: ['pairings'],
     results: ['results'],
     games: ['games'],
     recap: ['pairings', 'results'],
-    'final-recap': ['pairings', 'results'],
-    final: ['results'],
+    final: ['pairings', 'results'],
 };
 
 const STATE_KEY = { pairings: 'state:pairingsUp', results: 'state:resultsPosted', games: 'state:gamesPosted' };
@@ -672,7 +677,6 @@ function buildNotificationSpec(kind, { round, tournament, parsed }) {
                 body: (pairing, result) => composeRecapMessage(pairing, result, round),
                 expiresAt: twelveHours,
             };
-        case 'final-recap':
         case 'final':
             return {
                 prefKey: 'notifyResults',
