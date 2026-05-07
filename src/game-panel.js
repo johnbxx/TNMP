@@ -2965,6 +2965,9 @@ function renderBrowserPanel(state) {
     renderBrowserGameList(panelEl, state);
     renderBrowserSaveButton(state);
     updateStandingsButtonVisibility();
+    if (!_activeTab.viewerStandings.classList.contains('hidden')) {
+        standings.renderStandings(_activeTab.viewerStandings);
+    }
     if (_activeTab.panel.gameId) highlightActiveGame(_activeTab.panel.gameId);
 }
 

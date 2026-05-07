@@ -5515,17 +5515,6 @@ input.browser-search-input {
 }
 .viewer-standings.hidden { display: none; }
 
-.standings-header {
-    flex-shrink: 0;
-    margin-bottom: 1rem;
-}
-.standings-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0;
-}
-
 .standings-body {
     display: flex;
     flex-direction: column;
@@ -5542,7 +5531,7 @@ input.browser-search-input {
 }
 
 .standings-table {
-    width: 100%;
+    width: auto;
     border-collapse: separate;
     border-spacing: 0;
     font-variant-numeric: tabular-nums;
@@ -5553,10 +5542,12 @@ input.browser-search-input {
 }
 .standings-table th,
 .standings-table td {
-    padding: 0.4rem 0.5rem;
+    padding: 0.35rem 0.5rem;
     text-align: center;
     font-size: 0.85rem;
     border-bottom: 1px solid var(--border-color);
+    box-sizing: border-box;
+    height: 2rem;
 }
 .standings-table thead th {
     background: var(--surface);
@@ -5580,7 +5571,7 @@ input.browser-search-input {
     text-align: left;
     color: var(--text-primary);
     font-weight: 500;
-    max-width: 14rem;
+    white-space: nowrap;
 }
 .std-player-link {
     background: none;
@@ -5590,9 +5581,6 @@ input.browser-search-input {
     padding: 0;
     cursor: pointer;
     text-align: left;
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 .std-player-link:hover { color: var(--accent); }
@@ -5605,45 +5593,27 @@ input.browser-search-input {
 
 .std-th-round,
 .std-cell {
-    width: 2.5rem;
-    min-width: 2.5rem;
-    padding: 0.25rem 0.2rem;
-    position: relative;
-}
-.std-cell-result {
-    display: inline-block;
+    width: 2.75rem;
+    min-width: 2.75rem;
+    padding: 0;
     font-weight: 700;
     font-size: 0.8rem;
-    line-height: 1;
-}
-.std-cell-opp {
-    display: block;
-    font-size: 0.65rem;
-    color: var(--text-faint);
-    margin-top: 1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 .std-cell-empty { background: transparent; }
-.std-cell-win { background: color-mix(in srgb, var(--win) 18%, transparent); }
-.std-cell-win .std-cell-result { color: var(--win); }
-.std-cell-loss { background: color-mix(in srgb, var(--lose) 18%, transparent); }
-.std-cell-loss .std-cell-result { color: var(--lose); }
-.std-cell-draw { background: var(--surface); }
-.std-cell-draw .std-cell-result { color: var(--text-muted); }
-.std-cell-bye { background: var(--surface-subtle); }
-.std-cell-bye .std-cell-result { color: var(--text-subtle); }
+.std-cell-win { background: color-mix(in srgb, var(--win) 18%, transparent); color: var(--win); }
+.std-cell-loss { background: color-mix(in srgb, var(--lose) 18%, transparent); color: var(--lose); }
+.std-cell-draw { background: var(--surface); color: var(--text-muted); }
+.std-cell-bye { background: var(--surface-subtle); color: var(--text-subtle); }
 
 .std-cell-btn {
     background: none;
     border: none;
     color: inherit;
     font: inherit;
-    padding: 0.25rem 0.2rem;
-    margin: -0.25rem -0.2rem;
     cursor: pointer;
-    width: calc(100% + 0.4rem);
+    width: 100%;
+    height: 100%;
+    padding: 0;
     display: block;
 }
 .std-cell-clickable:hover { filter: brightness(1.2); }

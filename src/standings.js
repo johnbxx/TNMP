@@ -8,7 +8,7 @@
  */
 
 import { WORKER_URL } from './config.js';
-import { getDatasetGames, getTournamentMeta } from './games.js';
+import { getDatasetGames, getTournamentMeta, getVisibleSections } from './games.js';
 
 const _cache = new Map(); // slug → { sections, fetchedAt }
 let _prefetch = null;
@@ -72,7 +72,10 @@ function resultBadge(result) {
 function fmtTotal(t) {
     if (Number.isInteger(t)) return String(t);
     const r = Math.round(t * 2);
-    if (r % 2 === 1) return `${(r - 1) / 2}½`;
+    if (r % 2 === 1) {
+        const whole = (r - 1) / 2;
+        return whole === 0 ? '½' : `${whole}½`;
+    }
     return String(r / 2);
 }
 
@@ -85,16 +88,18 @@ export function renderStandings(mountEl) {
         return;
     }
 
-    const games = buildGameLookup();
-    const numRounds = Math.max(...data.sections.flatMap((s) => s.players.map((p) => p.rounds.length)), 0);
-    const sectionsHtml = data.sections.map((sec) => renderSection(sec, numRounds, games)).join('');
+    const visible = getVisibleSections();
+    const sections = visible.size > 0 ? data.sections.filter((s) => visible.has(s.section)) : data.sections;
+    if (sections.length === 0) {
+        mountEl.innerHTML = '<div class="standings-empty">No sections selected.</div>';
+        return;
+    }
 
-    mountEl.innerHTML = `
-        <div class="standings-header">
-            <h2 class="standings-title">${data.tournamentName || 'Standings'}</h2>
-        </div>
-        <div class="standings-body">${sectionsHtml}</div>
-    `;
+    const games = buildGameLookup();
+    const numRounds = Math.max(...sections.flatMap((s) => s.players.map((p) => p.rounds.length)), 0);
+    const sectionsHtml = sections.map((sec) => renderSection(sec, numRounds, games)).join('');
+
+    mountEl.innerHTML = `<div class="standings-body">${sectionsHtml}</div>`;
 }
 
 function renderSection(sec, numRounds, gameMap) {
@@ -111,26 +116,18 @@ function renderSection(sec, numRounds, gameMap) {
                     continue;
                 }
                 const badge = resultBadge(r.result);
-                let opponentLabel = '';
+                const label = r.opponentRank ? `${badge.label}${r.opponentRank}` : badge.label;
                 let game = null;
                 if (r.opponentRank) {
-                    const opp = sec.players[r.opponentRank - 1];
-                    if (opp) {
-                        opponentLabel = `<span class="std-cell-opp">${escapeHtml(lastInitial(opp.name))}</span>`;
-                        const k = `${sec.section}|${i + 1}|${nameKey(p.name)}`;
-                        game = gameMap.get(k) || null;
-                    }
+                    const k = `${sec.section}|${i + 1}|${nameKey(p.name)}`;
+                    game = gameMap.get(k) || null;
                 }
                 if (game) {
                     cells.push(
-                        `<td class="std-cell ${badge.cls} std-cell-clickable"><button type="button" class="std-cell-btn" data-action="standings-open-game" data-game-id="${escapeHtml(game.gameId)}">` +
-                            `<span class="std-cell-result">${badge.label}</span>${opponentLabel}` +
-                            `</button></td>`,
+                        `<td class="std-cell ${badge.cls} std-cell-clickable"><button type="button" class="std-cell-btn" data-action="standings-open-game" data-game-id="${escapeHtml(game.gameId)}">${label}</button></td>`,
                     );
                 } else {
-                    cells.push(
-                        `<td class="std-cell ${badge.cls}"><span class="std-cell-result">${badge.label}</span>${opponentLabel}</td>`,
-                    );
+                    cells.push(`<td class="std-cell ${badge.cls}">${label}</td>`);
                 }
             }
 
@@ -161,12 +158,6 @@ function renderSection(sec, numRounds, gameMap) {
             </table>
         </div>
     `;
-}
-
-function lastInitial(name) {
-    const parts = name.split(/\s+/).filter(Boolean);
-    if (parts.length < 2) return parts[0] || '';
-    return parts[parts.length - 1];
 }
 
 function escapeHtml(s) {
