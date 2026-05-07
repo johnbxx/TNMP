@@ -92,6 +92,7 @@ async function fetchTournamentList() {
 function buildTournamentMeta(data) {
     return {
         name: data.games?.[0]?.tournament || null,
+        slug: data.games?.[0]?.tournamentSlug || null,
         startDate: data.startDate || null,
         endDate: data.endDate || null,
         timeControl: data.timeControl || null,
