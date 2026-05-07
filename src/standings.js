@@ -52,7 +52,7 @@ function buildGameLookup() {
     for (const g of games) {
         if (!g.gameId) continue;
         const round = String(g.round);
-        const section = g.section || '';
+        const section = (g.section || '').toLowerCase();
         if (g.white) map.set(`${section}|${round}|${nameKey(g.white)}`, g);
         if (g.black) map.set(`${section}|${round}|${nameKey(g.black)}`, g);
     }
@@ -89,7 +89,9 @@ export function renderStandings(mountEl) {
     }
 
     const visible = getVisibleSections();
-    const sections = visible.size > 0 ? data.sections.filter((s) => visible.has(s.section)) : data.sections;
+    const visibleLc = new Set([...visible].map((s) => s.toLowerCase()));
+    const sections =
+        visibleLc.size > 0 ? data.sections.filter((s) => visibleLc.has(s.section.toLowerCase())) : data.sections;
     if (sections.length === 0) {
         mountEl.innerHTML = '<div class="standings-empty">No sections selected.</div>';
         return;
@@ -119,7 +121,7 @@ function renderSection(sec, numRounds, gameMap) {
                 const label = r.opponentRank ? `${badge.label}${r.opponentRank}` : badge.label;
                 let game = null;
                 if (r.opponentRank) {
-                    const k = `${sec.section}|${i + 1}|${nameKey(p.name)}`;
+                    const k = `${sec.section.toLowerCase()}|${i + 1}|${nameKey(p.name)}`;
                     game = gameMap.get(k) || null;
                 }
                 if (game) {
