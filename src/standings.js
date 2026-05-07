@@ -99,16 +99,37 @@ export function renderStandings(mountEl) {
 
     const games = buildGameLookup();
     const numRounds = Math.max(...sections.flatMap((s) => s.players.map((p) => p.rounds.length)), 0);
-    const sectionsHtml = sections.map((sec) => renderSection(sec, numRounds, games)).join('');
 
-    mountEl.innerHTML = `<div class="standings-body">${sectionsHtml}</div>`;
-}
-
-function renderSection(sec, numRounds, gameMap) {
     const headerCells = [];
     for (let i = 1; i <= numRounds; i++) headerCells.push(`<th class="std-th-round">R${i}</th>`);
+    const colspan = 4 + numRounds; // rank + name + rating + rounds + total
 
-    const rows = sec.players
+    const bodyHtml = sections
+        .map((sec) => {
+            const sectionRow = `<tr class="std-section-row"><td colspan="${colspan}">${escapeHtml(sec.section)}</td></tr>`;
+            const rows = renderSectionRows(sec, numRounds, games);
+            return sectionRow + rows;
+        })
+        .join('');
+
+    mountEl.innerHTML = `
+        <table class="standings-table">
+            <thead>
+                <tr>
+                    <th class="std-th-rank">#</th>
+                    <th class="std-th-name">Player</th>
+                    <th class="std-th-rating">Rating</th>
+                    ${headerCells.join('')}
+                    <th class="std-th-total">Total</th>
+                </tr>
+            </thead>
+            <tbody>${bodyHtml}</tbody>
+        </table>
+    `;
+}
+
+function renderSectionRows(sec, numRounds, gameMap) {
+    return sec.players
         .map((p) => {
             const cells = [];
             for (let i = 0; i < numRounds; i++) {
@@ -142,24 +163,6 @@ function renderSection(sec, numRounds, gameMap) {
             return `<tr class="std-row"><td class="std-cell-rank">${p.rank}</td>${nameCell}${ratingCell}${cells.join('')}${totalCell}</tr>`;
         })
         .join('');
-
-    return `
-        <div class="standings-section">
-            <h3 class="standings-section-title">${escapeHtml(sec.section)}</h3>
-            <table class="standings-table">
-                <thead>
-                    <tr>
-                        <th class="std-th-rank">#</th>
-                        <th class="std-th-name">Player</th>
-                        <th class="std-th-rating">Rating</th>
-                        ${headerCells.join('')}
-                        <th class="std-th-total">Total</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>
-    `;
 }
 
 function escapeHtml(s) {

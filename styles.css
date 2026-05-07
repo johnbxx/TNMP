@@ -5515,21 +5515,6 @@ input.browser-search-input {
 }
 .viewer-standings.hidden { display: none; }
 
-.standings-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.standings-section-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 0 0 0.5rem;
-}
-
 .standings-table {
     width: auto;
     border-collapse: separate;
@@ -5538,7 +5523,6 @@ input.browser-search-input {
     background: var(--raised-panel-bg);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-xs);
-    overflow: hidden;
 }
 .standings-table th,
 .standings-table td {
@@ -5550,15 +5534,33 @@ input.browser-search-input {
     height: 2rem;
 }
 .standings-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
     background: var(--surface);
     color: var(--text-muted);
     font-weight: 600;
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    box-shadow: 0 1px 0 var(--border-color);
 }
-.standings-table tbody tr:last-child td { border-bottom: none; }
-.standings-table tbody tr:hover { background: var(--surface-subtle); }
+.standings-table tbody tr:hover:not(.std-section-row) { background: var(--surface-subtle); }
+
+.std-section-row td {
+    position: sticky;
+    top: 2rem;            /* sits directly under the header (which is 2rem tall) */
+    z-index: 2;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: left;
+    padding-left: 0.75rem;
+    box-shadow: 0 1px 0 var(--border-color);
+}
 
 .std-th-rank,
 .std-cell-rank {
