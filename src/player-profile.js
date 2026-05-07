@@ -285,6 +285,7 @@ export async function openPlayerProfile(playerName) {
     tabs.classList.add('hidden');
     body.querySelector('.profile-loading').classList.remove('hidden');
     body.querySelector('.profile-error').classList.add('hidden');
+    body.querySelector('.profile-empty').classList.add('hidden');
 
     try {
         const result = await fetchAllPlayerGames(playerName);
