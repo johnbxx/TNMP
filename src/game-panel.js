@@ -31,6 +31,7 @@ import {
 } from './tnm.js';
 import { createTournamentMenu, renderTournamentInfoHtml } from './tournament-menu.js';
 import * as engine from './engine.js';
+import * as standings from './standings.js';
 
 let _tournamentMenu = null;
 
@@ -61,6 +62,7 @@ const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none
 <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></symbol>
 <symbol id="i-bookmark" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></symbol>
 <symbol id="i-folder-open" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></symbol>
+<symbol id="i-standings" viewBox="0 0 24 24" fill="currentColor"><path d="M5 21h4V11H5v10zm5 0h4V3h-4v18zm5 0h4v-7h-4v7z"/></symbol>
 </svg>`;
 
 function icon(name, size) {
@@ -116,6 +118,7 @@ function buildTabDOM() {
                         <div class="browser-autocomplete hidden" role="listbox"></div>
                     </div>
                     <button type="button" class="browser-action-btn" data-action="browser-tournament-info" aria-label="Tournament Info" data-tooltip="Tournament Info">ⓘ</button>
+                    <button type="button" class="browser-action-btn browser-standings-btn hidden" data-action="browser-standings" aria-label="Standings" data-tooltip="Standings">${icon('standings', 16)}</button>
                     <button type="button" class="browser-action-btn" data-action="browser-explore" aria-label="Opening Explorer" data-tooltip="Opening Explorer">${icon('explore', 16)}</button>
                     <button type="button" class="browser-action-btn" data-action="browser-import" aria-label="Import PGN" data-tooltip="Import PGN">${icon('import', 16)}</button>
                     <button type="button" class="browser-action-btn browser-export" aria-label="Download PGNs" data-tooltip="Download PGNs">${icon('download', 16)}</button>
@@ -127,6 +130,7 @@ function buildTabDOM() {
                 <div class="browser-games-wrap raised-panel"><div class="browser-games"></div></div>
             </div>
         </div>
+        <div class="viewer-standings hidden"></div>
         <div class="viewer-main">
             <div class="viewer-header">
                 <div class="viewer-game-header">
@@ -261,6 +265,9 @@ function createTab() {
         browserExport: el.querySelector('.browser-export'),
         browserSave: el.querySelector('.browser-save'),
         browserSaveCount: el.querySelector('.browser-save-count'),
+        viewerStandings: el.querySelector('.viewer-standings'),
+        standingsBtn: el.querySelector('.browser-standings-btn'),
+        viewerMain: el.querySelector('.viewer-main'),
         viewerHeader: el.querySelector('.viewer-header'),
         gameHeader: el.querySelector('.viewer-game-header'),
         explorerHeader: el.querySelector('.explorer-header'),
@@ -1072,6 +1079,39 @@ function showViewer() {
     const modal = _activeTab.el;
     if (modal) modal.classList.remove('browser-only');
 }
+
+// Standings overlay — replaces .viewer-main with a standings table while
+// the browser-panel (game list) stays visible on the left.
+export function toggleStandings() {
+    if (!_activeTab) return;
+    const showing = !_activeTab.viewerStandings.classList.contains('hidden');
+    if (showing) hideStandings();
+    else showStandings();
+}
+function showStandings() {
+    const tab = _activeTab;
+    if (!tab) return;
+    standings.renderStandings(tab.viewerStandings);
+    tab.viewerMain.classList.add('hidden');
+    tab.viewerStandings.classList.remove('hidden');
+    tab.standingsBtn?.classList.add('active');
+}
+function hideStandings() {
+    const tab = _activeTab;
+    if (!tab) return;
+    tab.viewerStandings.classList.add('hidden');
+    tab.viewerMain.classList.remove('hidden');
+    tab.standingsBtn?.classList.remove('active');
+}
+function updateStandingsButtonVisibility() {
+    const tab = _activeTab;
+    if (!tab?.standingsBtn) return;
+    const slug = games.getTournamentMeta()?.slug;
+    const has = slug ? standings.hasStandingsFor(slug) : false;
+    tab.standingsBtn.classList.toggle('hidden', !has);
+    if (!has && !tab.viewerStandings.classList.contains('hidden')) hideStandings();
+}
+standings.onStandingsReady(() => updateStandingsButtonVisibility());
 
 const MIN_COLLAPSIBLE = 6;
 let _pendingAction = null;
@@ -2924,6 +2964,7 @@ function renderBrowserPanel(state) {
     renderBrowserFilters(panelEl, state);
     renderBrowserGameList(panelEl, state);
     renderBrowserSaveButton(state);
+    updateStandingsButtonVisibility();
     if (_activeTab.panel.gameId) highlightActiveGame(_activeTab.panel.gameId);
 }
 

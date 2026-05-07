@@ -426,6 +426,10 @@ export function getPlayerSources() {
 export function getTournamentMeta() {
     return _activeDs()?.meta ?? null;
 }
+/** Full unfiltered game list of the active dataset. Used by standings lookup. */
+export function getDatasetGames() {
+    return _activeDs()?.games ?? [];
+}
 
 export function getTitle() {
     const ds = _activeDs();

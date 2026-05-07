@@ -1,5 +1,5 @@
 import { corsResponse, slugifyTournament, pacificDatetime, TOURNAMENTS_LIST_URL, MI_BASE_URL } from './helpers.js';
-import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList } from './parser.js';
+import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList, parseStandings } from './parser.js';
 
 // Falls back to MI listing page discovery during ~7-day gaps between tournaments
 export async function resolveTournament(env) {
@@ -362,6 +362,24 @@ export async function handleTournamentState(request, env) {
         tournamentName: display.name, tournamentUrl: display.url,
         tournamentSlug: display.slug, roundDates: display.roundDates,
         fetchedAt: cached?.fetchedAt || null,
+    }, 200, env, request);
+}
+
+export async function handleStandings(request, env) {
+    const [cached, meta] = await Promise.all([
+        env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
+        resolveTournament(env),
+    ]);
+    if (!cached?.html) return corsResponse({ sections: [], tournamentName: null, tournamentSlug: null }, 200, env, request);
+
+    const sections = parseStandings(cached.html);
+    return corsResponse({
+        sections,
+        tournamentName: meta?.name || null,
+        tournamentSlug: meta?.slug || null,
+        tournamentUrl: meta?.url || null,
+        roundDates: meta?.roundDates || [],
+        fetchedAt: cached.fetchedAt,
     }, 200, env, request);
 }
 

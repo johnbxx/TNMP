@@ -56,12 +56,14 @@ import {
     showTournamentInfo,
     saveHeaderEditor,
     launchExplorer,
+    toggleStandings,
     initGamePanel,
     getActiveTabEl,
     getActiveTabGame,
     openGameInTab,
     openExplorerInTab,
 } from './game-panel.js';
+import { prefetchStandings } from './standings.js';
 import { showToast } from './toast.js';
 import {
     getCachedGame,
@@ -492,6 +494,15 @@ const ACTIONS = {
     // Browser
     'browser-explore': launchExplorer,
     'browser-tournament-info': showTournamentInfo,
+    'browser-standings': toggleStandings,
+    'standings-open-game': (e) => {
+        const btn = e.target.closest('[data-game-id]');
+        if (btn?.dataset.gameId) openGameInTab(btn.dataset.gameId);
+    },
+    'standings-open-player': (e) => {
+        const btn = e.target.closest('[data-name]');
+        if (btn?.dataset.name) openPlayerProfile(btn.dataset.name);
+    },
     'browser-save': () =>
         openCollectionBrowser({
             mode: 'save',
@@ -792,6 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
     startCountdown(wrappedCheckPairings);
     syncPushSubscription();
     prefetchGames();
+    prefetchStandings();
 
     // Cross-tab coherence: re-hydrate ctx when another tab mutates it;
     // show a toast if the active collection is deleted remotely.

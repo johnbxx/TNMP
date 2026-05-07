@@ -10,7 +10,7 @@
  */
 
 import { corsHeaders, corsResponse } from './helpers.js';
-import { handleTournamentHtml, handleTournamentState, handleOgState, handleHealth } from './tournament.js';
+import { handleTournamentHtml, handleTournamentState, handleStandings, handleOgState, handleHealth } from './tournament.js';
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
 import { handleScheduled, TournamentCron, pairingsExpiresAt } from './cron.js';
@@ -42,6 +42,7 @@ export default {
             // Tournament & state
             if (path === '/tournament-html' && request.method === 'GET') return await handleTournamentHtml(request, env);
             if (path === '/tournament-state' && request.method === 'GET') return await handleTournamentState(request, env);
+            if (path === '/standings' && request.method === 'GET') return await handleStandings(request, env);
             if (path === '/og-state' && request.method === 'GET') return await handleOgState(request, env);
             if (path === '/health' && request.method === 'GET') return await handleHealth(env, request);
 
