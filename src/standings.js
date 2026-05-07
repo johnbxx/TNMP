@@ -108,7 +108,7 @@ export function renderStandings(mountEl) {
         .map((sec) => {
             const sectionRow = `<tr class="std-section-row"><td colspan="${colspan}">${escapeHtml(sec.section)}</td></tr>`;
             const rows = renderSectionRows(sec, numRounds, games);
-            return sectionRow + rows;
+            return `<tbody class="std-section">${sectionRow}${rows}</tbody>`;
         })
         .join('');
 
@@ -123,7 +123,7 @@ export function renderStandings(mountEl) {
                     <th class="std-th-total">Total</th>
                 </tr>
             </thead>
-            <tbody>${bodyHtml}</tbody>
+            ${bodyHtml}
         </table>
     `;
 }
