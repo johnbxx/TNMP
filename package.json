@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@lichess-org/chessground": "^10.1.1",
-    "@lichess-org/stockfish-web": "^0.2.3",
+    "@lichess-org/stockfish-web": "^0.3.0",
     "chess.js": "^1.4.0"
   }
 }
