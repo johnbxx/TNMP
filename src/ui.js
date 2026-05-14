@@ -314,9 +314,11 @@ export function renderRoundTracker(rounds, _totalRounds, currentRound, currentSt
               : 'tracker-future';
         tab.className = `tracker-round ${resultCls}`;
         tab.toggleAttribute('data-clickable', !!(r?.result || i === currentRound));
-        const icon = r?.isBye ? 'Duck' : PIECE_ICON[r?.color];
-        tab.innerHTML = icon
-            ? `<img class="tracker-icon" src="pieces/${icon}.webp" alt="${r?.color || 'Bye'}">`
+        const iconPath = r?.isBye
+            ? 'pieces/Duck.svg'
+            : PIECE_ICON[r?.color] && `pieces/default/${PIECE_ICON[r.color]}.svg`;
+        tab.innerHTML = iconPath
+            ? `<img class="tracker-icon" src="${iconPath}" alt="${r?.color || 'Bye'}">`
             : `<span class="tracker-number">${i}</span>`;
 
         // Panel: fill in round data
@@ -338,7 +340,7 @@ export function renderRoundTracker(rounds, _totalRounds, currentRound, currentSt
             resultEl.textContent = '';
             resultEl.classList.add('hidden');
             const label = r.byeType === 'full' ? 'Full-point bye' : r.byeType === 'half' ? 'Half-point bye' : 'Bye';
-            colorIcon.src = 'pieces/Duck.webp';
+            colorIcon.src = 'pieces/Duck.svg';
             colorIcon.alt = 'Bye';
             profileBtn.textContent = label;
             profileBtn.removeAttribute('data-action');
@@ -354,7 +356,7 @@ export function renderRoundTracker(rounds, _totalRounds, currentRound, currentSt
             }
 
             if (r.color) {
-                colorIcon.src = `pieces/${PIECE_ICON[r.color]}.webp`;
+                colorIcon.src = `pieces/default/${PIECE_ICON[r.color]}.svg`;
                 colorIcon.alt = r.color;
                 colorIcon.classList.remove('hidden');
             } else {

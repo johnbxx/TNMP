@@ -53,7 +53,7 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
             const p = pieces[i];
             btn.dataset.piece = p;
             const img = btn.querySelector('img');
-            img.src = `/pieces/${prefix}${fileChar[p]}.webp`;
+            img.src = `/pieces/default/${prefix}${fileChar[p]}.svg`;
             img.alt = altText[p];
         });
 

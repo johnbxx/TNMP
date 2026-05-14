@@ -16,8 +16,8 @@ const COLORS = { w: 'white', b: 'black' };
 
 const urls = {};
 for (const p of PIECES) {
-    const data = readFileSync(resolve(piecesDir, `${p}.webp`));
-    urls[p] = `data:image/webp;base64,${data.toString('base64')}`;
+    const data = readFileSync(resolve(piecesDir, 'default', `${p}.svg`));
+    urls[p] = `data:image/svg+xml;base64,${data.toString('base64')}`;
 }
 
 const lines = [
@@ -37,9 +37,10 @@ const lines = [
     '    style.textContent = rules.join("\\n");',
     '    document.head.appendChild(style);',
     '',
-    '    // Patch any <img> elements that reference /pieces/',
+    '    // Patch any <img> elements that reference /pieces/<theme>/<piece>.svg',
+    '    // (also handles the legacy /pieces/<piece>.webp shape, just in case).',
     '    for (const img of document.querySelectorAll("img[src*=\'/pieces/\']")) {',
-    '        const match = img.src.match(/\\/(\\w+)\\.webp$/);',
+    '        const match = img.src.match(/\\/(\\w+)\\.(?:svg|webp)$/);',
     '        if (match && PIECE_URLS[match[1]]) img.src = PIECE_URLS[match[1]];',
     '    }',
     '}',

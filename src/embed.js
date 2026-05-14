@@ -382,14 +382,17 @@ document.addEventListener('keydown', (e) => {
 // --- Piece image patching ---
 
 function patchPieceImages(root) {
+    // Matches /pieces/<theme>/<piece>.svg (current) and /pieces/<piece>.webp
+    // (legacy, kept defensive — older HTML strings in cache may still hit it).
+    const PIECE_RE = /\/pieces\/(?:\w+\/)?(\w+)\.(?:svg|webp)$/;
     const imgs = root.querySelectorAll ? root.querySelectorAll('img') : [];
     for (const img of imgs) {
-        const match = img.getAttribute('src')?.match(/\/pieces\/(\w+)\.webp$/);
+        const match = img.getAttribute('src')?.match(PIECE_RE);
         if (match && PIECE_URLS[match[1]]) img.src = PIECE_URLS[match[1]];
     }
     // Also patch if root itself is an img
     if (root.tagName === 'IMG') {
-        const match = root.getAttribute('src')?.match(/\/pieces\/(\w+)\.webp$/);
+        const match = root.getAttribute('src')?.match(PIECE_RE);
         if (match && PIECE_URLS[match[1]]) root.src = PIECE_URLS[match[1]];
     }
 }
@@ -414,12 +417,12 @@ function init() {
     document.body.appendChild(profileMount);
 
     // Init modules. `pieceSrc` bakes inline data URLs into img src at template
-    // build time so the browser never dispatches a `/pieces/*.webp` fetch on
+    // build time so the browser never dispatches a `/pieces/*.svg` fetch on
     // the host origin (which would 404). Falls through to the default path
     // for any unknown piece.
     initGamePanel(gameMount, {
         features: FEAT,
-        pieceSrc: (p) => PIECE_URLS[p] || `/pieces/${p}.webp`,
+        pieceSrc: (p) => PIECE_URLS[p] || `/pieces/default/${p}.svg`,
     });
 
     // Apply embed theme (compile-time constants from embed.config.js)

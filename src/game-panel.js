@@ -83,7 +83,7 @@ let _features = {
 // Piece image src resolver. Overridable via initGamePanel({ pieceSrc }) so the
 // embed can bake in inline data URLs at template-assembly time — eliminating
 // 404s from the browser's image preloader racing the post-insert patcher.
-let _pieceSrc = (p) => `/pieces/${p}.webp`;
+let _pieceSrc = (p) => `/pieces/default/${p}.svg`;
 
 let _activeTab = null;
 let _tabs = [];
@@ -2805,7 +2805,7 @@ function cleanComment(comment) {
 }
 
 function formatLinePreview(nodes, startNodeId, maxMoves = 6) {
-    const parts = [];
+    let html = '';
     let id = startNodeId,
         count = 0;
     while (id !== null && count < maxMoves) {
@@ -2814,14 +2814,14 @@ function formatLinePreview(nodes, startNodeId, maxMoves = 6) {
         const ply = n.ply;
         const moveNum = Math.floor((ply - 1) / 2) + 1;
         const isWhite = ply % 2 === 1;
-        if (isWhite) parts.push(`${moveNum}.\u00A0${n.san}`);
-        else if (count === 0) parts.push(`${moveNum}...\u00A0${n.san}`);
-        else parts.push(n.san);
+        if (isWhite) html += `<span class="move-number">${moveNum}.</span>`;
+        else if (count === 0) html += `<span class="move-number">${moveNum}\u2026</span>`;
+        html += `<span class="move-variation">${n.san}${renderNags(n.nags)}</span> `;
         id = n.mainChild;
         count++;
     }
-    if (id !== null) parts.push('\u2026');
-    return parts.join(' ');
+    if (id !== null) html += '\u2026';
+    return html;
 }
 
 function varLength(nodes, startId) {

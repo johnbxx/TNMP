@@ -151,13 +151,13 @@ function renderOverview(stats) {
                 'As White',
                 stats.totals.white,
                 JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'white' }),
-                { icon: 'wK.webp' },
+                { icon: 'default/wK.svg' },
             ) +
             profileRow(
                 'As Black',
                 stats.totals.black,
                 JSON.stringify({ player: currentPlayer, tournament: 'all', color: 'black' }),
-                { icon: 'bK.webp' },
+                { icon: 'default/bK.svg' },
             ) +
             `<div class="profile-section-title">Tournaments</div>`,
         content: entries
@@ -213,7 +213,7 @@ function renderOpenings(stats) {
         );
     }
 
-    return { header: '', content: section('white', 'wK.webp') + section('black', 'bK.webp') };
+    return { header: '', content: section('white', 'default/wK.svg') + section('black', 'default/bK.svg') };
 }
 
 function renderOpponentList(opponents, filter = '') {
