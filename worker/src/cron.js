@@ -365,6 +365,10 @@ async function runCronLogic(env) {
         console.log(`fullGames: ${totalParsed} games across rounds ${Object.keys(parsed.fullGames).join(', ')}`);
         t0 = performance.now();
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
+            // Canonical ISO-datetime for this round (e.g. 2026-05-12T18:30:00-07:00).
+            // Use this instead of the PGN [Date] header so the games.date column
+            // stays in one consistent format for sortable lex comparison.
+            const canonicalDate = tournament.roundDates?.[parseInt(roundNum) - 1] || null;
             for (const g of games) {
                 if (g.board === null) continue;
                 const key = `${roundNum}:${g.board}`;
@@ -399,7 +403,7 @@ async function runCronLogic(env) {
                         g.result,
                         opening ? opening.eco : g.eco,
                         opening ? opening.name : null,
-                        normalizeSection(g.section), g.date, g.gameId || null, g.pgn
+                        normalizeSection(g.section), canonicalDate, g.gameId || null, g.pgn
                     )
                 );
                 if (ex) updatedCount++;

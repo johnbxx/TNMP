@@ -247,7 +247,12 @@ export async function handleQuery(request, env) {
             `SELECT COUNT(*) as total FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${where}`
         ).bind(...params).first(),
         env.DB.prepare(
-            `SELECT ${selectCols}${submissionCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${submissionJoin} ${where} ORDER BY g.date DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
+            // Sort by tournament first (round_dates[0] is canonical ISO-datetime
+            // across all tournament rows), then by within-tournament round/board.
+            // Don't trust g.date for ordering: legacy rows may still be PGN-dot
+            // format (`2026.05.05`) which lex-sorts above ISO-datetime since
+            // `.` > `-` in ASCII — a backfill to ISO-datetime is in progress.
+            `SELECT ${selectCols}${submissionCols} FROM games g JOIN tournaments t ON g.tournament_slug = t.slug ${submissionJoin} ${where} ORDER BY json_extract(t.round_dates, '$[0]') DESC, g.round DESC, g.board LIMIT ? OFFSET ?`
         ).bind(...params, limit, offset).all(),
     ];
     if (fetchByes) {
