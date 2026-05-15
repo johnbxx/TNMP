@@ -74,11 +74,14 @@ import {
     getVisibleGames,
     hydrateFromIdb,
     initCrossTabSync,
+    ingestDataset,
+    hasDataset,
 } from './games.js';
 import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
 import { formatName, getHeader, resultDisplay, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
+import './gif-maker.js'; // side-effect: registers #gif hash trigger + window.openGifMaker
 
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
@@ -818,9 +821,19 @@ document.addEventListener('DOMContentLoaded', () => {
         queryGames({ gameId, include: 'pgn' })
             .then((data) => {
                 const game = data.games?.[0] || getCachedGame(gameId);
-                if (game) {
-                    openGameInTab(gameId);
+                if (!game) return;
+                // Seed the game's tournament dataset (single-game stub) so the
+                // new tab's ctx represents the game's actual tournament. Skip
+                // if a complete dataset is already loaded for that tournament.
+                const slug = game.tournamentSlug;
+                const sourceCtxKey = slug ? `tournament:${slug}` : undefined;
+                if (sourceCtxKey && !hasDataset(sourceCtxKey)) {
+                    ingestDataset(sourceCtxKey, {
+                        games: [game],
+                        meta: { name: game.tournament },
+                    });
                 }
+                openGameInTab(gameId, { game, sourceCtxKey });
                 window.history.replaceState({}, '', window.location.pathname);
             })
             .catch(() => {});

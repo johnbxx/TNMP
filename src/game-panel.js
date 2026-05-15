@@ -556,8 +556,16 @@ function openGameInNewTab(gameId) {
     openGameFromBrowser(gameId);
 }
 
-/** Find or create a tab for a specific game. */
+/** Find or create a tab for a specific game.
+ *
+ *   - `sourceCtxKey`: clone the new tab's ctx from this dataset (e.g. so a
+ *     deep link's tab represents the game's own tournament, not whatever
+ *     happened to be prefetched).
+ *   - `game`: caller-provided game object. Used as a fallback when the game
+ *     isn't in any cached dataset (e.g. cross-tournament deep links).
+ */
 export function openGameInTab(gameId, opts = {}) {
+    const { sourceCtxKey, game: providedGame, ...panelOpts } = opts;
     if (tabsActive()) {
         // Already open in a tab? Switch to it.
         const existing = _tabs.find((t) => t.panel.gameId === gameId);
@@ -567,12 +575,12 @@ export function openGameInTab(gameId, opts = {}) {
             return;
         }
         // Create new tab and open the game
-        addTab();
+        addTab({ sourceCtxKey });
     }
     openPanel();
-    const game = games.getCachedGame(gameId);
+    const game = providedGame || games.getCachedGame(gameId);
     if (game) {
-        openGamePanel({ game, ...opts });
+        openGamePanel({ game, ...panelOpts });
     }
 }
 

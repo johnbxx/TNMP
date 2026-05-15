@@ -382,6 +382,9 @@ export function getLastTournamentKey() {
 export function getActiveCtxKey() {
     return _activeCtx?.key ?? null;
 }
+export function hasDataset(key) {
+    return _datasetCache.has(key);
+}
 
 // ─── Module state ─────────────────────────────────────────────────
 
