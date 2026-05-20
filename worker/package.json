@@ -9,7 +9,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.7",
     "wrangler": "^4.88.0"
   },
   "dependencies": {
