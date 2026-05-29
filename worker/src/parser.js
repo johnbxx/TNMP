@@ -306,6 +306,60 @@ export function hasResults(html) {
 }
 
 
+// Resolve standings columns from the table's <thead>. SwissSys labels every
+// column ("#", "Place", "Name", "ID", "Rating", "Rd 1".."Rd N", "Total"), but
+// the ORDER varies between versions/configs: 11.79.5 emitted
+// `# | Name | ID | Rating | Rd...`; later builds inserted a "Place" column
+// before Name and (in 11.79.8) dropped the per-row ID column entirely. Reading
+// roles from the header — rather than assuming fixed offsets after the name —
+// keeps round numbers aligned to their real round regardless of layout. The old
+// positional approach hard-coded id=name+1 / rating=name+2 / rounds=name+3,
+// which silently shifted every round by one when the ID column moved or
+// vanished (e.g. a Round-4 bye landing in the Round-3 slot). Returns null when
+// no usable header is found so the caller can fall back to positional parsing.
+function resolveStandingsColumns(tableHtml) {
+    const theadMatch = tableHtml.match(/<thead>([\s\S]*?)<\/thead>/i);
+    if (!theadMatch) return null;
+    const rowMatch = theadMatch[1].match(/<tr>([\s\S]*?)<\/tr>/i);
+    if (!rowMatch) return null;
+
+    const cols = { nameIdx: -1, idIdx: -1, ratingIdx: -1, totalIdx: -1, roundCols: [] };
+    const cellRegex = /<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi;
+    let cellMatch;
+    let idx = 0;
+    while ((cellMatch = cellRegex.exec(rowMatch[1])) !== null) {
+        const label = decodeEntities(cellMatch[1].replace(/<[^>]*>/g, '')).trim();
+        const roundMatch = label.match(/^Rd\s*(\d+)$/i);
+        if (roundMatch) cols.roundCols.push({ idx, round: parseInt(roundMatch[1], 10) });
+        else if (/^name$/i.test(label)) cols.nameIdx = idx;
+        else if (/^id$/i.test(label)) cols.idIdx = idx;
+        else if (/^rating$/i.test(label)) cols.ratingIdx = idx;
+        else if (/^total$/i.test(label)) cols.totalIdx = idx;
+        idx++;
+    }
+
+    // Trust the header only if it actually located a name and round columns.
+    if (cols.nameIdx === -1 || cols.roundCols.length === 0) return null;
+    cols.roundCols.sort((a, b) => a.round - b.round);
+    return cols;
+}
+
+// Parse a single standings round cell into a result entry (or null when blank).
+// W/L/D and X/F (forfeit win/loss) carry the opponent's rank; H/B/U (half/full/
+// zero-point byes) have no opponent.
+function parseStandingsRoundCell(cellText) {
+    if (!cellText || cellText === ' ' || cellText === ' ') return null;
+    const code = cellText.charAt(0).toUpperCase();
+    const rest = cellText.substring(1).trim();
+    if (code === 'W' || code === 'L' || code === 'D' || code === 'X' || code === 'F') {
+        return { result: code, opponentRank: parseInt(rest, 10) };
+    }
+    if (code === 'H' || code === 'B' || code === 'U') {
+        return { result: code, opponentRank: null };
+    }
+    return null;
+}
+
 export function parseStandings(html) {
     const sections = [];
     const sectionRegex = /<h3>([^<]*Standings[^<]*)<\/h3>[\s\S]*?(<table[^>]*>[\s\S]*?<\/table>)/gi;
@@ -320,6 +374,7 @@ export function parseStandings(html) {
         const tableHtml = sectionMatch[2];
         const players = [];
         const hasNameClass = /class="name"/.test(tableHtml);
+        const cols = resolveStandingsColumns(tableHtml);
         const tbodyMatch = tableHtml.match(/<tbody>([\s\S]*?)<\/tbody>/i);
         if (!tbodyMatch) continue;
 
@@ -345,41 +400,55 @@ export function parseStandings(html) {
             const rank = parseInt(cells[0].text, 10);
             if (isNaN(rank)) continue;
 
-            let nameIdx = -1;
-            if (hasNameClass) {
-                for (let c = 1; c < cells.length; c++) {
-                    if (cells[c].isName) { nameIdx = c; break; }
+            let name, url, id, rating, rounds, total;
+
+            if (cols) {
+                // Header-driven: column roles come from the labeled <thead>, so
+                // round N is read from the column the header calls "Rd N" \u2014 robust
+                // to the Place/ID columns moving or disappearing across layouts.
+                name = cells[cols.nameIdx]?.text || '';
+                url = cells[cols.nameIdx]?.link || null;
+                const idText = cols.idIdx !== -1 ? (cells[cols.idIdx]?.text || '').trim() : '';
+                id = /^\d+$/.test(idText) ? idText : null;
+                rating = cols.ratingIdx !== -1 ? parseInt(cells[cols.ratingIdx]?.text, 10) || null : null;
+
+                // Index rounds by their real round number (rounds[n-1] = Rd n) so
+                // downstream `i + 1` math stays correct even if a round column is
+                // missing or out of order.
+                rounds = [];
+                for (const { idx, round } of cols.roundCols) {
+                    rounds[round - 1] = parseStandingsRoundCell(cells[idx]?.text);
                 }
+                for (let i = 0; i < rounds.length; i++) if (rounds[i] === undefined) rounds[i] = null;
+
+                total = cols.totalIdx !== -1
+                    ? parseFloat(cells[cols.totalIdx]?.text) || 0
+                    : parseFloat(cells[cells.length - 1].text) || 0;
+            } else {
+                // Fallback (no recognizable header): assume the historical
+                // positional layout `rank | name | id | rating | rounds | total`.
+                let nameIdx = -1;
+                if (hasNameClass) {
+                    for (let c = 1; c < cells.length; c++) {
+                        if (cells[c].isName) { nameIdx = c; break; }
+                    }
+                }
+                if (nameIdx === -1) nameIdx = 2;
+
+                name = cells[nameIdx].text;
+                url = cells[nameIdx].link || null;
+                id = cells[nameIdx + 1].text;
+                rating = parseInt(cells[nameIdx + 2].text, 10) || null;
+
+                rounds = [];
+                const roundStart = nameIdx + 3;
+                for (let i = roundStart; i < cells.length - 1; i++) {
+                    rounds.push(parseStandingsRoundCell(cells[i].text));
+                }
+
+                total = parseFloat(cells[cells.length - 1].text) || 0;
             }
-            if (nameIdx === -1) nameIdx = 2;
 
-            const name = cells[nameIdx].text;
-            const url = cells[nameIdx].link || null;
-            const id = cells[nameIdx + 1].text;
-            const rating = parseInt(cells[nameIdx + 2].text, 10) || null;
-
-            const rounds = [];
-            const roundStart = nameIdx + 3;
-            for (let i = roundStart; i < cells.length - 1; i++) {
-                const cellText = cells[i].text;
-                if (!cellText || cellText === '\u00A0' || cellText === ' ') {
-                    rounds.push(null);
-                    continue;
-                }
-                const code = cellText.charAt(0).toUpperCase();
-                const rest = cellText.substring(1).trim();
-                if (code === 'W' || code === 'L' || code === 'D' || code === 'X' || code === 'F') {
-                    // X = forfeit win against rank N; F = forfeit loss against rank N.
-                    // The F-marked player is the forfeiter; their opponent (rank N) gets X.
-                    rounds.push({ result: code, opponentRank: parseInt(rest, 10) });
-                } else if (code === 'H' || code === 'B' || code === 'U') {
-                    rounds.push({ result: code, opponentRank: null });
-                } else {
-                    rounds.push(null);
-                }
-            }
-
-            const total = parseFloat(cells[cells.length - 1].text) || 0;
             players.push({ rank, name, url, id, rating, rounds, total });
         }
 

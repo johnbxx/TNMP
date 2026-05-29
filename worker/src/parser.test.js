@@ -272,6 +272,37 @@ describe('parseStandings', () => {
         expect(sections[0].players[0].rounds[1]).toEqual({ result: 'L', opponentRank: 2 });
     });
 
+    // Regression: SwissSys 11.79.8 dropped the per-row ID column and put "Place"
+    // before "Name" (`# | Place | Name | Rating | Rd 1..Rd N | Total`). The old
+    // positional parser assumed id=name+1 / rating=name+2 / rounds=name+3, so it
+    // started rounds one column late — a Round-4 bye (H---) landed in the Round-3
+    // slot and overwrote the real Round-3 game in the tracker. Header-driven
+    // parsing must map each Rd column to its true round.
+    it('maps round columns by header when the ID column is absent (SwissSys 11.79.8)', () => {
+        const noIdHtml = `<h3>Standings. TNM: 1600-1999 (Standings)</h3><table>
+            <thead><tr>
+                <td class="fixed">#</td><td class="fixed">Place</td><td class="fixed">Name</td>
+                <td class="fixed">Rating</td>
+                <td class="fixed">Rd 1</td><td class="fixed">Rd 2</td><td class="fixed">Rd 3</td>
+                <td class="fixed">Rd 4</td><td class="fixed">Rd 5</td><td class="fixed">Rd 6</td>
+                <td class="fixed">Rd 7</td><td class="fixed">Total</td>
+            </tr></thead>
+            <tbody>
+                <tr><td>7</td><td>&nbsp;</td><td class="name"><a href="https://ratings.uschess.org/player/16865157">John Boyer</a></td><td>1766</td><td>D27</td><td>W20</td><td>D17</td><td>H---</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>2.5</td></tr>
+            </tbody></table>`;
+        const sections = parseStandings(noIdHtml);
+        expect(sections).toHaveLength(1);
+        const boyer = sections[0].players[0];
+        expect(boyer.name).toBe('John Boyer');
+        expect(boyer.rating).toBe(1766);
+        expect(boyer.id).toBeNull(); // no ID column → not the rating misread as an id
+        expect(boyer.total).toBe(2.5);
+        // The half-point bye is in the Rd 4 column → round 4, NOT round 3.
+        expect(boyer.rounds[2]).toEqual({ result: 'D', opponentRank: 17 });
+        expect(boyer.rounds[3]).toEqual({ result: 'H', opponentRank: null });
+        expect(boyer.rounds[4]).toBeNull();
+    });
+
     it('returns empty array for HTML with no standings', () => {
         expect(parseStandings('<html><body>No standings</body></html>')).toEqual([]);
     });

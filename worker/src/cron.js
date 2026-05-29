@@ -302,11 +302,23 @@ async function runCronLogic(env) {
                 }
             }
         }
-        if (byeStmts.length > 0) {
-            for (let i = 0; i < byeStmts.length; i += 100) {
-                await env.DB.batch(byeStmts.slice(i, i + 100));
+        // Rebuild this tournament's byes from the freshly parsed standings. A
+        // plain INSERT ... DO NOTHING is append-only and can't remove a bye that
+        // was previously written to the wrong round (e.g. when a SwissSys layout
+        // change shifted the round columns), so we delete-then-reinsert to make
+        // the table self-correcting. Guarded on a non-empty parse so a standings
+        // fetch hiccup can't wipe good data. Standings always carry the full bye
+        // picture (including future requested byes shown as H---), so a full
+        // rebuild is complete.
+        if (standings.length > 0) {
+            const stmts = [
+                env.DB.prepare(`DELETE FROM byes WHERE tournament_slug = ?`).bind(slug),
+                ...byeStmts,
+            ];
+            for (let i = 0; i < stmts.length; i += 100) {
+                await env.DB.batch(stmts.slice(i, i + 100));
             }
-            console.log(`Persisted ${byeStmts.length} bye(s) to D1.`);
+            console.log(`Rebuilt byes for ${slug}: ${byeStmts.length} bye(s).`);
         }
     } catch (err) {
         console.error('Failed to persist byes:', err.message);
