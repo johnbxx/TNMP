@@ -44,7 +44,12 @@ export function getStandings(slug) {
     return _cache.get(slug) || null;
 }
 
-const nameKey = (n) => (n || '').trim().toLowerCase();
+// MI's standings table prefixes titled players (GM/IM/FM/WGM/...). The
+// games table and server name-normalization don't recognize titles, so
+// strip the leading title before comparing or looking up.
+const TITLE_RE = /^(GM|IM|FM|WGM|WIM|WFM|NM|CM|WCM|WNM|AGM|HGM)\s+/i;
+const stripTitle = (n) => (n || '').trim().replace(TITLE_RE, '');
+const nameKey = (n) => stripTitle(n).toLowerCase();
 
 function buildGameLookup() {
     const games = getDatasetGames();
@@ -156,7 +161,7 @@ function renderSectionRows(sec, numRounds, gameMap) {
 
             const nameCell =
                 `<td class="std-cell-name">` +
-                `<button type="button" class="std-player-link" data-action="standings-open-player" data-name="${escapeHtml(p.name)}">${escapeHtml(p.name)}</button>` +
+                `<button type="button" class="std-player-link" data-action="standings-open-player" data-name="${escapeHtml(stripTitle(p.name))}">${escapeHtml(p.name)}</button>` +
                 `</td>`;
             const ratingCell = `<td class="std-cell-rating">${p.rating ?? ''}</td>`;
             const totalCell = `<td class="std-cell-total">${fmtTotal(p.total)}</td>`;
