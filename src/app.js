@@ -81,7 +81,9 @@ import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
 import { formatName, getHeader, resultDisplay, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
-import './gif-maker.js'; // side-effect: registers #gif hash trigger + window.openGifMaker
+// TODO: re-enable once the GIF-maker feature is committed (gif-maker.js, the
+// gifenc dep, and the style.js exports it needs are still uncommitted WIP).
+// import './gif-maker.js'; // side-effect: registers #gif hash trigger + window.openGifMaker
 
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
