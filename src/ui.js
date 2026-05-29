@@ -331,7 +331,10 @@ export function renderRoundTracker(rounds, _totalRounds, currentRound, currentSt
         const header = panel.querySelector('.pairing-history-label');
         const resultEl = panel.querySelector('.pairing-result');
         const gameBtn = panel.querySelector('.view-game-btn');
-        const profileBtn = panel.querySelector('.opponent-link');
+        // Select by stable structure, not the `.opponent-link` class: the bye
+        // branch removes that class for styling, so selecting by it would return
+        // null on any re-render after a bye rendered once (crash on textContent).
+        const profileBtn = panel.querySelector('.pairing-opponent button');
         const colorIcon = panel.querySelector('.color-icon');
 
         header.textContent = `Round ${i}${r.board ? ` \u00B7 Board ${r.board}` : ''}`;
